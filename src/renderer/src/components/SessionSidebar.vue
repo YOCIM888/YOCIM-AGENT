@@ -5,6 +5,7 @@ import type { ContextMenuItem } from '../lib/menu'
 import { useChatStore } from '../stores/chat'
 import { useProjectsStore } from '../stores/projects'
 import { useSessionStore } from '../stores/session'
+import { useSettingsStore } from '../stores/settings'
 import { useWorkspaceStore } from '../stores/workspace'
 import ContextMenu from './ContextMenu.vue'
 import MoveSessionDialog from './MoveSessionDialog.vue'
@@ -14,6 +15,7 @@ const sessions = useSessionStore()
 const projects = useProjectsStore()
 const workspace = useWorkspaceStore()
 const chat = useChatStore()
+const settings = useSettingsStore()
 
 const query = ref('')
 const showArchived = ref(false)
@@ -139,7 +141,11 @@ function selectProjectMenu(id: string): void {
 </script>
 
 <template>
-  <aside class="session-panel" data-testid="session-sidebar">
+  <aside
+    class="session-panel"
+    data-testid="session-sidebar"
+    :style="{ width: `${settings.sessionWidth}px` }"
+  >
     <div class="brand">
       <img class="brand-logo" src="/image/yocim.png" alt="YOCIM" />
       <span class="brand-name" data-testid="app-title">YOCIM AGRNT</span>
@@ -276,7 +282,7 @@ function selectProjectMenu(id: string): void {
   display: flex;
   flex: none;
   flex-direction: column;
-  width: 300px;
+  max-width: 45vw;
   min-height: 0;
   border-right: 1px solid var(--border);
   background: var(--bg-subtle);

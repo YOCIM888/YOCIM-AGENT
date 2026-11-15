@@ -27,11 +27,14 @@ import type {
   SessionMoveInput,
   ProjectRenameInput,
   ProjectListResult,
-  WorkspaceOpenProjectInput,
+  ProviderDeleteInput,
+  ProviderSaveInput,
   SettingsResult,
-  SettingsUpdateInput,
+  SettingsSetActiveInput,
+  SettingsSetApprovalModeInput,
   WindowControlInput,
-  WorkspaceInfo
+  WorkspaceInfo,
+  WorkspaceOpenProjectInput
 } from './ipc'
 import type { ProjectSummary, SessionSummary } from './session'
 
@@ -83,7 +86,10 @@ export interface YocimProjectApi {
 
 export interface YocimSettingsApi {
   get(): Promise<IpcResult<SettingsResult>>
-  set(input: SettingsUpdateInput): Promise<IpcResult<SettingsResult>>
+  saveProvider(input: ProviderSaveInput): Promise<IpcResult<SettingsResult>>
+  removeProvider(input: ProviderDeleteInput): Promise<IpcResult<SettingsResult>>
+  setActive(input: SettingsSetActiveInput): Promise<IpcResult<SettingsResult>>
+  setApprovalMode(input: SettingsSetApprovalModeInput): Promise<IpcResult<SettingsResult>>
 }
 
 export interface YocimWindowApi {

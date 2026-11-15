@@ -156,9 +156,10 @@ function toggleMaximize(): void {
       @select="selectMenu"
       @close="menu = null"
     />
-
-    <SettingsDialog v-if="showSettings" @close="showSettings = false" />
   </header>
+
+  <!-- 必须放在标题栏拖动区之外，否则真实鼠标事件会被 -webkit-app-region: drag 吞掉 -->
+  <SettingsDialog v-if="showSettings" @close="showSettings = false" />
 </template>
 
 <style scoped>

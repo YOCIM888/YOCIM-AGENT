@@ -76,6 +76,9 @@ test('launches the shell, streams a reply and cancels generation', async () => {
     await expect(page.getByTestId('welcome-state')).toBeVisible()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
 
+    const initialMaximized = await app.evaluate(({ BrowserWindow }) =>
+      Boolean(BrowserWindow.getAllWindows()[0]?.isMaximized())
+    )
     await page.getByTestId('window-maximize').click()
     await expect
       .poll(() =>
@@ -83,7 +86,7 @@ test('launches the shell, streams a reply and cancels generation', async () => {
           Boolean(BrowserWindow.getAllWindows()[0]?.isMaximized())
         )
       )
-      .toBe(true)
+      .toBe(!initialMaximized)
     await page.getByTestId('window-maximize').click()
     await expect
       .poll(() =>
@@ -91,7 +94,7 @@ test('launches the shell, streams a reply and cancels generation', async () => {
           Boolean(BrowserWindow.getAllWindows()[0]?.isMaximized())
         )
       )
-      .toBe(false)
+      .toBe(initialMaximized)
 
     await page.getByTestId('session-collapse').click()
     await expect(page.getByTestId('session-sidebar')).not.toBeVisible()
@@ -452,7 +455,75 @@ test('groups sessions by project and supports pin/archive/search/move', async ()
   }
 })
 
-test('surfaces provider misconfiguration and recovers', async () => {
+test('resizes both sidebars and persists widths', async () => {
+  const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-resize-'))
+  const app = await launch(userDataDir)
+
+  try {
+    const page = await app.firstWindow()
+    const sessionPanel = page.getByTestId('session-sidebar')
+    const workspacePanel = page.getByTestId('workspace-panel')
+    await expect(sessionPanel).toBeVisible()
+    await expect(workspacePanel).toBeVisible()
+
+    const initialSessionWidth = (await sessionPanel.boundingBox())?.width ?? 0
+    const leftHandle = await page.getByTestId('resize-left').boundingBox()
+    expect(leftHandle).not.toBeNull()
+    if (leftHandle) {
+      await page.mouse.move(
+        leftHandle.x + leftHandle.width / 2,
+        leftHandle.y + leftHandle.height / 2
+      )
+      await page.mouse.down()
+      await page.mouse.move(
+        leftHandle.x + leftHandle.width / 2 + 70,
+        leftHandle.y + leftHandle.height / 2,
+        { steps: 5 }
+      )
+      await page.mouse.up()
+    }
+    await expect
+      .poll(async () => (await sessionPanel.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(initialSessionWidth + 40)
+
+    const initialWorkspaceWidth = (await workspacePanel.boundingBox())?.width ?? 0
+    const rightHandle = await page.getByTestId('resize-right').boundingBox()
+    expect(rightHandle).not.toBeNull()
+    if (rightHandle) {
+      await page.mouse.move(
+        rightHandle.x + rightHandle.width / 2,
+        rightHandle.y + rightHandle.height / 2
+      )
+      await page.mouse.down()
+      await page.mouse.move(
+        rightHandle.x + rightHandle.width / 2 - 60,
+        rightHandle.y + rightHandle.height / 2,
+        { steps: 5 }
+      )
+      await page.mouse.up()
+    }
+    await expect
+      .poll(async () => (await workspacePanel.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(initialWorkspaceWidth + 30)
+
+    const persistedSessionWidth = (await sessionPanel.boundingBox())?.width ?? 0
+    const persistedWorkspaceWidth = (await workspacePanel.boundingBox())?.width ?? 0
+    await page.reload()
+    await expect(sessionPanel).toBeVisible()
+    await expect(workspacePanel).toBeVisible()
+    await expect
+      .poll(async () => (await sessionPanel.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(persistedSessionWidth - 2)
+    await expect
+      .poll(async () => (await workspacePanel.boundingBox())?.width ?? 0)
+      .toBeGreaterThan(persistedWorkspaceWidth - 2)
+  } finally {
+    await app.close()
+    await rm(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('adds a provider, switches models and recovers from misconfiguration', async () => {
   const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-provider-'))
   const app = await launch(userDataDir)
 
@@ -461,31 +532,111 @@ test('surfaces provider misconfiguration and recovers', async () => {
 
     await openSettings(page)
     await expect(page.getByTestId('settings-dialog')).toBeVisible()
-    await page.getByTestId('settings-provider').selectOption('openai')
-    await page.getByTestId('settings-base-url').fill('https://api.invalid/v1')
-    await page.getByTestId('settings-model').fill('test-model')
+    // 设置弹窗必须位于标题栏拖动区之外，否则真实鼠标点击会被窗口拖动吞掉
+    await expect(page.getByTestId('titlebar').getByTestId('settings-dialog')).toHaveCount(0)
+    await expect(page.getByTestId('settings-provider-mock')).toBeVisible()
+    await page.getByTestId('settings-add-provider').click()
+    await page.getByTestId('settings-preset').selectOption('deepseek')
+    await expect(page.getByTestId('settings-base-url')).toHaveValue('https://api.deepseek.com/v1')
     await page.getByTestId('settings-save').click()
     await expect(page.getByTestId('settings-dialog')).not.toBeVisible()
+
+    await expect(page.getByTestId('model-picker')).toContainText('deepseek-chat')
+    await page.getByTestId('model-picker').click()
+    await expect(page.getByTestId('model-option-deepseek-deepseek-chat')).toBeVisible()
+    await expect(page.getByTestId('model-option-mock-mock')).toBeVisible()
+    await page.keyboard.press('Escape')
 
     await page.getByTestId('new-session').click()
     await page.getByTestId('chat-input').fill('错误配置测试')
     await page.getByTestId('chat-send').click()
     await expect(page.getByTestId('error-card')).toContainText(
-      '发送失败：请先在设置中填写 Base URL、模型名称与 API Key'
+      '请先在设置中为「DeepSeek」配置 API Key'
     )
     await expect(page.getByTestId('chat-send')).toBeVisible()
 
-    await openSettings(page)
-    await page.getByTestId('settings-provider').selectOption('mock')
-    await page.getByTestId('settings-save').click()
-    await expect(page.getByTestId('settings-dialog')).not.toBeVisible()
+    await page.getByTestId('model-picker').click()
+    await page.getByTestId('model-option-mock-mock').click()
+    await expect(page.getByTestId('model-picker')).toContainText('mock')
 
     await page.getByTestId('error-retry').click()
     await expect(page.getByTestId('chat-panel')).toContainText('Mock Provider 已收到：错误配置测试')
     await expect(page.getByTestId('chat-send')).toBeVisible()
+
+    await openSettings(page)
+    await page.getByTestId('settings-provider-deepseek').click()
+    await page.getByTestId('settings-delete-provider').click()
+    await expect(page.getByTestId('settings-provider-deepseek')).toHaveCount(0)
+    await page.getByTestId('settings-dialog').getByText('关闭').click()
+    await expect(page.getByTestId('settings-dialog')).not.toBeVisible()
   } finally {
     await app.close()
     await rm(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('switches approval modes for agent tools', async () => {
+  const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-approval-'))
+  const workspaceDir = await mkdtemp(join(os.tmpdir(), 'yocim-approval-ws-'))
+  await writeFile(join(workspaceDir, 'hello.txt'), 'hello approval')
+
+  const app = await launch(userDataDir)
+  try {
+    const page = await app.firstWindow()
+    await patchOpenDialog(app, workspaceDir)
+    await page.getByTestId('workspace-switch').click()
+    await page.getByTestId('new-session').click()
+
+    await expect(page.getByTestId('approval-mode')).toContainText('手动模式')
+
+    await page.getByTestId('chat-input').fill('/tool write notes/manual.txt')
+    await page.getByTestId('chat-send').click()
+    const manualTimeline = page.getByTestId('timeline').last()
+    await expect(manualTimeline.getByTestId('approval-card')).toBeVisible()
+    await page.getByTestId('approval-deny').click()
+    await expect(page.getByTestId('chat-send')).toBeVisible()
+    await expect(readFile(join(workspaceDir, 'notes', 'manual.txt'), 'utf8')).rejects.toThrow()
+
+    await page.getByTestId('approval-mode').click()
+    await page.getByTestId('approval-mode-auto').click()
+    await expect(page.getByTestId('approval-mode')).toContainText('自动模式')
+
+    await page.getByTestId('chat-input').fill('/tool write notes/auto.txt')
+    await page.getByTestId('chat-send').click()
+    await expect(page.getByTestId('chat-send')).toBeVisible()
+    await expect(page.getByTestId('timeline').last().getByTestId('approval-card')).toHaveCount(0)
+    expect(await readFile(join(workspaceDir, 'notes', 'auto.txt'), 'utf8')).toBe('mock tool demo\n')
+
+    await page.getByTestId('approval-mode').click()
+    await page.getByTestId('approval-mode-open').click()
+    await expect(page.getByTestId('approval-mode')).toContainText('开放模式')
+
+    await page.getByTestId('chat-input').fill('/tool command node -v')
+    await page.getByTestId('chat-send').click()
+    await expect(page.getByTestId('chat-send')).toBeVisible()
+    await expect(page.getByTestId('timeline').last().getByTestId('approval-card')).toHaveCount(0)
+
+    await page.getByTestId('approval-mode').click()
+    await page.getByTestId('approval-mode-manual').click()
+    await expect(page.getByTestId('approval-mode')).toContainText('手动模式')
+
+    await page.getByTestId('chat-input').fill('/tool command node -v')
+    await page.getByTestId('chat-send').click()
+    await expect(page.getByTestId('timeline').last().getByTestId('approval-card')).toBeVisible()
+    await page.getByTestId('approval-approve').last().click()
+    await expect(page.getByTestId('chat-send')).toBeVisible()
+  } finally {
+    await app.close()
+  }
+
+  const restarted = await launch(userDataDir)
+  try {
+    const page = await restarted.firstWindow()
+    await expect(page.getByTestId('approval-mode')).toContainText('手动模式')
+  } finally {
+    await restarted.close()
+    await rm(userDataDir, { recursive: true, force: true })
+    await rm(workspaceDir, { recursive: true, force: true })
   }
 })
 

@@ -26,10 +26,24 @@
 
 ![工作区与 Monaco 编辑器](docs/screenshots/workspace-light.png)
 
+### 多模型 Provider 设置
+
+![多模型 Provider 设置](docs/screenshots/providers-settings.png)
+
+### 输入卡模型切换
+
+![输入卡模型切换](docs/screenshots/model-switcher.png)
+
+### 审批模式
+
+![审批模式](docs/screenshots/approval-modes.png)
+
 ## 功能
 
+- 多模型接入：DeepSeek、Qwen、BigModel、Kimi、MiniMax、腾讯云、阿里云、硅基流动、火山引擎、Claude、Gemini、Grok、本地 Ollama 与自定义端点；设置中添加，输入卡右下角切换
+- 输入卡左下角审批模式：手动 / 自动 / 开放，切换后持久化
 - 无边框自定义标题栏：左上「应用 / 编辑」菜单，右上最小化 / 最大化 / 关闭；左栏顶部为品牌 Logo
-- 三栏工作台：左侧项目化会话列表、中间纯会话区、右侧文件树 / Monaco / 审计；左右栏可折叠并在重启后保留
+- 三栏工作台：左侧项目化会话列表、中间纯会话区、右侧文件树 / Monaco / 审计；左右栏可折叠、可拖动调宽，状态与宽度重启后保留
 - 一个工作区 = 一个项目，同项目多会话；支持搜索、置顶、归档/取消归档、跨项目迁移
 - 会话与项目操作收进右键菜单，避免行内小按钮堆叠
 - 助手消息 Markdown 渲染（marked + DOMPurify）；工具调用以可展开步骤时间线展示，审批卡内联
@@ -46,6 +60,7 @@
 - 左侧：顶部品牌与「新会话」按钮，下方搜索、工作区计数、置顶区与项目分组；右键会话可重命名 / 导出 / 置顶 / 归档 / 迁移 / 删除，右键项目可新建会话 / 重命名。
 - 中间：空会话显示欢迎态与大输入卡；流式回复可停止；工具步骤折叠为「已执行 N 个步骤 · Xs」，展开查看参数与结果；审批卡内联并在待审批时自动展开；失败显示可重试错误卡。
 - 右侧：文件 / 编辑器 / 审计三个 Tab；点击文件自动切到编辑器。
+- 左右栏之间的分隔条可拖动调节宽度，双击恢复默认；聚焦分隔条后也可用方向键微调。
 - 标题栏「应用」菜单：切换工作区、切换主题、设置；「编辑」菜单：新建会话、搜索会话、折叠工作区、状态栏。
 - 快捷键（macOS 上为 `Cmd`）：
 
@@ -56,6 +71,18 @@
 | `Ctrl+N`       | 新建会话          |
 | `Ctrl+K`       | 聚焦会话搜索      |
 | `Ctrl+J`       | 展开 / 收起状态栏 |
+
+## 审批模式
+
+输入卡左下角可切换 Agent 工具审批模式，切换后写入设置并在重启后保留：
+
+| 模式     | 行为                                 |
+| -------- | ------------------------------------ |
+| 手动模式 | 写文件与命令执行都需要审批（默认）   |
+| 自动模式 | 自动批准写文件，命令执行仍需审批     |
+| 开放模式 | 自动批准写文件与命令，不再弹出审批卡 |
+
+开放模式仍受工作区路径守卫、命令白名单与危险命令拦截约束，审批模式不会绕过这些安全边界。
 
 ## 环境要求
 
@@ -101,15 +128,34 @@ node node_modules/electron/install.js
 
 接入真实模型：
 
-1. 点击右上角「设置」；
-2. Provider 选择 `OpenAI-compatible`；
-3. 填写 Base URL（如 `https://api.example.com/v1`）、模型名与 API Key；
-4. 保存后发送消息即可。
+1. 点击标题栏「应用」→「设置…」；
+2. 点击「添加提供商」，选择预设（DeepSeek / Qwen / BigModel / Kimi / MiniMax / 腾讯云 / 阿里云 / 硅基流动 / 火山引擎 / Claude / Gemini / Grok / 本地 Ollama / 自定义）；
+3. 按需调整 Base URL、模型列表与 API Key，保存后自动切换为该 Provider；
+4. 在中间输入卡右下角的模型按钮中切换 Provider / 模型。
+
+内置端点：
+
+| Provider         | Base URL                                            | 协议                        |
+| ---------------- | --------------------------------------------------- | --------------------------- |
+| DeepSeek         | `https://api.deepseek.com/v1`                       | OpenAI 兼容                 |
+| Qwen（通义千问） | `https://dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI 兼容                 |
+| BigModel（智谱） | `https://open.bigmodel.cn/api/paas/v4`              | OpenAI 兼容                 |
+| Kimi（Moonshot） | `https://api.moonshot.cn/v1`                        | OpenAI 兼容                 |
+| MiniMax          | `https://api.minimaxi.com/v1`                       | OpenAI 兼容                 |
+| 腾讯云（混元）   | `https://api.hunyuan.cloud.tencent.com/v1`          | OpenAI 兼容                 |
+| 阿里云（百炼）   | `https://dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI 兼容                 |
+| 硅基流动         | `https://api.siliconflow.cn/v1`                     | OpenAI 兼容                 |
+| 火山引擎（方舟） | `https://ark.cn-beijing.volces.com/api/v3`          | OpenAI 兼容                 |
+| Claude           | `https://api.anthropic.com/v1`                      | Anthropic Messages          |
+| Gemini           | `https://generativelanguage.googleapis.com/v1beta`  | Gemini GenerateContent      |
+| Grok             | `https://api.x.ai/v1`                               | OpenAI 兼容                 |
+| 本地 Ollama      | `http://localhost:11434/v1`                         | OpenAI 兼容（无需 Key）     |
+| 自定义           | 自行填写                                            | OpenAI / Anthropic / Gemini |
 
 API Key 处理：
 
-- 通过 Electron `safeStorage` 加密后存入 `settings.apiKeyEncrypted`，不会明文落库；
-- 也可用环境变量 `OPENAI_API_KEY`（优先级高于本地存储）；
+- 每个 Provider 的 Key 独立通过 Electron `safeStorage` 加密后存入 `settings`，不会明文落库；
+- 也可用环境变量回退（如 `DEEPSEEK_API_KEY`、`DASHSCOPE_API_KEY`、`ANTHROPIC_API_KEY`、`GEMINI_API_KEY`、`XAI_API_KEY` 等）；
 - renderer 只能读取 `hasApiKey`，无法拿到明文。
 
 ## 安全说明
@@ -145,6 +191,7 @@ npm run package
 
 ## 文档
 
+- [多模型 Provider 接入方案](docs/realized%28已实现%29/MULTI_PROVIDER_PLAN.md)：Provider 调研、协议、数据模型与实施记录
 - 已实现阶段（归档）：
   - [UI_IMPLEMENTATION](docs/realized%28已实现%29/UI_IMPLEMENTATION.md)：三栏布局、项目化会话、时间线、主题与测试
   - [UI_OPTIMIZATION_PLAN](docs/realized%28已实现%29/UI_OPTIMIZATION_PLAN.md)：DeepSeek Harness 风格 UI 重构计划与验收

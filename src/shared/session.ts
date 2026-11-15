@@ -1,3 +1,6 @@
+import type { ApprovalMode } from './approval'
+import type { PublicProvider } from './providers'
+
 export interface SessionSummary {
   id: string
   title: string
@@ -29,8 +32,8 @@ export interface StoredMessage {
 }
 
 export interface PublicSettings {
-  provider: 'mock' | 'openai'
-  baseUrl: string
-  model: string
-  hasApiKey: boolean
+  providers: PublicProvider[]
+  activeProviderId: string
+  activeModel: string
+  approvalMode: ApprovalMode
 }

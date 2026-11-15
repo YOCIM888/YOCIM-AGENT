@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import { ZodError } from 'zod'
 import type { ToolCall, ToolExecutionOutcome } from '../../shared/agent'
+import type { ApprovalMode } from '../../shared/approval'
 import type { AuditApproval } from '../../shared/audit'
 import { AppError } from '../../shared/errors'
 import { isWriteTool, TOOL_DEFINITIONS, type ToolName } from '../../shared/tools'
@@ -53,6 +54,7 @@ export interface ToolServiceDeps {
   approvals: ApprovalManager
   audit: AuditStore
   requireGuard: () => WorkspacePathGuard
+  getApprovalMode?: () => ApprovalMode
   toolCalls?: ToolCallRepository
 }
 
@@ -88,24 +90,29 @@ export class ToolService {
     }
 
     if (isWriteTool(parsed.tool)) {
-      const accepted = await this.deps.approvals.request(
-        {
-          callId: call.id,
-          tool: parsed.tool,
-          risk: TOOL_RISK[parsed.tool],
-          argsSummary
-        },
-        context.signal
-      )
-      approval = accepted ? 'approved' : 'denied'
-      if (!accepted) {
-        const outcome: ToolExecutionOutcome = {
-          ok: false,
-          content: '用户拒绝了该操作，未执行。',
-          summary: '审批被拒绝'
+      const mode = this.deps.getApprovalMode?.() ?? 'manual'
+      const requiresApproval =
+        mode === 'manual' || (mode === 'auto' && TOOL_RISK[parsed.tool] === 'high')
+      if (requiresApproval) {
+        const accepted = await this.deps.approvals.request(
+          {
+            callId: call.id,
+            tool: parsed.tool,
+            risk: TOOL_RISK[parsed.tool],
+            argsSummary
+          },
+          context.signal
+        )
+        approval = accepted ? 'approved' : 'denied'
+        if (!accepted) {
+          const outcome: ToolExecutionOutcome = {
+            ok: false,
+            content: '用户拒绝了该操作，未执行。',
+            summary: '审批被拒绝'
+          }
+          this.record(context, call, argsSummary, approval, outcome)
+          return outcome
         }
-        this.record(context, call, argsSummary, approval, outcome)
-        return outcome
       }
     }
 

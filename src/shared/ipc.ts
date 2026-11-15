@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { IpcErrorCode } from './errors'
 import { FS_LIMITS } from './ipcChannels'
 import type { AuditEntry } from './audit'
+import { PROVIDER_PRESET_IDS } from './providers'
 import type { PublicSettings, ProjectSummary, SessionSummary, StoredMessage } from './session'
 
 export type { IpcErrorCode } from './errors'
@@ -193,15 +194,44 @@ export interface SessionExportResult {
   path: string | null
 }
 
-export const settingsUpdateInputSchema = z.object({
-  provider: z.enum(['mock', 'openai']),
-  baseUrl: z.string().max(500).optional().default(''),
+const providerProtocolSchema = z.enum(['openai', 'anthropic', 'gemini'])
+
+export const providerSaveInputSchema = z.object({
+  id: z.string().min(1).max(64).optional(),
+  presetId: z.enum(PROVIDER_PRESET_IDS),
+  name: z.string().min(1).max(100),
+  protocol: providerProtocolSchema,
+  baseUrl: z.string().max(500),
   model: z.string().max(200).optional().default(''),
+  models: z.array(z.string().min(1).max(200)).max(50).optional().default([]),
   apiKey: z.string().max(500).optional()
 })
 
-export type SettingsUpdateInput = z.input<typeof settingsUpdateInputSchema>
-export type SettingsUpdateRequest = z.output<typeof settingsUpdateInputSchema>
+export type ProviderSaveInput = z.input<typeof providerSaveInputSchema>
+export type ProviderSaveRequest = z.output<typeof providerSaveInputSchema>
+
+export const providerDeleteInputSchema = z.object({
+  providerId: z.string().min(1).max(64)
+})
+
+export type ProviderDeleteInput = z.input<typeof providerDeleteInputSchema>
+export type ProviderDeleteRequest = z.output<typeof providerDeleteInputSchema>
+
+export const settingsSetActiveInputSchema = z.object({
+  providerId: z.string().min(1).max(64),
+  model: z.string().min(1).max(200)
+})
+
+export type SettingsSetActiveInput = z.input<typeof settingsSetActiveInputSchema>
+export type SettingsSetActiveRequest = z.output<typeof settingsSetActiveInputSchema>
+
+export const settingsSetApprovalModeInputSchema = z.object({
+  mode: z.enum(['manual', 'auto', 'open'])
+})
+
+export type SettingsSetApprovalModeInput = z.input<typeof settingsSetApprovalModeInputSchema>
+export type SettingsSetApprovalModeRequest = z.output<typeof settingsSetApprovalModeInputSchema>
+
 export type SettingsResult = PublicSettings
 
 export const windowControlInputSchema = z.object({

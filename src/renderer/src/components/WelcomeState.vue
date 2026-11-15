@@ -9,12 +9,10 @@ const workspaceName = computed(() => workspace.info?.name ?? '未选择工作区
 <template>
   <section class="welcome" data-testid="welcome-state">
     <img class="welcome-logo" src="/image/yocim.png" alt="YOCIM" />
-    <h1>让想法落地</h1>
-    <span class="badge">预览版</span>
-    <p class="subtitle">描述你的目标，YOCIM 会在工作区内读取、搜索并执行任务。</p>
+    <h1>YOCIM AGENT 让想法落地</h1>
+    <span class="badge">测试版</span>
     <div class="chips">
       <span class="chip">▤ {{ workspaceName }}</span>
-      <span class="chip">标准模式</span>
     </div>
   </section>
 </template>

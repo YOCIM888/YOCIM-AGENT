@@ -19,10 +19,11 @@ const SEPARATOR_HEIGHT = 7
 const EDGE = 8
 
 const position = computed(() => {
-  const height =
+  const rawHeight =
     props.items.length * ITEM_HEIGHT +
     props.items.filter((item) => item.separatorBefore).length * SEPARATOR_HEIGHT +
     10
+  const height = Math.min(rawHeight, window.innerHeight * 0.6)
   return {
     left: `${Math.max(EDGE, Math.min(props.x, window.innerWidth - MENU_WIDTH - EDGE))}px`,
     top: `${Math.max(EDGE, Math.min(props.y, window.innerHeight - height - EDGE))}px`,
@@ -75,11 +76,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 .context-menu {
   position: fixed;
   z-index: 1001;
+  max-height: 60vh;
   padding: 5px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-md);
+  overflow-y: auto;
 }
 
 .context-item {
@@ -93,6 +96,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
   font: inherit;
   font-size: 12.5px;
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
   cursor: pointer;
 }
 

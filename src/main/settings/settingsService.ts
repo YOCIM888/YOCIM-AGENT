@@ -1,7 +1,23 @@
+import { randomUUID } from 'node:crypto'
 import type { ChatProvider } from '../../shared/agent'
+import type { ApprovalMode } from '../../shared/approval'
 import { AppError } from '../../shared/errors'
-import type { SettingsUpdateRequest } from '../../shared/ipc'
+import type {
+  ProviderDeleteRequest,
+  ProviderSaveRequest,
+  SettingsSetActiveRequest,
+  SettingsSetApprovalModeRequest
+} from '../../shared/ipc'
+import {
+  getProviderPreset,
+  MOCK_PROVIDER_ID,
+  type ProviderConfig,
+  type ProviderProtocol,
+  type PublicProvider
+} from '../../shared/providers'
 import type { PublicSettings } from '../../shared/session'
+import { AnthropicProvider } from '../agent/providers/anthropicProvider'
+import { GeminiProvider } from '../agent/providers/geminiProvider'
 import { MockProvider } from '../agent/providers/mockProvider'
 import { OpenAICompatibleProvider } from '../agent/providers/openaiProvider'
 import type { SettingsRepository } from '../db/repositories'
@@ -11,73 +27,358 @@ export interface SettingsCrypto {
   decrypt(value: string): string
 }
 
+type EnvMap = Record<string, string | undefined>
+
+const KEY_PROVIDERS = 'providers'
+const KEY_ACTIVE_PROVIDER = 'activeProviderId'
+const KEY_ACTIVE_MODEL = 'activeModel'
+const KEY_APPROVAL_MODE = 'approvalMode'
+const KEY_LEGACY_PROVIDER = 'provider'
+const KEY_LEGACY_BASE_URL = 'baseUrl'
+const KEY_LEGACY_MODEL = 'model'
+const KEY_LEGACY_API_KEY = 'apiKeyEncrypted'
+const PROVIDER_KEY_PREFIX = 'providerApiKey:'
+
 function readString(value: unknown): string {
   return typeof value === 'string' ? value : ''
+}
+
+function mockConfig(): ProviderConfig {
+  return {
+    id: MOCK_PROVIDER_ID,
+    presetId: 'mock',
+    name: 'Mock（离线）',
+    protocol: 'openai',
+    baseUrl: '',
+    model: 'mock',
+    models: ['mock']
+  }
+}
+
+function isProviderConfig(value: unknown): value is ProviderConfig {
+  if (typeof value !== 'object' || value === null) return false
+  const item = value as Record<string, unknown>
+  return (
+    typeof item.id === 'string' &&
+    typeof item.presetId === 'string' &&
+    typeof item.name === 'string' &&
+    (item.protocol === 'openai' || item.protocol === 'anthropic' || item.protocol === 'gemini') &&
+    typeof item.baseUrl === 'string' &&
+    typeof item.model === 'string' &&
+    Array.isArray(item.models) &&
+    item.models.every((model) => typeof model === 'string')
+  )
+}
+
+function normalizeBaseUrl(value: string, providerName: string, isMock: boolean): string {
+  const trimmed = value.trim().replace(/\/+$/, '')
+  if (!trimmed) {
+    if (isMock) return ''
+    throw new AppError('E_INVALID_INPUT', `请填写「${providerName}」的 Base URL`)
+  }
+  let url: URL
+  try {
+    url = new URL(trimmed)
+  } catch {
+    throw new AppError('E_INVALID_INPUT', `「${providerName}」的 Base URL 不是合法地址`)
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new AppError('E_INVALID_INPUT', `「${providerName}」的 Base URL 仅支持 http/https`)
+  }
+  return trimmed
+}
+
+function sanitizeModels(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].slice(0, 50)
 }
 
 export class SettingsService {
   constructor(
     private readonly repo: SettingsRepository,
     private readonly crypto: SettingsCrypto | null,
-    private readonly envKey: string | null = process.env['OPENAI_API_KEY'] ?? null
+    private readonly env: EnvMap | null = process.env
   ) {}
 
   getPublic(): PublicSettings {
-    const provider = this.repo.get('provider') === 'openai' ? 'openai' : 'mock'
+    const providers = this.ensureProviders()
+    const activeProviderId = this.resolveActiveProviderId(providers)
+    const activeProvider =
+      providers.find((provider) => provider.id === activeProviderId) ?? providers[0]
+    const activeModel = this.resolveActiveModel(activeProvider)
+
     return {
-      provider,
-      baseUrl: readString(this.repo.get('baseUrl')),
-      model: readString(this.repo.get('model')),
-      hasApiKey: Boolean(this.getApiKey())
+      providers: providers.map((provider) => this.toPublicProvider(provider)),
+      activeProviderId: activeProvider.id,
+      activeModel,
+      approvalMode: this.getApprovalMode()
     }
   }
 
-  update(input: SettingsUpdateRequest): PublicSettings {
-    this.repo.set('provider', input.provider)
-    this.repo.set('baseUrl', input.baseUrl.trim())
-    this.repo.set('model', input.model.trim())
+  getApprovalMode(): ApprovalMode {
+    const value = this.repo.get(KEY_APPROVAL_MODE)
+    return value === 'auto' || value === 'open' ? value : 'manual'
+  }
 
-    if (input.apiKey !== undefined) {
-      const key = input.apiKey.trim()
-      if (!key) {
-        this.repo.delete('apiKeyEncrypted')
-      } else {
-        if (!this.crypto) {
-          throw new AppError('E_UNSUPPORTED', '当前环境不支持安全存储，无法保存 API Key')
-        }
-        this.repo.set('apiKeyEncrypted', this.crypto.encrypt(key))
-      }
-    }
-
+  setApprovalMode(input: SettingsSetApprovalModeRequest): PublicSettings {
+    this.repo.set(KEY_APPROVAL_MODE, input.mode)
     return this.getPublic()
   }
 
-  getApiKey(): string | null {
-    if (this.envKey) return this.envKey
-    const encrypted = this.repo.get('apiKeyEncrypted')
-    if (typeof encrypted !== 'string' || !this.crypto) return null
-    try {
-      return this.crypto.decrypt(encrypted)
-    } catch {
-      return null
+  saveProvider(input: ProviderSaveRequest): PublicSettings {
+    const providers = this.ensureProviders()
+    const preset = getProviderPreset(input.presetId)
+    const existing = input.id
+      ? (providers.find((provider) => provider.id === input.id) ?? null)
+      : null
+    if (input.id && !existing) {
+      throw new AppError('E_NOT_FOUND', '要更新的 Provider 不存在')
     }
+    if (existing?.id === MOCK_PROVIDER_ID) {
+      throw new AppError('E_INVALID_INPUT', '内置 Mock Provider 不可修改')
+    }
+    if (!existing && input.presetId === MOCK_PROVIDER_ID) {
+      throw new AppError('E_INVALID_INPUT', '内置 Mock Provider 无需添加')
+    }
+
+    const id =
+      existing?.id ??
+      (preset.id === MOCK_PROVIDER_ID
+        ? MOCK_PROVIDER_ID
+        : providers.some((provider) => provider.id === preset.id)
+          ? `${preset.id}-${randomUUID().slice(0, 8)}`
+          : preset.id)
+    const name = input.name.trim() || preset.name
+    const protocol: ProviderProtocol =
+      preset.id === 'custom' || preset.id === MOCK_PROVIDER_ID ? input.protocol : preset.protocol
+    const baseUrl = normalizeBaseUrl(
+      input.baseUrl || preset.baseUrl,
+      name,
+      preset.id === MOCK_PROVIDER_ID
+    )
+    const providedModels = input.models ?? []
+    const models = sanitizeModels(providedModels.length ? providedModels : preset.models)
+    const model = ((input.model ?? '').trim() || models[0] || '').trim()
+    if (preset.id !== MOCK_PROVIDER_ID && !model) {
+      throw new AppError('E_INVALID_INPUT', `请为「${name}」至少填写一个模型`)
+    }
+
+    const config: ProviderConfig = {
+      id,
+      presetId: input.presetId,
+      name,
+      protocol,
+      baseUrl,
+      model,
+      models: models.length ? models : [model]
+    }
+
+    const index = providers.findIndex((provider) => provider.id === id)
+    if (index >= 0) {
+      providers[index] = config
+    } else {
+      providers.push(config)
+    }
+
+    if (input.apiKey !== undefined) {
+      this.storeApiKey(id, input.apiKey.trim())
+    }
+
+    this.repo.set(KEY_PROVIDERS, JSON.stringify(providers))
+    if (!existing || id === existing.id) {
+      this.repo.set(KEY_ACTIVE_PROVIDER, id)
+      this.repo.set(KEY_ACTIVE_MODEL, model)
+      config.model = model
+    }
+    return this.getPublic()
+  }
+
+  deleteProvider(input: ProviderDeleteRequest): PublicSettings {
+    const providers = this.ensureProviders()
+    if (input.providerId === MOCK_PROVIDER_ID) {
+      throw new AppError('E_INVALID_INPUT', '内置 Mock Provider 不可删除')
+    }
+    const next = providers.filter((provider) => provider.id !== input.providerId)
+    if (next.length === providers.length) {
+      throw new AppError('E_NOT_FOUND', 'Provider 不存在')
+    }
+    this.repo.delete(`${PROVIDER_KEY_PREFIX}${input.providerId}`)
+    this.repo.set(KEY_PROVIDERS, JSON.stringify(next))
+    if (this.repo.get(KEY_ACTIVE_PROVIDER) === input.providerId) {
+      this.repo.set(KEY_ACTIVE_PROVIDER, MOCK_PROVIDER_ID)
+      this.repo.set(KEY_ACTIVE_MODEL, 'mock')
+    }
+    return this.getPublic()
+  }
+
+  setActive(input: SettingsSetActiveRequest): PublicSettings {
+    const providers = this.ensureProviders()
+    const provider = providers.find((item) => item.id === input.providerId)
+    if (!provider) throw new AppError('E_NOT_FOUND', 'Provider 不存在')
+    const model = input.model.trim()
+    if (!model) throw new AppError('E_INVALID_INPUT', '请选择模型')
+    if (!provider.models.includes(model)) {
+      provider.models = [...provider.models, model]
+    }
+    provider.model = model
+    this.repo.set(KEY_PROVIDERS, JSON.stringify(providers))
+    this.repo.set(KEY_ACTIVE_PROVIDER, provider.id)
+    this.repo.set(KEY_ACTIVE_MODEL, model)
+    return this.getPublic()
   }
 
   createProvider(): ChatProvider {
     const settings = this.getPublic()
-    if (settings.provider === 'mock') {
+    const provider =
+      settings.providers.find((item) => item.id === settings.activeProviderId) ??
+      settings.providers[0]
+    if (!provider) {
+      throw new AppError('E_INVALID_INPUT', '没有可用的模型 Provider')
+    }
+    if (provider.id === MOCK_PROVIDER_ID) {
       return new MockProvider()
     }
 
-    const apiKey = this.getApiKey()
-    if (!settings.baseUrl || !settings.model || !apiKey) {
-      throw new AppError('E_INVALID_INPUT', '请先在设置中填写 Base URL、模型名称与 API Key')
+    if (!provider.baseUrl) {
+      throw new AppError('E_INVALID_INPUT', `请先在设置中为「${provider.name}」填写 Base URL`)
+    }
+    if (!settings.activeModel) {
+      throw new AppError('E_INVALID_INPUT', `请先为「${provider.name}」选择模型`)
+    }
+    const apiKey = this.getApiKeyFor(provider)
+    if (!apiKey && getProviderPreset(provider.presetId).requiresApiKey) {
+      throw new AppError('E_INVALID_INPUT', `请先在设置中为「${provider.name}」配置 API Key`)
     }
 
+    if (provider.protocol === 'anthropic') {
+      return new AnthropicProvider({
+        baseUrl: provider.baseUrl,
+        apiKey: apiKey ?? '',
+        model: settings.activeModel
+      })
+    }
+    if (provider.protocol === 'gemini') {
+      return new GeminiProvider({
+        baseUrl: provider.baseUrl,
+        apiKey: apiKey ?? '',
+        model: settings.activeModel
+      })
+    }
     return new OpenAICompatibleProvider({
-      baseUrl: settings.baseUrl,
-      apiKey,
-      model: settings.model
+      baseUrl: provider.baseUrl,
+      apiKey: apiKey ?? '',
+      model: settings.activeModel
     })
+  }
+
+  private ensureProviders(): ProviderConfig[] {
+    const raw = this.repo.get(KEY_PROVIDERS)
+    if (typeof raw === 'string') {
+      try {
+        const parsed: unknown = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          const providers = parsed.filter(isProviderConfig)
+          if (!providers.some((provider) => provider.id === MOCK_PROVIDER_ID)) {
+            providers.unshift(mockConfig())
+          }
+          if (providers.length) return providers
+        }
+      } catch {
+        // 损坏时回退到默认 Provider
+      }
+    }
+    return this.migrateLegacySettings()
+  }
+
+  private migrateLegacySettings(): ProviderConfig[] {
+    const legacyProvider = this.repo.get(KEY_LEGACY_PROVIDER)
+    const legacyBaseUrl = readString(this.repo.get(KEY_LEGACY_BASE_URL))
+    const legacyModel = readString(this.repo.get(KEY_LEGACY_MODEL))
+    const providers: ProviderConfig[] = [mockConfig()]
+
+    if (legacyProvider === 'openai' && legacyBaseUrl) {
+      const model = legacyModel || 'gpt-4o-mini'
+      providers.push({
+        id: 'custom',
+        presetId: 'custom',
+        name: 'OpenAI-compatible',
+        protocol: 'openai',
+        baseUrl: legacyBaseUrl.replace(/\/+$/, ''),
+        model,
+        models: [model]
+      })
+      const legacyKey = this.repo.get(KEY_LEGACY_API_KEY)
+      if (typeof legacyKey === 'string') {
+        this.repo.set(`${PROVIDER_KEY_PREFIX}custom`, legacyKey)
+      }
+      this.repo.set(KEY_ACTIVE_PROVIDER, 'custom')
+      this.repo.set(KEY_ACTIVE_MODEL, model)
+    } else {
+      this.repo.set(KEY_ACTIVE_PROVIDER, MOCK_PROVIDER_ID)
+      this.repo.set(KEY_ACTIVE_MODEL, 'mock')
+    }
+
+    this.repo.set(KEY_PROVIDERS, JSON.stringify(providers))
+    return providers
+  }
+
+  private resolveActiveProviderId(providers: ProviderConfig[]): string {
+    const stored = this.repo.get(KEY_ACTIVE_PROVIDER)
+    const found =
+      typeof stored === 'string' ? providers.find((provider) => provider.id === stored) : null
+    const active = found ?? providers[0]
+    if (this.repo.get(KEY_ACTIVE_PROVIDER) !== active.id) {
+      this.repo.set(KEY_ACTIVE_PROVIDER, active.id)
+    }
+    return active.id
+  }
+
+  private resolveActiveModel(provider: ProviderConfig): string {
+    const stored = this.repo.get(KEY_ACTIVE_MODEL)
+    const storedModel = typeof stored === 'string' ? stored.trim() : ''
+    const belongsToProvider =
+      storedModel.length > 0 &&
+      (provider.models.includes(storedModel) || provider.model === storedModel)
+    const activeModel = belongsToProvider ? storedModel : provider.model || provider.models[0] || ''
+    if (this.repo.get(KEY_ACTIVE_MODEL) !== activeModel) {
+      this.repo.set(KEY_ACTIVE_MODEL, activeModel)
+    }
+    return activeModel
+  }
+
+  private toPublicProvider(provider: ProviderConfig): PublicProvider {
+    return {
+      ...provider,
+      models: [...provider.models],
+      hasApiKey: Boolean(this.getApiKeyFor(provider))
+    }
+  }
+
+  private storeApiKey(providerId: string, apiKey: string): void {
+    const key = `${PROVIDER_KEY_PREFIX}${providerId}`
+    if (!apiKey) {
+      this.repo.delete(key)
+      return
+    }
+    if (!this.crypto) {
+      throw new AppError('E_UNSUPPORTED', '当前环境不支持安全存储，无法保存 API Key')
+    }
+    this.repo.set(key, this.crypto.encrypt(apiKey))
+  }
+
+  private getApiKeyFor(provider: ProviderConfig): string | null {
+    const encrypted = this.repo.get(`${PROVIDER_KEY_PREFIX}${provider.id}`)
+    if (typeof encrypted === 'string' && this.crypto) {
+      try {
+        return this.crypto.decrypt(encrypted)
+      } catch {
+        // 解密失败时继续尝试环境变量
+      }
+    }
+    const envKey = getProviderPreset(provider.presetId).envKey
+    if (envKey && this.env) {
+      const value = this.env[envKey]
+      if (typeof value === 'string' && value.trim()) return value.trim()
+    }
+    return null
   }
 }

@@ -20,6 +20,8 @@ import type {
   IpcResult,
   ProjectListResult,
   ProjectRenameInput,
+  ProviderDeleteInput,
+  ProviderSaveInput,
   SessionArchiveInput,
   SessionCreateInput,
   SessionDeleteResult,
@@ -32,7 +34,8 @@ import type {
   SessionPinInput,
   SessionRenameInput,
   SettingsResult,
-  SettingsUpdateInput,
+  SettingsSetActiveInput,
+  SettingsSetApprovalModeInput,
   WindowControlInput,
   WorkspaceInfo,
   WorkspaceOpenProjectInput
@@ -116,8 +119,14 @@ const api: YocimApi = {
   },
   settings: {
     get: () => invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsGet),
-    set: (input: SettingsUpdateInput) =>
-      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSet, input)
+    saveProvider: (input: ProviderSaveInput) =>
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSaveProvider, input),
+    removeProvider: (input: ProviderDeleteInput) =>
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsDeleteProvider, input),
+    setActive: (input: SettingsSetActiveInput) =>
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetActive, input),
+    setApprovalMode: (input: SettingsSetApprovalModeInput) =>
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetApprovalMode, input)
   },
   window: {
     control: (input: WindowControlInput) =>

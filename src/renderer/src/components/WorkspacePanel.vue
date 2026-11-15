@@ -40,7 +40,11 @@ watch(
 </script>
 
 <template>
-  <aside class="workspace-panel" data-testid="workspace-panel">
+  <aside
+    class="workspace-panel"
+    data-testid="workspace-panel"
+    :style="{ width: `${settings.workspaceWidth}px` }"
+  >
     <div class="panel-head">
       <div class="ws-info">
         <span class="ws-name">{{ workspace.info ? workspace.info.name : '工作区' }}</span>
@@ -107,16 +111,10 @@ watch(
   display: flex;
   flex: none;
   flex-direction: column;
-  width: 280px;
+  max-width: 45vw;
   min-height: 0;
   border-left: 1px solid var(--border);
   background: var(--bg-subtle);
-}
-
-@media (max-width: 1200px) {
-  .workspace-panel {
-    width: 240px;
-  }
 }
 
 .panel-head {

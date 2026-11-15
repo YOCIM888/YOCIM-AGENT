@@ -1,117 +1,332 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import type { PublicSettings } from '@shared/session'
+import { computed, onMounted, ref } from 'vue'
+import {
+  getProviderPreset,
+  PROVIDER_PRESETS,
+  type ProviderPresetId,
+  type ProviderProtocol,
+  type PublicProvider
+} from '@shared/providers'
+import { useProvidersStore } from '../stores/providers'
 
 const emit = defineEmits<{
   close: []
 }>()
 
-const provider = ref<'mock' | 'openai'>('mock')
+const store = useProvidersStore()
+
+const selectedId = ref<string | null>(null)
+const isNew = ref(false)
+const presetId = ref<ProviderPresetId>('deepseek')
+const name = ref('')
+const protocol = ref<ProviderProtocol>('openai')
 const baseUrl = ref('')
+const modelsText = ref('')
 const model = ref('')
 const apiKey = ref('')
 const clearKey = ref(false)
-const hasApiKey = ref(false)
 const loading = ref(false)
 const error = ref('')
 
-function applySettings(settings: PublicSettings): void {
-  provider.value = settings.provider
-  baseUrl.value = settings.baseUrl
-  model.value = settings.model
-  hasApiKey.value = settings.hasApiKey
-}
-
-onMounted(async () => {
-  const result = await window.yocim.settings.get()
-  if (result.ok) {
-    applySettings(result.data)
-  } else {
-    error.value = result.error.message
-  }
+const addablePresets = PROVIDER_PRESETS.filter((preset) => preset.id !== 'mock')
+const selectedProvider = computed(
+  () => store.providers.find((provider) => provider.id === selectedId.value) ?? null
+)
+const isMock = computed(() => !isNew.value && selectedProvider.value?.id === 'mock')
+const isCustom = computed(() => presetId.value === 'custom')
+const preset = computed(() => getProviderPreset(presetId.value))
+const parsedModels = computed(() =>
+  [
+    ...new Set(
+      modelsText.value
+        .split(/[\n,，]/)
+        .map((value) => value.trim())
+        .filter(Boolean)
+    )
+  ].slice(0, 50)
+)
+const modelOptions = computed(() => {
+  const list = [...parsedModels.value]
+  if (model.value && !list.includes(model.value)) list.unshift(model.value)
+  return list
 })
 
+function protocolLabel(value: ProviderProtocol): string {
+  if (value === 'anthropic') return 'Anthropic'
+  if (value === 'gemini') return 'Gemini'
+  return 'OpenAI 兼容'
+}
+
+function fillFromProvider(provider: PublicProvider): void {
+  selectedId.value = provider.id
+  isNew.value = false
+  presetId.value = provider.presetId
+  name.value = provider.name
+  protocol.value = provider.protocol
+  baseUrl.value = provider.baseUrl
+  modelsText.value = provider.models.join('\n')
+  model.value = provider.model || provider.models[0] || ''
+  apiKey.value = ''
+  clearKey.value = false
+  error.value = ''
+}
+
+function applyPreset(id: ProviderPresetId): void {
+  const item = getProviderPreset(id)
+  presetId.value = id
+  name.value = item.name
+  protocol.value = item.protocol
+  baseUrl.value = item.baseUrl
+  modelsText.value = item.models.join('\n')
+  model.value = item.models[0] ?? ''
+  apiKey.value = ''
+  clearKey.value = false
+  error.value = ''
+}
+
+function selectProvider(provider: PublicProvider): void {
+  fillFromProvider(provider)
+}
+
+function startAdd(): void {
+  selectedId.value = null
+  isNew.value = true
+  applyPreset('deepseek')
+}
+
+function onPresetChange(): void {
+  applyPreset(presetId.value)
+}
+
 async function save(): Promise<void> {
+  if (isMock.value) return
   loading.value = true
   error.value = ''
   try {
-    const key = apiKey.value.trim()
-    const result = await window.yocim.settings.set({
-      provider: provider.value,
+    const models = parsedModels.value.length
+      ? parsedModels.value
+      : model.value.trim()
+        ? [model.value.trim()]
+        : []
+    const ok = await store.saveProvider({
+      ...(isNew.value || !selectedId.value ? {} : { id: selectedId.value }),
+      presetId: presetId.value,
+      name: name.value.trim() || preset.value.name,
+      protocol: protocol.value,
       baseUrl: baseUrl.value,
-      model: model.value,
-      ...(clearKey.value ? { apiKey: '' } : key ? { apiKey: key } : {})
+      model: model.value.trim() || models[0] || '',
+      models,
+      ...(clearKey.value
+        ? { apiKey: '' }
+        : apiKey.value.trim()
+          ? { apiKey: apiKey.value.trim() }
+          : {})
     })
-    if (!result.ok) {
-      error.value = result.error.message
+    if (!ok) {
+      error.value = store.error
       return
     }
-    applySettings(result.data)
-    apiKey.value = ''
-    clearKey.value = false
     emit('close')
   } finally {
     loading.value = false
   }
 }
+
+async function remove(): Promise<void> {
+  const provider = selectedProvider.value
+  if (!provider || provider.id === 'mock') return
+  loading.value = true
+  error.value = ''
+  try {
+    const ok = await store.removeProvider(provider.id)
+    if (!ok) {
+      error.value = store.error
+      return
+    }
+    const next = store.providers[0]
+    if (next) fillFromProvider(next)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function useProvider(): Promise<void> {
+  const provider = selectedProvider.value
+  if (!provider) return
+  loading.value = true
+  error.value = ''
+  try {
+    const target = provider.model || provider.models[0] || ''
+    const ok = await store.setActive(provider.id, target)
+    if (!ok) error.value = store.error
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(async () => {
+  await store.refresh()
+  const active =
+    store.providers.find((provider) => provider.id === store.activeProviderId) ?? store.providers[0]
+  if (active) fillFromProvider(active)
+})
 </script>
 
 <template>
   <div class="overlay" @click.self="emit('close')">
     <section class="dialog" data-testid="settings-dialog">
-      <h2>模型设置</h2>
+      <header class="dialog-head">
+        <h2>模型设置</h2>
+        <button type="button" class="close" aria-label="关闭设置" @click="emit('close')">✕</button>
+      </header>
 
-      <label class="field">
-        <span>Provider</span>
-        <select v-model="provider" data-testid="settings-provider">
-          <option value="mock">Mock（离线）</option>
-          <option value="openai">OpenAI-compatible</option>
-        </select>
-      </label>
+      <div class="body">
+        <aside class="provider-list">
+          <button
+            v-for="provider in store.providers"
+            :key="provider.id"
+            type="button"
+            class="provider-item"
+            :class="{ active: !isNew && selectedId === provider.id }"
+            :data-provider-id="provider.id"
+            :data-testid="`settings-provider-${provider.id}`"
+            @click="selectProvider(provider)"
+          >
+            <span class="provider-name">{{ provider.name }}</span>
+            <span class="provider-meta">
+              {{ protocolLabel(provider.protocol) }}
+              <template v-if="provider.id === store.activeProviderId"> · 当前</template>
+            </span>
+            <span
+              class="key-dot"
+              :class="{ ok: provider.hasApiKey }"
+              :title="provider.hasApiKey ? '已配置 API Key' : '未配置 API Key'"
+            ></span>
+          </button>
+          <button
+            type="button"
+            class="add-provider"
+            data-testid="settings-add-provider"
+            @click="startAdd"
+          >
+            ＋ 添加提供商
+          </button>
+        </aside>
 
-      <label class="field">
-        <span>Base URL</span>
-        <input
-          v-model="baseUrl"
-          data-testid="settings-base-url"
-          placeholder="https://api.example.com/v1"
-        />
-      </label>
+        <div class="form">
+          <label v-if="isNew" class="field">
+            <span>Provider 预设</span>
+            <select v-model="presetId" data-testid="settings-preset" @change="onPresetChange">
+              <option v-for="item in addablePresets" :key="item.id" :value="item.id">
+                {{ item.name }}
+              </option>
+            </select>
+          </label>
+          <p v-if="isNew" class="preset-desc">{{ preset.description }}</p>
 
-      <label class="field">
-        <span>模型</span>
-        <input v-model="model" data-testid="settings-model" placeholder="gpt-4o-mini" />
-      </label>
+          <label class="field">
+            <span>名称</span>
+            <input v-model="name" data-testid="settings-name" :disabled="isMock" />
+          </label>
 
-      <label class="field">
-        <span>API Key</span>
-        <input
-          v-model="apiKey"
-          type="password"
-          data-testid="settings-api-key"
-          :placeholder="hasApiKey ? '已保存（留空不修改）' : '输入 API Key'"
-        />
-      </label>
+          <label v-if="isCustom" class="field">
+            <span>协议</span>
+            <select v-model="protocol" data-testid="settings-protocol">
+              <option value="openai">OpenAI-compatible</option>
+              <option value="anthropic">Anthropic Messages</option>
+              <option value="gemini">Gemini GenerateContent</option>
+            </select>
+          </label>
 
-      <label class="checkbox">
-        <input v-model="clearKey" type="checkbox" />
-        清除已保存的 API Key
-      </label>
+          <label class="field">
+            <span>Base URL</span>
+            <input
+              v-model="baseUrl"
+              data-testid="settings-base-url"
+              :disabled="isMock"
+              placeholder="https://api.example.com/v1"
+            />
+          </label>
 
-      <p class="hint">API Key 通过系统安全存储加密保存，不会写入日志或明文数据库。</p>
-      <p v-if="error" class="error">{{ error }}</p>
+          <label class="field">
+            <span>模型列表（每行一个，也可用逗号分隔）</span>
+            <textarea
+              v-model="modelsText"
+              data-testid="settings-models"
+              rows="3"
+              :disabled="isMock"
+              placeholder="model-a&#10;model-b"
+            ></textarea>
+          </label>
 
-      <div class="actions">
-        <button
-          type="button"
-          class="primary"
-          data-testid="settings-save"
-          :disabled="loading"
-          @click="save"
-        >
-          保存
-        </button>
-        <button type="button" @click="emit('close')">关闭</button>
+          <label class="field">
+            <span>当前模型</span>
+            <select v-model="model" data-testid="settings-model" :disabled="isMock">
+              <option v-for="item in modelOptions" :key="item" :value="item">{{ item }}</option>
+            </select>
+          </label>
+
+          <label v-if="!isMock" class="field">
+            <span>API Key</span>
+            <input
+              v-model="apiKey"
+              type="password"
+              data-testid="settings-api-key"
+              :placeholder="
+                selectedProvider?.hasApiKey
+                  ? '已保存（留空不修改）'
+                  : preset.requiresApiKey
+                    ? '输入 API Key'
+                    : '可选（本地服务可留空）'
+              "
+            />
+          </label>
+
+          <label v-if="!isMock" class="checkbox">
+            <input v-model="clearKey" type="checkbox" data-testid="settings-clear-key" />
+            清除已保存的 API Key
+          </label>
+
+          <p class="hint">
+            API Key 通过系统安全存储按 Provider 独立加密保存，不会写入日志或明文数据库。
+            保存后将自动切换为该 Provider。
+          </p>
+          <p v-if="isMock" class="hint">内置 Mock Provider 无需配置，可直接在输入卡右下角切换。</p>
+          <p v-if="error" class="error">{{ error }}</p>
+
+          <div class="actions">
+            <button
+              v-if="!isNew && !isMock"
+              type="button"
+              class="danger"
+              :disabled="loading"
+              data-testid="settings-delete-provider"
+              @click="remove"
+            >
+              删除
+            </button>
+            <span class="spacer"></span>
+            <button
+              v-if="!isNew && selectedProvider"
+              type="button"
+              :disabled="loading"
+              data-testid="settings-use-provider"
+              @click="useProvider"
+            >
+              设为当前
+            </button>
+            <button
+              type="button"
+              class="primary"
+              :disabled="loading || isMock"
+              data-testid="settings-save"
+              @click="save"
+            >
+              保存
+            </button>
+            <button type="button" @click="emit('close')">关闭</button>
+          </div>
+        </div>
       </div>
     </section>
   </div>
@@ -125,33 +340,161 @@ async function save(): Promise<void> {
   display: grid;
   place-items: center;
   background: rgba(16, 24, 40, 0.28);
+  -webkit-app-region: no-drag;
 }
 
 .dialog {
-  width: 440px;
-  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 48px));
+  max-height: calc(100vh - 80px);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-md);
 }
 
-.dialog h2 {
-  margin: 0 0 16px;
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px 12px;
+}
+
+.dialog-head h2 {
+  margin: 0;
   font-size: 17px;
+}
+
+.close {
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.body {
+  display: flex;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+
+.provider-list {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  width: 220px;
+  padding: 10px;
+  border-right: 1px solid var(--border);
+  overflow: auto;
+}
+
+.provider-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.provider-item:hover {
+  background: var(--bg-hover);
+}
+
+.provider-item.active {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+}
+
+.provider-name {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-meta {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.key-dot {
+  position: absolute;
+  top: 12px;
+  right: 10px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.key-dot.ok {
+  background: var(--success);
+}
+
+.add-provider {
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.add-provider:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px 22px 18px;
+  overflow: auto;
+}
+
+.preset-desc {
+  margin: -4px 0 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.6;
 }
 
 .field {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   font-size: 12px;
   color: var(--text-muted);
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -162,22 +505,36 @@ async function save(): Promise<void> {
   outline: none;
 }
 
+.field textarea {
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
 .field input:focus,
-.field select:focus {
+.field select:focus,
+.field textarea:focus {
   border-color: var(--accent);
+}
+
+.field input:disabled,
+.field select:disabled,
+.field textarea:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .checkbox {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 4px 0 10px;
+  margin: 2px 0 10px;
   font-size: 12px;
   color: var(--text-muted);
 }
 
 .hint {
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   font-size: 11px;
   line-height: 1.6;
   color: var(--text-muted);
@@ -191,8 +548,14 @@ async function save(): Promise<void> {
 
 .actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: 10px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.spacer {
+  flex: 1;
 }
 
 .actions button {
@@ -206,7 +569,7 @@ async function save(): Promise<void> {
   cursor: pointer;
 }
 
-.actions button:hover {
+.actions button:hover:not(:disabled) {
   background: var(--bg-hover);
 }
 
@@ -216,8 +579,25 @@ async function save(): Promise<void> {
   color: var(--accent-contrast);
 }
 
+.actions button.danger {
+  color: var(--danger);
+}
+
 .actions button:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+@media (max-width: 720px) {
+  .body {
+    flex-direction: column;
+  }
+
+  .provider-list {
+    width: auto;
+    max-height: 160px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
 }
 </style>
