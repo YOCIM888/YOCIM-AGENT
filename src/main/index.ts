@@ -117,7 +117,7 @@ void app.whenReady().then(async () => {
   logInfo(`app ready v${app.getVersion()}`)
   database = openDatabase(join(app.getPath('userData'), 'yocim.db'))
   await workspaceService.restore()
-  registerIpcHandlers(database)
+  registerIpcHandlers(database, app.getPath('userData'))
   createMainWindow()
 
   app.on('activate', () => {

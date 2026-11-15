@@ -148,7 +148,7 @@ function selectProjectMenu(id: string): void {
   >
     <div class="brand">
       <img class="brand-logo" src="/image/yocim.png" alt="YOCIM" />
-      <span class="brand-name" data-testid="app-title">YOCIM AGRNT</span>
+      <span class="brand-name" data-testid="app-title">YOCIM AGENT</span>
     </div>
 
     <button

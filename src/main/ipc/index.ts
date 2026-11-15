@@ -1,5 +1,6 @@
-import { BrowserWindow, ipcMain, safeStorage } from 'electron'
+import { BrowserWindow, clipboard, ipcMain, safeStorage, shell } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
+import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type { AgentEvent } from '../../shared/agent'
 import type { ApprovalRequest } from '../../shared/approval'
@@ -9,7 +10,13 @@ import {
   auditListInputSchema,
   chatCancelInputSchema,
   chatSendInputSchema,
+  clipboardWriteTextInputSchema,
+  fsClipboardInputSchema,
+  fsCreateEntryInputSchema,
+  fsPathInputSchema,
   fsReadFileInputSchema,
+  fsRenameInputSchema,
+  fsTransferInputSchema,
   fsTreeInputSchema,
   IPC_CHANNELS,
   projectRenameInputSchema,
@@ -24,6 +31,7 @@ import {
   sessionRenameInputSchema,
   settingsSetActiveInputSchema,
   settingsSetApprovalModeInputSchema,
+  timelineReadInputSchema,
   windowControlInputSchema,
   workspaceOpenProjectInputSchema,
   type ApprovalRespondRequest,
@@ -34,8 +42,17 @@ import {
   type ChatCancelResult,
   type ChatSendRequest,
   type ChatSendResult,
+  type ClipboardWriteTextRequest,
+  type FsClipboardRequest,
+  type FsClipboardResult,
+  type FsCreateEntryRequest,
+  type FsDeleteResult,
+  type FsPathRequest,
   type FsReadFileRequest,
   type FsReadFileResult,
+  type FsRenameRequest,
+  type FsTransferRequest,
+  type FsTransferResult,
   type FsTreeNode,
   type FsTreeRequest,
   type IpcResult,
@@ -57,6 +74,10 @@ import {
   type SettingsResult,
   type SettingsSetActiveRequest,
   type SettingsSetApprovalModeRequest,
+  type TimelineListResult,
+  type TimelineReadRequest,
+  type TimelineReadResult,
+  type TimelineRestoreResult,
   type WindowControlRequest,
   type WorkspaceInfo,
   type WorkspaceOpenProjectRequest
@@ -67,6 +88,7 @@ import { ApprovalManager } from '../approval/approvalManager'
 import { AuditStore } from '../audit/auditStore'
 import {
   AuditRepository,
+  FileHistoryRepository,
   MessageRepository,
   ProjectRepository,
   SessionRepository,
@@ -76,6 +98,15 @@ import {
 import { SessionService } from '../sessions/sessionService'
 import { SettingsService, type SettingsCrypto } from '../settings/settingsService'
 import { ToolService } from '../tools/toolService'
+import {
+  copyWorkspaceEntry,
+  createWorkspaceEntry,
+  deleteWorkspaceEntry,
+  moveWorkspaceEntry,
+  renameWorkspaceEntry
+} from '../workspace/fileExplorer'
+import { fileClipboard } from '../workspace/fileClipboard'
+import { TimelineService } from '../workspace/timelineService'
 import { readWorkspaceFile, readWorkspaceTree } from '../workspace/workspaceFs'
 import { workspaceService } from '../workspace/workspaceService'
 import { runIpcHandler, type InputSchema } from './runIpcHandler'
@@ -134,21 +165,28 @@ function handleIpc<TInput, TOutput>(
   )
 }
 
-export function registerIpcHandlers(db: DatabaseSync): void {
+export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
   const sessionRepo = new SessionRepository(db)
   const messageRepo = new MessageRepository(db)
   const projectRepo = new ProjectRepository(db)
   const toolCallRepo = new ToolCallRepository(db)
   const settingsRepo = new SettingsRepository(db)
   const auditRepo = new AuditRepository(db)
+  const fileHistoryRepo = new FileHistoryRepository(db)
 
   const auditStore = new AuditStore({ repo: auditRepo })
   const approvalManager = new ApprovalManager(broadcastApprovalRequest)
   const settingsService = new SettingsService(settingsRepo, createSettingsCrypto())
+  const timelineService = new TimelineService({
+    history: fileHistoryRepo,
+    baseDir: join(userData, 'timeline')
+  })
+  const trashItem = (absolutePath: string): Promise<void> => shell.trashItem(absolutePath)
   const toolService = new ToolService({
     approvals: approvalManager,
     audit: auditStore,
     toolCalls: toolCallRepo,
+    timeline: timelineService,
     requireGuard: () => workspaceService.requireGuard(),
     getApprovalMode: () => settingsService.getApprovalMode()
   })
@@ -196,6 +234,122 @@ export function registerIpcHandlers(db: DatabaseSync): void {
     IPC_CHANNELS.fsReadFile,
     fsReadFileInputSchema,
     (input) => readWorkspaceFile(workspaceService.requireGuard(), input)
+  )
+
+  handleIpc<FsCreateEntryRequest, FsTreeNode>(
+    IPC_CHANNELS.fsCreateFile,
+    fsCreateEntryInputSchema,
+    (input) => createWorkspaceEntry(workspaceService.requireGuard(), input, 'file')
+  )
+
+  handleIpc<FsCreateEntryRequest, FsTreeNode>(
+    IPC_CHANNELS.fsCreateFolder,
+    fsCreateEntryInputSchema,
+    (input) => createWorkspaceEntry(workspaceService.requireGuard(), input, 'directory')
+  )
+
+  handleIpc<FsRenameRequest, FsTreeNode>(IPC_CHANNELS.fsRename, fsRenameInputSchema, (input) =>
+    renameWorkspaceEntry(workspaceService.requireGuard(), input)
+  )
+
+  handleIpc<FsTransferRequest, FsTransferResult>(
+    IPC_CHANNELS.fsCopy,
+    fsTransferInputSchema,
+    (input) => copyWorkspaceEntry(workspaceService.requireGuard(), input)
+  )
+
+  handleIpc<FsTransferRequest, FsTransferResult>(
+    IPC_CHANNELS.fsMove,
+    fsTransferInputSchema,
+    async (input) => {
+      const guard = workspaceService.requireGuard()
+      const result = await moveWorkspaceEntry(guard, input, trashItem)
+      const clip = fileClipboard.get()
+      if (
+        !result.skipped &&
+        clip?.mode === 'cut' &&
+        clip.workspaceRoot === guard.root &&
+        clip.relativePath === input.sourcePath
+      ) {
+        fileClipboard.clear()
+      }
+      return result
+    }
+  )
+
+  handleIpc<FsPathRequest, FsDeleteResult>(
+    IPC_CHANNELS.fsDelete,
+    fsPathInputSchema,
+    async (input) => {
+      const guard = workspaceService.requireGuard()
+      const result = await deleteWorkspaceEntry(guard, input.relativePath, trashItem)
+      const clip = fileClipboard.get()
+      if (clip?.workspaceRoot === guard.root && clip.relativePath === input.relativePath) {
+        fileClipboard.clear()
+      }
+      return result
+    }
+  )
+
+  handleIpc<FsPathRequest, null>(IPC_CHANNELS.fsReveal, fsPathInputSchema, async (input) => {
+    const resolved = await workspaceService
+      .requireGuard()
+      .resolve(input.relativePath, { mustExist: true })
+    shell.showItemInFolder(resolved.absolutePath)
+    return null
+  })
+
+  handleIpc<FsClipboardRequest, FsClipboardResult>(
+    IPC_CHANNELS.fsClipboard,
+    fsClipboardInputSchema,
+    async (input) => {
+      if (input.action === 'clear') {
+        fileClipboard.clear()
+        return null
+      }
+      const root = workspaceService.current()?.root ?? null
+      if (input.action === 'get') {
+        const clip = fileClipboard.get()
+        return clip && clip.workspaceRoot === root ? fileClipboard.publicState() : null
+      }
+      const guard = workspaceService.requireGuard()
+      const resolved = await guard.resolve(input.relativePath, { mustExist: true })
+      fileClipboard.set({
+        mode: input.mode,
+        relativePath: resolved.relativePath,
+        name: resolved.relativePath.split('/').pop() ?? resolved.relativePath,
+        workspaceRoot: guard.root,
+        ts: Date.now()
+      })
+      return fileClipboard.publicState()
+    }
+  )
+
+  handleIpc<ClipboardWriteTextRequest, null>(
+    IPC_CHANNELS.clipboardWriteText,
+    clipboardWriteTextInputSchema,
+    async (input) => {
+      clipboard.writeText(input.text)
+      return null
+    }
+  )
+
+  handleIpc<FsPathRequest, TimelineListResult>(
+    IPC_CHANNELS.timelineList,
+    fsPathInputSchema,
+    async (input) => timelineService.list(workspaceService.requireGuard().root, input.relativePath)
+  )
+
+  handleIpc<TimelineReadRequest, TimelineReadResult>(
+    IPC_CHANNELS.timelineRead,
+    timelineReadInputSchema,
+    (input) => timelineService.read(input.id)
+  )
+
+  handleIpc<TimelineReadRequest, TimelineRestoreResult>(
+    IPC_CHANNELS.timelineRestore,
+    timelineReadInputSchema,
+    (input) => timelineService.restore(input.id, workspaceService.requireGuard())
   )
 
   handleIpc<ChatSendRequest, ChatSendResult>(

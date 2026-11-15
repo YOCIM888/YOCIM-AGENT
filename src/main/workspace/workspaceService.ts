@@ -2,6 +2,7 @@ import path from 'node:path'
 import { dialog } from 'electron'
 import { AppError } from '../../shared/errors'
 import type { WorkspaceInfo } from '../../shared/ipc'
+import { fileClipboard } from './fileClipboard'
 import { WorkspacePathGuard } from './pathGuard'
 import { WorkspaceStore } from './workspaceStore'
 
@@ -22,6 +23,7 @@ async function activate(root: string): Promise<WorkspaceInfo> {
   const guard = await WorkspacePathGuard.create(root)
   const name = path.basename(guard.root) || guard.root
   active = { info: { root: guard.root, name }, guard }
+  fileClipboard.clear()
   await getStore().save(guard.root)
   return active.info
 }

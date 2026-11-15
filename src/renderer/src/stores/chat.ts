@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, toRaw } from 'vue'
 import type { AgentEvent } from '@shared/agent'
 import type { ApprovalDecision, ApprovalRequest } from '@shared/approval'
+import { ATTACHMENT_LIMITS, type ContextAttachment } from '@shared/attachment'
 import {
   attachStepApproval,
   closePendingApprovals,
@@ -11,6 +12,8 @@ import {
   upsertToolStep,
   type AgentStep
 } from '../lib/agentSteps'
+import { checkAttachment } from '../lib/attachments'
+import { languageForPath } from '../lib/language'
 import { useSessionStore } from './session'
 
 export type ChatRole = 'user' | 'assistant' | 'system'
@@ -44,6 +47,8 @@ export const useChatStore = defineStore('chat', () => {
   const sending = ref(false)
   const activeRunId = ref<string | null>(null)
   const pendingApprovals = ref<ApprovalRequest[]>([])
+  const attachments = ref<ContextAttachment[]>([])
+  const attachmentError = ref('')
 
   let activeSessionId: string | null = null
   let cancelRequested = false
@@ -270,6 +275,50 @@ export const useChatStore = defineStore('chat', () => {
     append(target, 'system', content)
   }
 
+  function addAttachment(attachment: ContextAttachment): boolean {
+    attachmentError.value = ''
+    const check = checkAttachment(attachments.value, attachment)
+    if (check === 'duplicate') return true
+    if (check === 'count') {
+      attachmentError.value = `最多附加 ${ATTACHMENT_LIMITS.maxCount} 个上下文文件`
+      return false
+    }
+    if (check === 'total') {
+      attachmentError.value = '上下文附件总大小超出限制'
+      return false
+    }
+    attachments.value.push(attachment)
+    return true
+  }
+
+  async function attachFile(node: { relativePath: string }): Promise<void> {
+    attachmentError.value = ''
+    const result = await window.yocim.workspace.readFile({ relativePath: node.relativePath })
+    if (!result.ok) {
+      attachmentError.value = result.error.message
+      return
+    }
+    const max = ATTACHMENT_LIMITS.maxFileBytes
+    const content = result.data.content.slice(0, max)
+    addAttachment({
+      id: createId(),
+      type: 'file',
+      relativePath: result.data.relativePath,
+      content,
+      language: languageForPath(result.data.relativePath),
+      truncated: result.data.truncated || result.data.content.length > max
+    })
+  }
+
+  function removeAttachment(id: string): void {
+    attachments.value = attachments.value.filter((item) => item.id !== id)
+  }
+
+  function clearAttachments(): void {
+    attachments.value = []
+    attachmentError.value = ''
+  }
+
   async function send(): Promise<void> {
     const text = draft.value.trim()
     if (!text || sending.value) return
@@ -291,10 +340,17 @@ export const useChatStore = defineStore('chat', () => {
 
     append(sessionId, 'user', text)
     draft.value = ''
+    // IPC 结构化克隆无法序列化 Vue 响应式 Proxy，先转成纯数据
+    const pendingAttachments = toRaw(attachments.value).map((item) => ({ ...toRaw(item) }))
 
     let result: Awaited<ReturnType<typeof window.yocim.chat.send>>
     try {
-      result = await window.yocim.chat.send({ sessionId, text, history })
+      result = await window.yocim.chat.send({
+        sessionId,
+        text,
+        history,
+        attachments: pendingAttachments
+      })
     } catch {
       sending.value = false
       appendError(sessionId, '发送失败：主进程无响应')
@@ -306,6 +362,9 @@ export const useChatStore = defineStore('chat', () => {
       appendError(sessionId, `发送失败：${result.error.message}`, result.error.code)
       return
     }
+
+    attachments.value = []
+    attachmentError.value = ''
 
     // 运行可能已经被取消或提前结束，此时不再恢复 runId
     if (!sending.value) return
@@ -347,11 +406,17 @@ export const useChatStore = defineStore('chat', () => {
     sending,
     activeRunId,
     pendingApprovals,
+    attachments,
+    attachmentError,
     send,
     retry,
     cancel,
     respondApproval,
     loadSession,
-    appendSystem
+    appendSystem,
+    addAttachment,
+    attachFile,
+    removeAttachment,
+    clearAttachments
   }
 })

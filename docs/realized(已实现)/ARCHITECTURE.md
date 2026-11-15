@@ -1,4 +1,4 @@
-# YOCIM AGRNT — 架构设计（ARCHITECTURE）
+# YOCIM AGENT — 架构设计（ARCHITECTURE）
 
 > 本文档是架构事实来源。任何偏离本文档的实现，必须先在本文档记录理由，再改代码。
 

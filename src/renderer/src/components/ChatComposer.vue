@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { ApprovalMode } from '@shared/approval'
+import type { ContextAttachment } from '@shared/attachment'
 import type { ContextMenuItem } from '../lib/menu'
 import { useChatStore } from '../stores/chat'
 import { usePreferencesStore } from '../stores/preferences'
@@ -87,6 +88,23 @@ function submit(): void {
   void nextTick(resize)
 }
 
+function baseName(path: string): string {
+  return path.split('/').pop() ?? path
+}
+
+function chipLabel(attachment: ContextAttachment): string {
+  const name = baseName(attachment.relativePath)
+  return attachment.range
+    ? `${name}:${attachment.range.startLine}-${attachment.range.endLine}`
+    : name
+}
+
+function attachCurrent(): void {
+  const file = workspace.activeFile
+  if (!file) return
+  void chat.attachFile({ relativePath: file.relativePath })
+}
+
 function openModelMenu(event: MouseEvent): void {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const height = Math.min(modelItems.value.length * 30 + 16, window.innerHeight * 0.6)
@@ -136,6 +154,44 @@ onMounted(() => {
       @keydown.enter.exact.prevent="submit"
     ></textarea>
 
+    <div
+      v-if="chat.attachments.length || chat.attachmentError"
+      class="attachments"
+      data-testid="attachment-chips"
+    >
+      <span
+        v-for="attachment in chat.attachments"
+        :key="attachment.id"
+        class="attachment"
+        :title="attachment.relativePath"
+        :data-testid="`attachment-${attachment.id}`"
+      >
+        <span class="att-name">{{ chipLabel(attachment) }}</span>
+        <span v-if="attachment.truncated" class="att-trunc">截断</span>
+        <button
+          type="button"
+          class="att-remove"
+          title="移除附件"
+          :data-testid="`attachment-remove-${attachment.id}`"
+          @click="chat.removeAttachment(attachment.id)"
+        >
+          ×
+        </button>
+      </span>
+      <button
+        v-if="chat.attachments.length"
+        type="button"
+        class="att-clear"
+        data-testid="attachment-clear"
+        @click="chat.clearAttachments()"
+      >
+        清除
+      </button>
+      <span v-if="chat.attachmentError" class="att-error" data-testid="attachment-error">
+        {{ chat.attachmentError }}
+      </span>
+    </div>
+
     <div class="bar">
       <button
         type="button"
@@ -148,7 +204,16 @@ onMounted(() => {
         <span class="approval-dot"></span>
         {{ approvalLabel }}
       </button>
-      <button type="button" class="attach" disabled title="附件（即将支持）">+</button>
+      <button
+        type="button"
+        class="attach"
+        :disabled="!workspace.activeFile"
+        title="添加当前文件到对话"
+        data-testid="attach-current"
+        @click="attachCurrent"
+      >
+        +
+      </button>
       <template v-if="props.showContext">
         <span class="chip">▤ {{ workspaceName }}</span>
       </template>
@@ -233,6 +298,81 @@ textarea::placeholder {
   color: var(--text-muted);
 }
 
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 11px;
+}
+
+.att-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.att-trunc {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--warning-soft, rgba(220, 182, 122, 0.2));
+  color: var(--warning, #b8860b);
+  font-size: 9.5px;
+}
+
+.att-remove {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.att-remove:hover {
+  background: var(--bg-hover);
+  color: var(--danger);
+}
+
+.att-clear {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.att-clear:hover {
+  color: var(--text);
+}
+
+.att-error {
+  width: 100%;
+  color: var(--danger);
+  font-size: 10.5px;
+}
+
 .bar {
   display: flex;
   align-items: center;
@@ -296,6 +436,12 @@ textarea::placeholder {
   font: inherit;
   font-size: 14px;
   line-height: 1;
+  cursor: pointer;
+}
+
+.attach:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .attach:disabled {

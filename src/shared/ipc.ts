@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ATTACHMENT_LIMITS, contextAttachmentSchema } from './attachment'
 import type { IpcErrorCode } from './errors'
 import { FS_LIMITS } from './ipcChannels'
 import type { AuditEntry } from './audit'
@@ -7,6 +8,14 @@ import type { PublicSettings, ProjectSummary, SessionSummary, StoredMessage } fr
 
 export type { IpcErrorCode } from './errors'
 export { FS_LIMITS, IGNORED_DIRECTORIES, IPC_CHANNELS } from './ipcChannels'
+export {
+  ATTACHMENT_LIMITS,
+  contextAttachmentSchema,
+  summarizeAttachments,
+  type AttachmentSummary,
+  type ContextAttachment,
+  type ContextAttachmentRange
+} from './attachment'
 
 export interface IpcError {
   code: IpcErrorCode
@@ -62,16 +71,142 @@ export const fsReadFileResultSchema = z.object({
 
 export type FsReadFileResult = z.infer<typeof fsReadFileResultSchema>
 
+const relativePathSchema = z.string().min(1).max(FS_LIMITS.maxRelativePathLength)
+const dirPathSchema = z.string().max(FS_LIMITS.maxRelativePathLength).optional().default('')
+const entryNameSchema = z.string().min(1).max(255)
+
+export const fsCreateEntryInputSchema = z.object({
+  parentPath: dirPathSchema,
+  name: entryNameSchema
+})
+
+export type FsCreateEntryInput = z.input<typeof fsCreateEntryInputSchema>
+export type FsCreateEntryRequest = z.output<typeof fsCreateEntryInputSchema>
+
+export const fsRenameInputSchema = z.object({
+  relativePath: relativePathSchema,
+  newName: entryNameSchema
+})
+
+export type FsRenameInput = z.input<typeof fsRenameInputSchema>
+export type FsRenameRequest = z.output<typeof fsRenameInputSchema>
+
+export const fsConflictSchema = z.enum(['error', 'keep-both', 'replace', 'skip'])
+export type FsConflictResolution = z.infer<typeof fsConflictSchema>
+
+export const fsTransferInputSchema = z.object({
+  sourcePath: relativePathSchema,
+  targetDir: dirPathSchema,
+  conflict: fsConflictSchema.optional().default('error')
+})
+
+export type FsTransferInput = z.input<typeof fsTransferInputSchema>
+export type FsTransferRequest = z.output<typeof fsTransferInputSchema>
+
+export interface FsTransferResult {
+  relativePath: string
+  skipped: boolean
+}
+
+export const fsPathInputSchema = z.object({
+  relativePath: relativePathSchema
+})
+
+export type FsPathInput = z.input<typeof fsPathInputSchema>
+export type FsPathRequest = z.output<typeof fsPathInputSchema>
+
+export interface FsDeleteResult {
+  deleted: boolean
+}
+
+export const fsClipboardStateSchema = z.object({
+  mode: z.enum(['cut', 'copy']),
+  relativePath: z.string(),
+  name: z.string()
+})
+
+export type FsClipboardState = z.infer<typeof fsClipboardStateSchema>
+export type FsClipboardResult = FsClipboardState | null
+
+export const fsClipboardInputSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('get') }),
+  z.object({ action: z.literal('clear') }),
+  z.object({
+    action: z.literal('set'),
+    mode: z.enum(['cut', 'copy']),
+    relativePath: relativePathSchema
+  })
+])
+
+export type FsClipboardInput = z.input<typeof fsClipboardInputSchema>
+export type FsClipboardRequest = z.output<typeof fsClipboardInputSchema>
+
+export const clipboardWriteTextInputSchema = z.object({
+  text: z.string().max(4096)
+})
+
+export type ClipboardWriteTextInput = z.input<typeof clipboardWriteTextInputSchema>
+export type ClipboardWriteTextRequest = z.output<typeof clipboardWriteTextInputSchema>
+
+export const timelineSourceSchema = z.enum(['user', 'agent', 'external'])
+export type TimelineSource = z.infer<typeof timelineSourceSchema>
+
+export const timelineEntrySchema = z.object({
+  id: z.string(),
+  relativePath: z.string(),
+  source: timelineSourceSchema,
+  size: z.number().int().nonnegative(),
+  contentHash: z.string(),
+  createdAt: z.number().int()
+})
+
+export type TimelineEntry = z.infer<typeof timelineEntrySchema>
+export type TimelineListResult = TimelineEntry[]
+
+export const timelineReadInputSchema = z.object({
+  id: z.string().min(1).max(64)
+})
+
+export type TimelineReadInput = z.input<typeof timelineReadInputSchema>
+export type TimelineReadRequest = z.output<typeof timelineReadInputSchema>
+
+export interface TimelineReadResult {
+  entry: TimelineEntry
+  content: string
+}
+
+export interface TimelineRestoreResult {
+  relativePath: string
+  content: string
+  size: number
+}
+
 export const chatHistoryMessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
   content: z.string().min(1).max(20_000)
 })
 
-export const chatSendInputSchema = z.object({
-  sessionId: z.string().min(1).max(64),
-  text: z.string().min(1).max(20_000),
-  history: z.array(chatHistoryMessageSchema).max(50).optional().default([])
-})
+export const chatSendInputSchema = z
+  .object({
+    sessionId: z.string().min(1).max(64),
+    text: z.string().min(1).max(20_000),
+    history: z.array(chatHistoryMessageSchema).max(50).optional().default([]),
+    attachments: z
+      .array(contextAttachmentSchema)
+      .max(ATTACHMENT_LIMITS.maxCount)
+      .optional()
+      .default([])
+  })
+  .superRefine((value, ctx) => {
+    const total = value.attachments.reduce((sum, item) => sum + item.content.length, 0)
+    if (total > ATTACHMENT_LIMITS.maxTotalBytes) {
+      ctx.addIssue({
+        code: 'custom',
+        message: '附件总大小超出 200KB 限制',
+        path: ['attachments']
+      })
+    }
+  })
 
 export type ChatSendInput = z.input<typeof chatSendInputSchema>
 export type ChatSendRequest = z.output<typeof chatSendInputSchema>

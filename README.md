@@ -1,4 +1,4 @@
-# YOCIM AGRNT
+# YOCIM AGENT
 
 本地优先的桌面 AI 编程助手（Electron + Vue 3 + TypeScript）。可选择本地工作区，与模型对话，在审批后读取/修改文件并执行受控命令。
 
@@ -169,7 +169,7 @@ API Key 处理：
 
 ## 数据位置
 
-位于 Electron `userData` 目录（Windows 通常为 `%APPDATA%\YOCIM AGRNT`）：
+位于 Electron `userData` 目录（Windows 通常为 `%APPDATA%\YOCIM AGENT`）：
 
 - `yocim.db`：项目、会话、消息、工具调用、设置、审计
 - `workspace.json`：上次打开的工作区
@@ -183,7 +183,7 @@ $env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-bu
 npm run package
 ```
 
-- Windows 产物：`release/0.1.0/YOCIM AGRNT-0.1.0-x64-setup.exe` 与 `release/0.1.0/win-unpacked/`
+- Windows 产物：`release/0.1.0/YOCIM AGENT-0.1.0-x64-setup.exe` 与 `release/0.1.0/win-unpacked/`
 - 应用图标：`build/icon.png`（由 `public/image/yocim.png` 复制）
 - 当前未配置代码签名；安装时可能出现 SmartScreen 提示
 

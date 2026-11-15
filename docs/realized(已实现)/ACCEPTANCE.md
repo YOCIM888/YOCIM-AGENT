@@ -1,4 +1,4 @@
-# YOCIM AGRNT — 验收清单（ACCEPTANCE）
+# YOCIM AGENT — 验收清单（ACCEPTANCE）
 
 > 验收原则：每条验收项必须有可复现的验证方式（命令、测试用例或操作步骤），并保存真实输出。未验证项一律标记为未通过。
 
@@ -88,7 +88,7 @@
 
 ## 2. MVP 总验收（最终门禁）
 
-- [x] `npm install && npm run dev` 可启动 YOCIM AGRNT 桌面窗口
+- [x] `npm install && npm run dev` 可启动 YOCIM AGENT 桌面窗口
 - [x] 可选择工作区、浏览文件树、用 Monaco 打开文件
 - [ ] 可配置 OpenAI-compatible 模型并流式对话（配置/SSE 解析已覆盖；待真实端点实测）
 - [x] Agent 可调用读/搜索/写/命令工具
@@ -118,7 +118,7 @@
 | 阶段 | 日期       | 结果 | 备注                                                                                                                     |
 | ---- | ---------- | ---- | ------------------------------------------------------------------------------------------------------------------------ |
 | 0    | 2026-11-15 | 通过 | 四份文档创建完成，仓库为空、Node v24.15.0 / npm 11.12.1                                                                  |
-| 1    | 2026-11-15 | 通过 | typecheck / lint / test / build 全通过；dev 窗口标题 YOCIM AGRNT；Playwright 冒烟 1 passed；Electron 45 二进制需镜像下载 |
+| 1    | 2026-11-15 | 通过 | typecheck / lint / test / build 全通过；dev 窗口标题 YOCIM AGENT；Playwright 冒烟 1 passed；Electron 45 二进制需镜像下载 |
 | 2    | 2026-11-15 | 通过 | 25 个单测通过（含 junction 逃逸）；e2e 2 passed（工作区恢复 + 文件树 + 预览）；dev 窗口正常                              |
 | 3    | 2026-11-15 | 通过 | Codex 布局 + Monaco（本地 worker）+ 四 store + 对话面板；e2e 2 passed，含 Monaco 文本断言；renderer 无 Node              |
 | 4    | 2026-11-15 | 通过 | Agent 引擎 + mock/OpenAI SSE provider + chat IPC；37 单测（引擎/取消/SSE）；e2e 2 passed（流式 mock 回复）               |

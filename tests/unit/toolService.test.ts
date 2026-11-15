@@ -1,11 +1,15 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { DatabaseSync } from 'node:sqlite'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { ApprovalManager } from '../../src/main/approval/approvalManager'
 import { AuditStore } from '../../src/main/audit/auditStore'
+import { migrate } from '../../src/main/db/database'
+import { FileHistoryRepository } from '../../src/main/db/repositories'
 import { ToolService } from '../../src/main/tools/toolService'
 import { WorkspacePathGuard } from '../../src/main/workspace/pathGuard'
+import { TimelineService } from '../../src/main/workspace/timelineService'
 import type { ApprovalRequest } from '../../src/shared/approval'
 
 let tempRoot: string
@@ -259,5 +263,51 @@ describe('run_command protection', () => {
     expect(outcome.ok).toBe(true)
     expect(outcome.content).toContain('hi')
     expect(audit.list()[0]).toMatchObject({ tool: 'run_command', approval: 'approved', ok: true })
+  })
+})
+
+describe('write_file timeline snapshot', () => {
+  function makeTimeline(): { timeline: TimelineService; db: DatabaseSync } {
+    const db = new DatabaseSync(':memory:')
+    migrate(db)
+    const timeline = new TimelineService({
+      history: new FileHistoryRepository(db),
+      baseDir: path.join(tempRoot, 'timeline-hook')
+    })
+    return { timeline, db }
+  }
+
+  it('captures an agent snapshot after a successful write', async () => {
+    const { timeline, db } = makeTimeline()
+    const hooked = new ToolService({
+      approvals,
+      audit,
+      requireGuard: () => guard,
+      getApprovalMode: () => 'open',
+      timeline
+    })
+    const outcome = await hooked.execute(
+      toolCall('write_file', { relativePath: 'notes/hooked.txt', content: 'snapshot me' }),
+      context()
+    )
+    expect(outcome.ok).toBe(true)
+    const entries = timeline.list(guard.root, 'notes/hooked.txt')
+    expect(entries).toHaveLength(1)
+    expect(entries[0].source).toBe('agent')
+    expect((await timeline.read(entries[0].id)).content).toBe('snapshot me')
+    db.close()
+  })
+
+  it('does not snapshot a denied write', async () => {
+    const { timeline, db } = makeTimeline()
+    const hooked = new ToolService({ approvals, audit, requireGuard: () => guard, timeline })
+    const run = hooked.execute(
+      toolCall('write_file', { relativePath: 'notes/hook-denied.txt', content: 'x' }),
+      context()
+    )
+    approvals.respond(requests[0].approvalId, 'deny')
+    expect((await run).ok).toBe(false)
+    expect(timeline.list(guard.root, 'notes/hook-denied.txt')).toHaveLength(0)
+    db.close()
   })
 })

@@ -9,6 +9,7 @@ import type {
   ToolCall,
   ToolExecutionOutcome
 } from '../../shared/agent'
+import type { ContextAttachment } from '../../shared/attachment'
 
 export interface AgentEngineConfig {
   provider: ChatProvider
@@ -27,17 +28,34 @@ function truncate(text: string, limit: number): string {
   return text.length > limit ? `${text.slice(0, limit)}…` : text
 }
 
+function formatAttachmentContext(attachments: ContextAttachment[]): string {
+  const blocks = attachments.map((attachment) => {
+    const header = attachment.range
+      ? `${attachment.relativePath}（第 ${attachment.range.startLine}-${attachment.range.endLine} 行）`
+      : attachment.relativePath
+    const language = attachment.language ?? ''
+    const note = attachment.truncated ? '\n（内容已截断）' : ''
+    return `### ${header}\n\`\`\`${language}\n${attachment.content}\n\`\`\`${note}`
+  })
+  return `以下是用户附加的上下文文件，仅供参考：\n\n${blocks.join('\n\n')}`
+}
+
 export function buildMessages(
   systemPrompt: string | undefined,
   history: AgentMessage[],
-  userText: string
+  userText: string,
+  attachments?: ContextAttachment[]
 ): AgentMessage[] {
   const messages: AgentMessage[] = []
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt })
   }
   messages.push(...history)
-  messages.push({ role: 'user', content: userText })
+  const content =
+    attachments && attachments.length > 0
+      ? `${userText}\n\n${formatAttachmentContext(attachments)}`
+      : userText
+  messages.push({ role: 'user', content })
   return messages
 }
 
@@ -53,7 +71,12 @@ export async function runAgentTurn(
   let seq = 0
   let finished = false
   let combinedText = ''
-  const messages = buildMessages(config.systemPrompt, input.history, input.userText)
+  const messages = buildMessages(
+    config.systemPrompt,
+    input.history,
+    input.userText,
+    input.attachments
+  )
 
   const nextMeta = (): { runId: string; seq: number; ts: number } => ({
     runId: input.runId,

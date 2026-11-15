@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export const MIGRATION_V1 = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -77,6 +77,21 @@ CREATE INDEX IF NOT EXISTS idx_sessions_pinned ON sessions(pinned_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_archived ON sessions(archived_at);
 `
 
+const MIGRATION_V3 = `
+CREATE TABLE IF NOT EXISTS file_history (
+  id TEXT PRIMARY KEY,
+  workspace_root TEXT NOT NULL,
+  relative_path TEXT NOT NULL,
+  source TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  content_hash TEXT NOT NULL,
+  storage_path TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_file_history_path ON file_history(workspace_root, relative_path, created_at);
+`
+
 function getUserVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as { user_version?: number } | undefined
   return Number(row?.user_version ?? 0)
@@ -127,7 +142,19 @@ export function migrate(db: DatabaseSync): void {
     try {
       db.exec(MIGRATION_V2)
       backfillProjects(db)
-      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
+      db.exec('PRAGMA user_version = 2')
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  if (version < 3) {
+    db.exec('BEGIN')
+    try {
+      db.exec(MIGRATION_V3)
+      db.exec('PRAGMA user_version = 3')
       db.exec('COMMIT')
     } catch (error) {
       db.exec('ROLLBACK')

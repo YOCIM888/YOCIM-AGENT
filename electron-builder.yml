@@ -1,5 +1,5 @@
 appId: com.yocim.agent
-productName: YOCIM AGRNT
+productName: YOCIM AGENT
 copyright: Copyright © 2026 YOCIM
 directories:
   buildResources: build
@@ -22,7 +22,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: YOCIM AGRNT
+  shortcutName: YOCIM AGENT
   artifactName: ${productName}-${version}-setup.${ext}
 mac:
   target:

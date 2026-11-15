@@ -9,8 +9,17 @@ import type {
   ChatCancelResult,
   ChatSendInput,
   ChatSendResult,
+  ClipboardWriteTextInput,
+  FsClipboardInput,
+  FsClipboardResult,
+  FsCreateEntryInput,
+  FsDeleteResult,
+  FsPathInput,
   FsReadFileInput,
   FsReadFileResult,
+  FsRenameInput,
+  FsTransferInput,
+  FsTransferResult,
   FsTreeInput,
   FsTreeNode,
   IpcResult,
@@ -32,6 +41,10 @@ import type {
   SettingsResult,
   SettingsSetActiveInput,
   SettingsSetApprovalModeInput,
+  TimelineListResult,
+  TimelineReadInput,
+  TimelineReadResult,
+  TimelineRestoreResult,
   WindowControlInput,
   WorkspaceInfo,
   WorkspaceOpenProjectInput
@@ -50,6 +63,24 @@ export interface YocimWorkspaceApi {
   openProject(input: WorkspaceOpenProjectInput): Promise<IpcResult<WorkspaceInfo>>
   tree(input: FsTreeInput): Promise<IpcResult<FsTreeNode[]>>
   readFile(input: FsReadFileInput): Promise<IpcResult<FsReadFileResult>>
+  createFile(input: FsCreateEntryInput): Promise<IpcResult<FsTreeNode>>
+  createFolder(input: FsCreateEntryInput): Promise<IpcResult<FsTreeNode>>
+  rename(input: FsRenameInput): Promise<IpcResult<FsTreeNode>>
+  copy(input: FsTransferInput): Promise<IpcResult<FsTransferResult>>
+  move(input: FsTransferInput): Promise<IpcResult<FsTransferResult>>
+  delete(input: FsPathInput): Promise<IpcResult<FsDeleteResult>>
+  reveal(input: FsPathInput): Promise<IpcResult<null>>
+  clipboard(input: FsClipboardInput): Promise<IpcResult<FsClipboardResult>>
+}
+
+export interface YocimClipboardApi {
+  writeText(input: ClipboardWriteTextInput): Promise<IpcResult<null>>
+}
+
+export interface YocimTimelineApi {
+  list(input: FsPathInput): Promise<IpcResult<TimelineListResult>>
+  read(input: TimelineReadInput): Promise<IpcResult<TimelineReadResult>>
+  restore(input: TimelineReadInput): Promise<IpcResult<TimelineRestoreResult>>
 }
 
 export interface YocimChatApi {
@@ -107,4 +138,6 @@ export interface YocimApi {
   projects: YocimProjectApi
   settings: YocimSettingsApi
   window: YocimWindowApi
+  clipboard: YocimClipboardApi
+  timeline: YocimTimelineApi
 }

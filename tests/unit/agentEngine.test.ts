@@ -79,6 +79,37 @@ describe('buildMessages', () => {
   it('omits the system message when no prompt is provided', () => {
     expect(buildMessages(undefined, [], 'c')).toEqual([{ role: 'user', content: 'c' }])
   })
+
+  it('appends attachment context to the user message', () => {
+    const messages = buildMessages(undefined, [], '请解释', [
+      {
+        id: 'a1',
+        type: 'file',
+        relativePath: 'src/a.ts',
+        language: 'typescript',
+        content: 'export const a = 1'
+      },
+      {
+        id: 'a2',
+        type: 'selection',
+        relativePath: 'src/b.ts',
+        content: 'const b = 2',
+        range: { startLine: 3, startColumn: 1, endLine: 5, endColumn: 1 },
+        truncated: true
+      }
+    ])
+    const user = messages[messages.length - 1]
+    expect(user.role).toBe('user')
+    expect(user.content.startsWith('请解释\n\n')).toBe(true)
+    expect(user.content).toContain('### src/a.ts')
+    expect(user.content).toContain('```typescript\nexport const a = 1\n```')
+    expect(user.content).toContain('### src/b.ts（第 3-5 行）')
+    expect(user.content).toContain('（内容已截断）')
+  })
+
+  it('leaves the user message unchanged when attachments are empty', () => {
+    expect(buildMessages(undefined, [], 'c', [])).toEqual([{ role: 'user', content: 'c' }])
+  })
 })
 
 describe('runAgentTurn', () => {

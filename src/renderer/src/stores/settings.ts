@@ -1,8 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { isWorkspaceView, type WorkspaceView } from '../lib/workspaceViews'
 
 export type ThemeMode = 'light' | 'dark'
-export type WorkspaceTab = 'files' | 'editor' | 'audit'
+
+export type WorkspaceSection = 'outline' | 'timeline'
+
+export interface WorkspaceSections {
+  outline: boolean
+  timeline: boolean
+}
 
 export const SESSION_WIDTH_MIN = 220
 export const SESSION_WIDTH_MAX = 420
@@ -16,7 +23,8 @@ const STORAGE_KEYS = {
   sessionCollapsed: 'yocim.ui.sessionCollapsed',
   workspaceCollapsed: 'yocim.ui.workspaceCollapsed',
   statusExpanded: 'yocim.ui.statusExpanded',
-  workspaceTab: 'yocim.ui.workspaceTab',
+  workspaceView: 'yocim.ui.workspaceView',
+  workspaceSections: 'yocim.ui.workspaceSections',
   sessionWidth: 'yocim.ui.sessionWidth',
   workspaceWidth: 'yocim.ui.workspaceWidth'
 } as const
@@ -57,9 +65,24 @@ function readTheme(): ThemeMode {
   return readStorage(STORAGE_KEYS.theme) === 'dark' ? 'dark' : 'light'
 }
 
-function readTab(): WorkspaceTab {
-  const value = readStorage(STORAGE_KEYS.workspaceTab)
-  return value === 'editor' || value === 'audit' ? value : 'files'
+function readView(): WorkspaceView {
+  const value = readStorage(STORAGE_KEYS.workspaceView) ?? readStorage('yocim.ui.workspaceTab')
+  return isWorkspaceView(value) ? value : 'files'
+}
+
+function readSections(): WorkspaceSections {
+  const fallback: WorkspaceSections = { outline: true, timeline: true }
+  const raw = readStorage(STORAGE_KEYS.workspaceSections)
+  if (!raw) return fallback
+  try {
+    const parsed = JSON.parse(raw) as Partial<WorkspaceSections>
+    return {
+      outline: typeof parsed.outline === 'boolean' ? parsed.outline : true,
+      timeline: typeof parsed.timeline === 'boolean' ? parsed.timeline : true
+    }
+  } catch {
+    return fallback
+  }
 }
 
 function applyTheme(theme: ThemeMode): void {
@@ -75,7 +98,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const sessionCollapsed = ref(readBoolean(STORAGE_KEYS.sessionCollapsed, false))
   const workspaceCollapsed = ref(readBoolean(STORAGE_KEYS.workspaceCollapsed, false))
   const statusExpanded = ref(readBoolean(STORAGE_KEYS.statusExpanded, false))
-  const workspaceTab = ref<WorkspaceTab>(readTab())
+  const workspaceView = ref<WorkspaceView>(readView())
+  const workspaceSections = ref<WorkspaceSections>(readSections())
   const sessionWidth = ref(
     readWidth(
       STORAGE_KEYS.sessionWidth,
@@ -120,9 +144,14 @@ export const useSettingsStore = defineStore('settings', () => {
     writeStorage(STORAGE_KEYS.statusExpanded, String(value))
   }
 
-  function setWorkspaceTab(value: WorkspaceTab): void {
-    workspaceTab.value = value
-    writeStorage(STORAGE_KEYS.workspaceTab, value)
+  function setWorkspaceView(value: WorkspaceView): void {
+    workspaceView.value = value
+    writeStorage(STORAGE_KEYS.workspaceView, value)
+  }
+
+  function setSectionCollapsed(section: WorkspaceSection, collapsed: boolean): void {
+    workspaceSections.value[section] = collapsed
+    writeStorage(STORAGE_KEYS.workspaceSections, JSON.stringify(workspaceSections.value))
   }
 
   function setSessionWidth(value: number): void {
@@ -153,7 +182,8 @@ export const useSettingsStore = defineStore('settings', () => {
     sessionCollapsed,
     workspaceCollapsed,
     statusExpanded,
-    workspaceTab,
+    workspaceView,
+    workspaceSections,
     sessionWidth,
     workspaceWidth,
     setTheme,
@@ -161,7 +191,8 @@ export const useSettingsStore = defineStore('settings', () => {
     setSessionCollapsed,
     setWorkspaceCollapsed,
     setStatusExpanded,
-    setWorkspaceTab,
+    setWorkspaceView,
+    setSectionCollapsed,
     setSessionWidth,
     setWorkspaceWidth
   }

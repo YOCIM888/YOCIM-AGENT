@@ -2,7 +2,7 @@
   "name": "yocim-agent",
   "version": "0.1.0",
   "private": true,
-  "description": "YOCIM AGRNT - local-first desktop AI coding assistant",
+  "description": "YOCIM AGENT - local-first desktop AI coding assistant",
   "main": "./out/main/index.js",
   "author": "YOCIM",
   "license": "UNLICENSED",

@@ -1,3 +1,5 @@
+import type { ContextAttachment } from './attachment'
+
 export type AgentRole = 'system' | 'user' | 'assistant' | 'tool'
 
 export interface ToolCall {
@@ -68,6 +70,7 @@ export interface AgentRunInput {
   sessionId: string
   history: AgentMessage[]
   userText: string
+  attachments?: ContextAttachment[]
 }
 
 export interface AgentRunResult {

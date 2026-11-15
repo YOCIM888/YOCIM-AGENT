@@ -1,9 +1,9 @@
 # 右侧工作区增强计划（VS Code 风格）
 
-> 状态：**范围已确认，待实施**（2026-11-15）
+> 状态：**P0、P1 已完成并验收；P2 待实施**（2026-11-15 更新）
 > 已确认决策：编辑器可编辑、扩展第一层、Node.js 调试优先、WSL 先行、打包 ripgrep、依赖系统 Git。
 > 范围：右侧工作区面板从「文件 / 编辑器 / 审计」三个文字 Tab 扩展为 VS Code 风格的图标活动栏与 8 个视图：文件、搜索、编辑器、审计、源代码管理、扩展安装、运行和调试、远程管理器。
-> 本文档只描述设计与实施计划，本轮不改动代码。
+> P0/P1 已按本文档实施（见 §8 阶段标记与 §14 交接）；P2–P6 仍为计划。
 
 ## 1. 现状与目标
 
@@ -370,13 +370,14 @@ interface ContextAttachment {
 
 ## 8. 实施阶段
 
-### P0：活动栏与视图骨架
+### P0：活动栏与视图骨架 ✅ 已完成（2026-11-15）
 
 - 右侧文字 Tab 替换为图标活动栏（8 个视图），保留现有文件/编辑器/审计功能。
 - 视图切换、选中态、tooltip、活动视图持久化、面板拖动调宽回归。
 - 验收：8 个图标可切换；现有功能不回退；1024/1280/1440 无溢出。
+- 结果：`tests/e2e/workspaceViews.spec.ts` 2 例通过（8 视图切换+持久化、窄屏横向滚动）。
 
-### P1：文件资源管理器
+### P1：文件资源管理器 ✅ 已完成（2026-11-15）
 
 - 懒加载文件树、默认全折叠、文件图标、单击预览/双击固定。
 - 新建文件/文件夹、刷新、全部折叠、内部剪贴板、右键菜单全部条目。
@@ -384,8 +385,9 @@ interface ContextAttachment {
 - 大纲与时间线折叠区块、本地历史快照与 Diff/恢复。
 - 上下文附件基础能力：文件「添加到对话」、附件 chips、发送链路。
 - 验收：全部文件操作单测 + e2e；删除可从回收站恢复；默认折叠；时间线可恢复。
+- 结果：`tests/e2e/fileExplorer.spec.ts` 2 例 + 全量 e2e 11 例、单测 150 例、typecheck/lint/format 全绿；回收站/默认折叠/时间线恢复均 e2e 覆盖；light/dark/1024/右键菜单/Diff 视觉验证通过。
 
-### P2：搜索替换与编辑器体验
+### P2：搜索替换与编辑器体验 ⏳ 待实施（下一步）
 
 - 搜索/替换面板、ripgrep 流式结果、取消、include/exclude、大小写/全词/正则。
 - 替换预览、hash 冲突检测、单条/文件/全局替换。
@@ -494,9 +496,40 @@ interface ContextAttachment {
 
 ### 下一步
 
-从 **P0：活动栏与视图骨架** 开始实施：
+**P0、P1 已完成。从 P2：搜索替换与编辑器体验 开始实施**（交接见 §14）：
 
-1. 右侧文字 Tab 改为 8 图标活动栏；
-2. 视图路由、选中态、tooltip、持久化；
-3. 保留现有文件/编辑器/审计功能与面板拖动调宽；
-4. 完成后按阶段验收再进入 P1。
+1. 搜索/替换面板 + ripgrep 流式结果、取消、include/exclude、大小写/全词/正则；
+2. 替换预览、hash 冲突检测、单条/文件/全局替换；
+3. 编辑器多标签、可编辑与保存、外部修改冲突处理；
+4. 编辑器选区右键「添加到对话」（复用 P1 附件模型）；
+5. 完成后按阶段验收再进入 P3。
+
+## 14. 实施状态与交接（2026-11-15，P0/P1 完成）
+
+> 供接手 P2 的会话快速上手。P0+P1 全部为**未提交**的工作区改动（baseline `c9dbd41` 尚无工作区面板）。
+
+### 14.1 已落地代码
+
+- 主进程：`workspace/fileExplorer.ts`（新建/重命名/复制/移动/删除/冲突）、`workspace/fileClipboard.ts`（内部剪贴板）、`workspace/timelineService.ts`（快照/去重/保留/Diff/恢复）；`db` v3 `file_history` 表；`ipc/index.ts` 注册 `fs:*`、`timeline:*`；`tools/toolService.ts` write_file 后快照钩子。
+- 共享：`shared/attachment.ts`（ContextAttachment + 限额 10/64KB/200KB）、`shared/ipc.ts` 各 schema。
+- 前端组件：`FileTreePanel/FileTreeNode/FileTypeIcon/TreeNameInput/ContextMenu/ConflictDialog/ConfirmDialog/CollapsibleSection/OutlinePanel/TimelinePanel/WorkspaceActivityBar/WorkspaceViewIcon/ViewPlaceholder`。
+- 前端 store/lib：`stores/workspace.ts`（懒加载树/剪贴板/diff/reveal）、`stores/chat.ts`（附件+发送）、`stores/settings.ts`（视图/区块折叠持久化）、`lib/outline.ts`、`lib/attachments.ts`、`lib/language.ts`、`lib/fileTree.ts`、`lib/fileIcons.ts`、`lib/workspaceViews.ts`。
+
+### 14.2 验证基线（接手时请先复跑确认）
+
+- 单测 150（21 文件）；e2e 11（smoke 7 + workspaceViews 2 + fileExplorer 2）；`typecheck:node`、`typecheck:web`、`lint`、`format:check` 全绿。
+- 命令：`npm test`、`npm run e2e`、`npm run typecheck`、`npm run lint`、`npm run format:check`。
+
+### 14.3 与计划的偏差（P2 需留意）
+
+- 大纲 TS/JS 目前用**正则提取**（`lib/outline.ts`），未接 §3.1.5 首选的 Monaco TS Worker；P2 可升级。
+- 时间线快照目前仅 **Agent 写入钩子 + 恢复**；「用户保存 / 外部修改检测」快照待 P2 编辑器可编辑后补齐（现无 fs watcher）。
+- 编辑器仍为**只读预览 + 单文件**；多标签/可编辑/保存/冲突属 P2 范围。
+
+### 14.4 交接坑位（已踩过的坑）
+
+1. **IPC 传参必须纯数据**：Vue reactive Proxy 无法结构化克隆。`chat.send` 已用 `toRaw` 快照附件（`stores/chat.ts` send）；新增 IPC 调用勿直接传 `ref.value` 的对象/数组，否则 invoke reject 表现为「主进程无响应」。
+2. **tsconfig 分工**：`tsconfig.node.json` 不映射 `@renderer`（避免把 DOM store 拉进 node 程序）；依赖 DOM 的测试（`workspaceStore.test.ts`）归 `tsconfig.web.json`；纯逻辑测试用相对路径导入 renderer lib。
+3. **Diff 在编辑器视图**：`openDiff` 会自动切到编辑器视图（overlay 在 EditorPane 内）；关闭后不自动回文件视图，交互/e2e 需手动切回 `workspace-tab-files`。
+4. **refreshTree 保留已展开目录**（符合 §3.1.2）；e2e 不要重复点击已展开目录（会折叠）。
+5. **runIpcHandler 捕获所有 handler 错误**返回 `{ok:false}`；invoke 被 reject 通常是克隆/注册问题而非业务错误，排查方向不同。
