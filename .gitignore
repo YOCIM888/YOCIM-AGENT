@@ -1,0 +1,17 @@
+node_modules/
+out/
+dist/
+release/
+coverage/
+logs/
+*.log
+*.tsbuildinfo
+.eslintcache
+.vite/
+.DS_Store
+Thumbs.db
+playwright-report/
+test-results/
+.env
+.env.*
+!.env.example

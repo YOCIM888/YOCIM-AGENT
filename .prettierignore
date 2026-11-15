@@ -1,0 +1,11 @@
+node_modules/
+out/
+dist/
+release/
+coverage/
+logs/
+playwright-report/
+test-results/
+public/
+DevDocs/
+package-lock.json
