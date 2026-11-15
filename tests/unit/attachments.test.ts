@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { ATTACHMENT_LIMITS, type ContextAttachment } from '@shared/attachment'
-import { checkAttachment, sameAttachmentRange } from '../../src/renderer/src/lib/attachments'
+import {
+  checkAttachment,
+  createSelectionAttachment,
+  sameAttachmentRange
+} from '../../src/renderer/src/lib/attachments'
 
 function attachment(overrides: Partial<ContextAttachment> = {}): ContextAttachment {
   return {
@@ -78,5 +82,49 @@ describe('checkAttachment', () => {
     expect(
       checkAttachment(existing, attachment({ id: '2', relativePath: 'b.ts', content: 'b' }))
     ).toBe('ok')
+  })
+})
+
+describe('createSelectionAttachment', () => {
+  const range = { startLine: 3, startColumn: 1, endLine: 5, endColumn: 12 }
+
+  it('carries the file, selection range and language', () => {
+    const result = createSelectionAttachment({
+      id: 'sel-1',
+      relativePath: 'src/app.ts',
+      content: 'const value = 42',
+      language: 'typescript',
+      range
+    })
+    expect(result).toEqual({
+      id: 'sel-1',
+      type: 'selection',
+      relativePath: 'src/app.ts',
+      content: 'const value = 42',
+      language: 'typescript',
+      range
+    })
+  })
+
+  it('truncates oversized selections and marks the attachment', () => {
+    const result = createSelectionAttachment({
+      id: 'sel-2',
+      relativePath: 'big.txt',
+      content: 'x'.repeat(ATTACHMENT_LIMITS.maxFileBytes + 100),
+      range
+    })
+    expect(result.content).toHaveLength(ATTACHMENT_LIMITS.maxFileBytes)
+    expect(result.truncated).toBe(true)
+    expect(result.range).toEqual(range)
+  })
+
+  it('rejects duplicate ranges through the shared checker', () => {
+    const item = createSelectionAttachment({
+      id: 'sel-3',
+      relativePath: 'src/app.ts',
+      content: 'foo',
+      range
+    })
+    expect(checkAttachment([item], { ...item, id: 'sel-4' })).toBe('duplicate')
   })
 })

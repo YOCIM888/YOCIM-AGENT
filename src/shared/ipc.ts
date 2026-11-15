@@ -1,13 +1,13 @@
 import { z } from 'zod'
 import { ATTACHMENT_LIMITS, contextAttachmentSchema } from './attachment'
 import type { IpcErrorCode } from './errors'
-import { FS_LIMITS } from './ipcChannels'
+import { FS_LIMITS, SEARCH_LIMITS } from './ipcChannels'
 import type { AuditEntry } from './audit'
 import { PROVIDER_PRESET_IDS } from './providers'
 import type { PublicSettings, ProjectSummary, SessionSummary, StoredMessage } from './session'
 
 export type { IpcErrorCode } from './errors'
-export { FS_LIMITS, IGNORED_DIRECTORIES, IPC_CHANNELS } from './ipcChannels'
+export { FS_LIMITS, IGNORED_DIRECTORIES, IPC_CHANNELS, SEARCH_LIMITS } from './ipcChannels'
 export {
   ATTACHMENT_LIMITS,
   contextAttachmentSchema,
@@ -56,7 +56,9 @@ export type FsTreeInput = z.input<typeof fsTreeInputSchema>
 export type FsTreeRequest = z.output<typeof fsTreeInputSchema>
 
 export const fsReadFileInputSchema = z.object({
-  relativePath: z.string().min(1).max(FS_LIMITS.maxRelativePathLength)
+  relativePath: z.string().min(1).max(FS_LIMITS.maxRelativePathLength),
+  /** 提供时若磁盘内容与期望 hash 不同，主进程生成一条 external 快照 */
+  expectedHash: z.string().max(128).optional()
 })
 
 export type FsReadFileInput = z.input<typeof fsReadFileInputSchema>
@@ -66,7 +68,15 @@ export const fsReadFileResultSchema = z.object({
   relativePath: z.string(),
   content: z.string(),
   truncated: z.boolean(),
-  size: z.number().int().nonnegative()
+  size: z.number().int().nonnegative(),
+  /** 归一化（LF）后内容的 sha256，用于保存/替换前的外部修改冲突校验 */
+  contentHash: z.string().max(128).optional(),
+  eol: z.enum(['lf', 'crlf']).optional(),
+  kind: z.enum(['text', 'image', 'binary']).optional(),
+  imageDataUrl: z
+    .string()
+    .max(4 * 1024 * 1024)
+    .optional()
 })
 
 export type FsReadFileResult = z.infer<typeof fsReadFileResultSchema>
@@ -375,3 +385,152 @@ export const windowControlInputSchema = z.object({
 
 export type WindowControlInput = z.input<typeof windowControlInputSchema>
 export type WindowControlRequest = z.output<typeof windowControlInputSchema>
+
+/* -------------------------------------------------------------------------- */
+/* P2：编辑器保存与搜索替换                                                    */
+/* -------------------------------------------------------------------------- */
+
+export type FileEol = 'lf' | 'crlf'
+
+export interface FsFileVersion {
+  /** LF 归一化后的文本，便于直接写入 Monaco 缓冲区 */
+  content: string
+  contentHash: string
+  eol: FileEol
+  size: number
+}
+
+export const fsWriteFileInputSchema = z.object({
+  relativePath: relativePathSchema,
+  content: z.string().max(FS_LIMITS.maxFileBytes * 2),
+  expectedHash: z.string().max(128).optional(),
+  force: z.boolean().optional().default(false),
+  eol: z.enum(['lf', 'crlf']).optional(),
+  /** 「另存」目标路径；提供时写入新文件，不修改原文件 */
+  targetPath: relativePathSchema.optional(),
+  createIfMissing: z.boolean().optional().default(false)
+})
+
+export type FsWriteFileInput = z.input<typeof fsWriteFileInputSchema>
+export type FsWriteFileRequest = z.output<typeof fsWriteFileInputSchema>
+
+export type FsWriteFileResult =
+  | { status: 'saved'; relativePath: string; version: FsFileVersion }
+  | { status: 'conflict'; relativePath: string; disk: FsFileVersion }
+
+export const searchQuerySchema = z.object({
+  query: z.string().min(1).max(SEARCH_LIMITS.maxQueryLength),
+  replaceText: z.string().max(SEARCH_LIMITS.maxReplacementLength).optional().default(''),
+  caseSensitive: z.boolean().optional().default(false),
+  wholeWord: z.boolean().optional().default(false),
+  useRegex: z.boolean().optional().default(false),
+  preserveCase: z.boolean().optional().default(false),
+  include: z.string().max(SEARCH_LIMITS.maxPatternLength).optional().default(''),
+  exclude: z.string().max(SEARCH_LIMITS.maxPatternLength).optional().default(''),
+  includeIgnored: z.boolean().optional().default(false),
+  onlyOpenEditors: z.boolean().optional().default(false),
+  openFiles: z.array(relativePathSchema).max(100).optional().default([]),
+  maxResults: z
+    .number()
+    .int()
+    .min(1)
+    .max(SEARCH_LIMITS.maxResults)
+    .optional()
+    .default(SEARCH_LIMITS.maxResults)
+})
+
+export type SearchStartInput = z.input<typeof searchQuerySchema>
+export type SearchQuery = z.output<typeof searchQuerySchema>
+
+export const searchMatchSchema = z.object({
+  line: z.number().int().min(1),
+  column: z.number().int().min(1),
+  endColumn: z.number().int().min(1),
+  lineText: z.string(),
+  matchText: z.string(),
+  replaceText: z.string()
+})
+
+export type SearchMatch = z.infer<typeof searchMatchSchema>
+
+export const searchFileResultSchema = z.object({
+  relativePath: z.string(),
+  contentHash: z.string(),
+  matches: z.array(searchMatchSchema)
+})
+
+export type SearchFileResult = z.infer<typeof searchFileResultSchema>
+
+export type SearchEngine = 'ripgrep' | 'builtin'
+
+export const searchEventSchema = z.object({
+  searchId: z.string(),
+  seq: z.number().int().nonnegative(),
+  kind: z.enum(['file', 'done', 'error', 'cancelled']),
+  engine: z.enum(['ripgrep', 'builtin']),
+  file: searchFileResultSchema.optional(),
+  totalMatches: z.number().int().nonnegative().optional(),
+  totalFiles: z.number().int().nonnegative().optional(),
+  truncated: z.boolean().optional(),
+  message: z.string().optional()
+})
+
+export type SearchEvent = z.infer<typeof searchEventSchema>
+
+export interface SearchStartResult {
+  searchId: string
+  engine: SearchEngine
+}
+
+export const searchCancelInputSchema = z.object({
+  searchId: z.string().min(1).max(64)
+})
+
+export type SearchCancelInput = z.input<typeof searchCancelInputSchema>
+export type SearchCancelRequest = z.output<typeof searchCancelInputSchema>
+export type SearchCancelResult = { cancelled: boolean }
+
+export const searchReplaceTargetSchema = z.object({
+  relativePath: relativePathSchema,
+  hash: z.string().max(128),
+  line: z.number().int().min(1).optional(),
+  column: z.number().int().min(1).optional()
+})
+
+export type SearchReplaceTarget = z.infer<typeof searchReplaceTargetSchema>
+
+export const searchReplaceInputSchema = z.object({
+  query: searchQuerySchema,
+  scope: z.enum(['single', 'file', 'all']),
+  apply: z.boolean().optional().default(false),
+  target: searchReplaceTargetSchema.optional(),
+  files: z
+    .array(searchReplaceTargetSchema)
+    .max(SEARCH_LIMITS.maxReplaceFiles)
+    .optional()
+    .default([])
+})
+
+export type SearchReplaceInput = z.input<typeof searchReplaceInputSchema>
+export type SearchReplaceRequest = z.output<typeof searchReplaceInputSchema>
+
+export interface ReplacePreviewLine {
+  line: number
+  before: string
+  after: string
+}
+
+export interface ReplaceFileResult {
+  relativePath: string
+  status: 'ok' | 'conflict' | 'skipped'
+  replaced: number
+  previews: ReplacePreviewLine[]
+  contentHash?: string
+}
+
+export interface SearchReplaceResult {
+  files: ReplaceFileResult[]
+  totalReplaced: number
+  conflicts: string[]
+  applied: boolean
+}

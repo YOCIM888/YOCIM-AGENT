@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { _electron as electron, expect, test, type Page } from '@playwright/test'
 
 const mainEntry = join(__dirname, '../../out/main/index.js')
@@ -20,8 +20,9 @@ async function patchOpenDialog(
 
 async function selectWorkspace(page: Page, app: Awaited<ReturnType<typeof launch>>, dir: string) {
   await patchOpenDialog(app, dir)
-  await page.getByTestId('workspace-switch').click()
-  await expect(page.getByTestId('workspace-root')).toHaveText(await realpath(dir))
+  await page.getByTestId('menu-edit').click()
+  await page.getByTestId('menu-open-folder').click()
+  await expect(page.getByTestId('status-bar')).toContainText(basename(await realpath(dir)))
 }
 
 test('file tree defaults collapsed and supports create/rename/copy/paste/delete to recycle bin', async () => {

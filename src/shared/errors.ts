@@ -4,6 +4,7 @@ export type IpcErrorCode =
   | 'E_PATH_ESCAPE'
   | 'E_NOT_FOUND'
   | 'E_EXISTS'
+  | 'E_CONFLICT'
   | 'E_IO'
   | 'E_TOO_LARGE'
   | 'E_UNSUPPORTED'

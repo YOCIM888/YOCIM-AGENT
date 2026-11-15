@@ -15,7 +15,6 @@ const menu = ref<{ kind: MenuKind; x: number; y: number } | null>(null)
 const showSettings = ref(false)
 
 const appItems = computed<ContextMenuItem[]>(() => [
-  { id: 'switch-workspace', label: '切换工作区…', testid: 'menu-workspace-switch' },
   {
     id: 'theme',
     label: settings.theme === 'dark' ? '切换到浅色主题' : '切换到深色主题',
@@ -25,7 +24,8 @@ const appItems = computed<ContextMenuItem[]>(() => [
 ])
 
 const editItems = computed<ContextMenuItem[]>(() => [
-  { id: 'new-session', label: '新建会话', testid: 'menu-new-session' },
+  { id: 'open-folder', label: '打开文件夹…', testid: 'menu-open-folder' },
+  { id: 'new-session', label: '新建会话', testid: 'menu-new-session', separatorBefore: true },
   { id: 'search-session', label: '搜索会话', testid: 'menu-search-session' },
   {
     id: 'toggle-workspace',
@@ -54,7 +54,7 @@ function toggleMenu(kind: MenuKind, event: MouseEvent): void {
 
 function selectMenu(id: string): void {
   menu.value = null
-  if (id === 'switch-workspace') {
+  if (id === 'open-folder') {
     void commands.switchWorkspace()
   } else if (id === 'theme') {
     settings.toggleTheme()

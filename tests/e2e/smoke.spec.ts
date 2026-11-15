@@ -17,6 +17,11 @@ async function openAppMenu(page: Page): Promise<void> {
   await page.getByTestId('menu-app').click()
 }
 
+async function openFolder(page: Page): Promise<void> {
+  await page.getByTestId('menu-edit').click()
+  await page.getByTestId('menu-open-folder').click()
+}
+
 async function toggleTheme(page: Page): Promise<void> {
   await openAppMenu(page)
   await page.getByTestId('theme-toggle').click()
@@ -62,7 +67,6 @@ test('launches the shell, streams a reply and cancels generation', async () => {
     })
     expect(nodeLeak).toBe(false)
 
-    await expect(page.getByTestId('workspace-switch')).toBeVisible()
     await expect(page.getByTestId('workspace-empty')).toBeVisible()
     await expect(page.getByTestId('titlebar')).toBeVisible()
     await expect(page.getByTestId('window-minimize')).toBeVisible()
@@ -133,10 +137,10 @@ test('launches the shell, streams a reply and cancels generation', async () => {
     await page.getByTestId('session-expand').click()
     await expect(page.getByTestId('session-sidebar')).toBeVisible()
 
-    await page.getByTestId('workspace-collapse').click()
+    await page.getByTestId('workspace-toggle').click()
     await expect(page.getByTestId('workspace-panel')).not.toBeVisible()
-    await expect(page.getByTestId('workspace-expand')).toBeVisible()
-    await page.getByTestId('workspace-expand').click()
+    await expect(page.getByTestId('workspace-toggle')).toBeVisible()
+    await page.getByTestId('workspace-toggle').click()
     await expect(page.getByTestId('workspace-panel')).toBeVisible()
 
     await expect(page.getByTestId('status-toggle')).toHaveText('展开')
@@ -172,7 +176,7 @@ test('launches the shell, streams a reply and cancels generation', async () => {
       BrowserWindow.getAllWindows()[0]?.setSize(900, 800)
     })
     await expect(page.getByTestId('workspace-panel')).not.toBeVisible()
-    await expect(page.getByTestId('workspace-expand')).toBeVisible()
+    await expect(page.getByTestId('workspace-toggle')).toBeVisible()
     await app.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows()[0]?.setSize(1440, 900)
     })
@@ -244,15 +248,15 @@ test('selects a workspace, runs tools with approvals and persists across restart
   const app = await launch(userDataDir)
   try {
     const page = await app.firstWindow()
-    await expect(page.getByTestId('workspace-root')).toHaveText('未选择工作区')
+    await expect(page.getByTestId('status-bar')).toContainText('无工作区')
 
     // 用 Playwright 替换主进程的文件选择对话框，真实走 renderer → preload → IPC → 工作区服务
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] })
     }, workspaceDir)
 
-    await page.getByTestId('workspace-switch').click()
-    await expect(page.getByTestId('workspace-root')).toHaveText(expectedRoot)
+    await openFolder(page)
+    await expect(page.getByTestId('status-bar')).toContainText(basename(expectedRoot))
     await expect(page.getByTestId('tree-node-hello.txt')).toBeVisible()
     await expect(page.getByTestId('tree-node-src')).toBeVisible()
 
@@ -261,7 +265,6 @@ test('selects a workspace, runs tools with approvals and persists across restart
     await expect(page.locator('.monaco-editor')).toBeVisible()
     await expect(page.locator('.view-lines')).toContainText('hello from e2e')
 
-    await expect(page.getByTestId('workspace-switch')).toBeVisible()
     await page.getByTestId('workspace-tab-files').click()
     await expect(page.getByTestId('file-tree')).toBeVisible()
     await expect(page.locator('.monaco-editor')).not.toBeVisible()
@@ -349,11 +352,11 @@ test('selects a workspace, runs tools with approvals and persists across restart
   const restarted = await launch(userDataDir)
   try {
     const page = await restarted.firstWindow()
-    await expect(page.getByTestId('workspace-root')).toHaveText(expectedRoot)
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
     await expect(page.getByTestId('status-toggle')).toHaveText('收起')
     await expect(page.getByTestId('session-expand')).toBeVisible()
     await page.getByTestId('session-expand').click()
+    await expect(page.getByTestId('status-bar')).toContainText(basename(expectedRoot))
     await expect(page.getByTestId('session-sidebar')).toContainText('E2E 会话')
     await expect(page.getByTestId('chat-panel')).toContainText('/tool read hello.txt')
     await expect(page.getByTestId('chat-panel')).toContainText('工具执行完成：hello from e2e')
@@ -378,8 +381,8 @@ test('groups sessions by project and supports pin/archive/search/move', async ()
   try {
     const page = await app.firstWindow()
     await patchOpenDialog(app, workspaceA)
-    await page.getByTestId('workspace-switch').click()
-    await expect(page.getByTestId('workspace-root')).toHaveText(await realpath(workspaceA))
+    await openFolder(page)
+    await expect(page.getByTestId('status-bar')).toContainText(projectAName)
 
     const groupA = page.getByTestId('project-group').filter({ hasText: projectAName })
     await expect(groupA).toBeVisible()
@@ -415,7 +418,7 @@ test('groups sessions by project and supports pin/archive/search/move', async ()
     await expect(page.getByTestId('pinned-section')).not.toBeVisible()
 
     await patchOpenDialog(app, workspaceB)
-    await page.getByTestId('workspace-switch').click()
+    await openFolder(page)
     await expect(page.getByTestId('project-group')).toHaveCount(2)
     const groupB = page.getByTestId('project-group').filter({ hasText: projectBName })
     await expect(groupB).toBeVisible()
@@ -586,7 +589,7 @@ test('switches approval modes for agent tools', async () => {
   try {
     const page = await app.firstWindow()
     await patchOpenDialog(app, workspaceDir)
-    await page.getByTestId('workspace-switch').click()
+    await openFolder(page)
     await page.getByTestId('new-session').click()
 
     await expect(page.getByTestId('approval-mode')).toContainText('手动模式')
@@ -653,8 +656,8 @@ test('covers the project workflow end to end', async () => {
   try {
     const page = await app.firstWindow()
     await patchOpenDialog(app, workspaceDir)
-    await page.getByTestId('workspace-switch').click()
-    await expect(page.getByTestId('workspace-root')).toHaveText(expectedRoot)
+    await openFolder(page)
+    await expect(page.getByTestId('status-bar')).toContainText(basename(expectedRoot))
     await expect(page.getByTestId('project-group').filter({ hasText: projectName })).toBeVisible()
 
     await page.getByTestId('new-session').click()
@@ -697,8 +700,8 @@ test('covers the project workflow end to end', async () => {
     await expect(page.getByTestId('pinned-section')).toContainText('流程会话')
     await page.getByTestId('archive-toggle').click()
 
-    await page.getByTestId('workspace-collapse').click()
-    await expect(page.getByTestId('workspace-expand')).toBeVisible()
+    await page.getByTestId('workspace-toggle').click()
+    await expect(page.getByTestId('workspace-toggle')).toBeVisible()
   } finally {
     await app.close()
   }
@@ -706,10 +709,10 @@ test('covers the project workflow end to end', async () => {
   const restarted = await launch(userDataDir)
   try {
     const page = await restarted.firstWindow()
-    await expect(page.getByTestId('workspace-expand')).toBeVisible()
-    await page.getByTestId('workspace-expand').click()
+    await expect(page.getByTestId('workspace-toggle')).toBeVisible()
+    await page.getByTestId('workspace-toggle').click()
     await expect(page.getByTestId('workspace-panel')).toBeVisible()
-    await expect(page.getByTestId('workspace-root')).toHaveText(expectedRoot)
+    await expect(page.getByTestId('status-bar')).toContainText(basename(expectedRoot))
     await expect(page.getByTestId('project-group').filter({ hasText: projectName })).toBeVisible()
     await expect(page.getByTestId('pinned-section')).toContainText('流程会话')
     await expect(page.getByTestId('chat-panel')).toContainText('工具执行完成：hello e2e flow')

@@ -4,6 +4,7 @@ import type { ChatMessage } from '../stores/chat'
 import { useChatStore } from '../stores/chat'
 import { useProjectsStore } from '../stores/projects'
 import { useSessionStore } from '../stores/session'
+import { useSettingsStore } from '../stores/settings'
 import AgentTimeline from './AgentTimeline.vue'
 import ChatComposer from './ChatComposer.vue'
 import MarkdownMessage from './MarkdownMessage.vue'
@@ -12,6 +13,7 @@ import WelcomeState from './WelcomeState.vue'
 const chat = useChatStore()
 const sessions = useSessionStore()
 const projects = useProjectsStore()
+const settings = useSettingsStore()
 const listRef = ref<HTMLDivElement | null>(null)
 const stickToBottom = ref(true)
 
@@ -75,9 +77,38 @@ watch(
         <span class="session-title">{{ sessions.activeSession?.title ?? '新会话' }}</span>
         <span v-if="projectName" class="project-chip">{{ projectName }}</span>
       </div>
-      <div class="run-block">
-        <span class="status-dot" :class="runTone"></span>
-        <span class="status-label" data-testid="chat-status">{{ runState }}</span>
+      <div class="header-actions">
+        <div class="run-block">
+          <span class="status-dot" :class="runTone"></span>
+          <span class="status-label" data-testid="chat-status">{{ runState }}</span>
+        </div>
+        <button
+          type="button"
+          class="workspace-toggle"
+          :class="{ active: !settings.workspaceCollapsed }"
+          data-testid="workspace-toggle"
+          :title="
+            settings.workspaceCollapsed ? '展开工作区 (Ctrl+Shift+B)' : '折叠工作区 (Ctrl+Shift+B)'
+          "
+          :aria-label="settings.workspaceCollapsed ? '展开工作区' : '折叠工作区'"
+          :aria-pressed="!settings.workspaceCollapsed"
+          @click="settings.setWorkspaceCollapsed(!settings.workspaceCollapsed)"
+        >
+          <svg
+            viewBox="0 0 16 16"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="2" y="3" width="12" height="10" rx="1.5" />
+            <path d="M10 3v10" />
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -85,7 +116,7 @@ watch(
       <div class="welcome-wrap">
         <WelcomeState />
         <div class="welcome-composer">
-          <ChatComposer :show-context="false" />
+          <ChatComposer />
         </div>
       </div>
     </template>
@@ -192,6 +223,13 @@ watch(
   white-space: nowrap;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
 .run-block {
   display: flex;
   align-items: center;
@@ -199,6 +237,39 @@ watch(
   flex: none;
   color: var(--text-muted);
   font-size: 11px;
+}
+
+.workspace-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.workspace-toggle:hover {
+  border-color: var(--border);
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.workspace-toggle.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.workspace-toggle.active:hover {
+  border-color: var(--border);
 }
 
 .status-dot {

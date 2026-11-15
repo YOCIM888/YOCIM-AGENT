@@ -32,7 +32,9 @@ async function load(): Promise<void> {
   else error.value = result.error.message
 }
 
-watch(() => workspace.activeFile?.relativePath, load, { immediate: true })
+watch(() => [workspace.activeFile?.relativePath, workspace.timelineVersion], load, {
+  immediate: true
+})
 
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleString('zh-CN', {

@@ -4,6 +4,28 @@ import {
   type ContextAttachmentRange
 } from '@shared/attachment'
 
+export interface SelectionAttachmentInput {
+  id: string
+  relativePath: string
+  content: string
+  language?: string
+  range: ContextAttachmentRange
+}
+
+/** 编辑器选区 → 上下文附件；与文件树「添加到对话」共用同一模型。 */
+export function createSelectionAttachment(input: SelectionAttachmentInput): ContextAttachment {
+  const truncated = input.content.length > ATTACHMENT_LIMITS.maxFileBytes
+  return {
+    id: input.id,
+    type: 'selection',
+    relativePath: input.relativePath,
+    content: truncated ? input.content.slice(0, ATTACHMENT_LIMITS.maxFileBytes) : input.content,
+    language: input.language,
+    range: input.range,
+    ...(truncated ? { truncated: true } : {})
+  }
+}
+
 export function sameAttachmentRange(
   a?: ContextAttachmentRange,
   b?: ContextAttachmentRange
