@@ -1,4 +1,4 @@
-# YOCIM AGRNT UI 重构计划（DeepSeek Harness 风格）
+# YOCIM AGENT UI 重构计划（DeepSeek Harness 风格）
 
 > 状态：**已完成** — UI-0 设计基线、UI-1 项目化会话数据、UI-2 右侧工作区面板、UI-3 中间会话区、UI-4 步骤时间线与内联审批、UI-5 视觉与交互打磨、UI-6 回归与交付全部完成（2026-11-15）。
 > 增量优化（2026-11-15）：移除顶部栏，改为无边框自绘标题栏（左上 `应用` / `编辑`，右上最小化/最大化/关闭）；品牌 Logo 移至左栏顶部；会话与项目操作改为右键菜单。实现细节见 [UI_IMPLEMENTATION.md](UI_IMPLEMENTATION.md) 的 2.1 / 2.2 节。

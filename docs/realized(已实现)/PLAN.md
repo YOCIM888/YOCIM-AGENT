@@ -1,11 +1,11 @@
-# YOCIM AGRNT — MVP 计划（PLAN）
+# YOCIM AGENT — MVP 计划（PLAN）
 
 > 项目定位：本地优先（local-first）的桌面 AI 编程助手，形态对标 Codex 类工具。
 > 本文档记录 MVP 范围、非目标、阶段计划、风险与决策基线。阶段推进中如变更范围，必须在本文件追加变更记录。
 
 ## 1. 项目目标
 
-YOCIM AGRNT 是一个 Electron 桌面应用：
+YOCIM AGENT 是一个 Electron 桌面应用：
 
 - 用户选择一个本地工作区（workspace），在应用内与模型对话；
 - 模型可通过工具读取 / 搜索 / 编辑工作区文件，并在审批后执行受控命令；

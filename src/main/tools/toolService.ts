@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { ZodError } from 'zod'
 import type { ToolCall, ToolExecutionOutcome } from '../../shared/agent'
 import type { ApprovalMode } from '../../shared/approval'
@@ -10,6 +10,7 @@ import type { ApprovalManager } from '../approval/approvalManager'
 import type { AuditStore } from '../audit/auditStore'
 import type { ToolCallRepository } from '../db/repositories'
 import type { WorkspacePathGuard } from '../workspace/pathGuard'
+import { TIMELINE_LIMITS, type TimelineService } from '../workspace/timelineService'
 import { assertCommandAllowed, runWorkspaceCommand } from './commandRunner'
 import { parseToolArguments, type ParsedToolArguments } from './toolSchemas'
 import {
@@ -56,6 +57,7 @@ export interface ToolServiceDeps {
   requireGuard: () => WorkspacePathGuard
   getApprovalMode?: () => ApprovalMode
   toolCalls?: ToolCallRepository
+  timeline?: TimelineService
 }
 
 export class ToolService {
@@ -141,8 +143,13 @@ export class ToolService {
         return runReadFile(guard, parsed.args)
       case 'search_files':
         return runSearchFiles(guard, parsed.args)
-      case 'write_file':
-        return runWriteFile(guard, parsed.args)
+      case 'write_file': {
+        const result = await runWriteFile(guard, parsed.args)
+        if (result.ok) {
+          await this.snapshotAfterWrite(guard, parsed.args.relativePath)
+        }
+        return result
+      }
       case 'run_command': {
         const cwd = await guard.resolve(parsed.args.cwd, { mustExist: true })
         const cwdInfo = await stat(cwd.absolutePath)
@@ -155,6 +162,25 @@ export class ToolService {
           signal: context.signal
         })
       }
+    }
+  }
+
+  private async snapshotAfterWrite(guard: WorkspacePathGuard, relativePath: string): Promise<void> {
+    const timeline = this.deps.timeline
+    if (!timeline) return
+    try {
+      const resolved = await guard.resolve(relativePath, { mustExist: true })
+      const info = await stat(resolved.absolutePath)
+      if (!info.isFile() || info.size > TIMELINE_LIMITS.maxSnapshotBytes) return
+      const content = await readFile(resolved.absolutePath, 'utf8')
+      await timeline.snapshot({
+        workspaceRoot: guard.root,
+        relativePath: resolved.relativePath,
+        source: 'agent',
+        content
+      })
+    } catch {
+      // 快照失败不影响工具执行结果
     }
   }
 

@@ -8,12 +8,12 @@ import type {
   ToolExecutionOutcome
 } from '../../shared/agent'
 import { AppError } from '../../shared/errors'
-import type { ChatSendRequest } from '../../shared/ipc'
+import type { ChatSendInput } from '../../shared/ipc'
 import type { MessageRepository, SessionRepository } from '../db/repositories'
 import { runAgentTurn } from './agentEngine'
 
 const DEFAULT_SYSTEM_PROMPT = [
-  '你是 YOCIM AGRNT，一个本地优先的桌面 AI 编程助手。',
+  '你是 YOCIM AGENT，一个本地优先的桌面 AI 编程助手。',
   '回答保持简洁、具体，优先给出可执行的下一步。',
   '不要编造未读取的文件内容；不确定时明确说明。',
   '需要读取或修改工作区时，使用提供的工具，并遵守工作区边界。'
@@ -46,7 +46,7 @@ export class AgentService {
 
   constructor(private readonly deps: AgentServiceDeps) {}
 
-  start(input: ChatSendRequest): { runId: string } {
+  start(input: ChatSendInput): { runId: string } {
     const session = this.deps.persist?.sessions.get(input.sessionId) ?? null
     if (this.deps.persist && !session) {
       throw new AppError('E_NOT_FOUND', '会话不存在，请新建会话后再发送')
@@ -112,8 +112,9 @@ export class AgentService {
       {
         runId,
         sessionId: input.sessionId,
-        history: input.history,
-        userText: input.text
+        history: input.history ?? [],
+        userText: input.text,
+        attachments: input.attachments
       },
       controller.signal
     )

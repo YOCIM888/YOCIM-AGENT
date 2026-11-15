@@ -1,4 +1,4 @@
-# YOCIM AGRNT — 安全设计（SECURITY）
+# YOCIM AGENT — 安全设计（SECURITY）
 
 > 核心立场：模型输出不可信、renderer 不可信、工作区之外的任何路径不可信。所有能力都必须经过主进程的显式校验。
 

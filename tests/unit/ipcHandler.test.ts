@@ -49,15 +49,44 @@ describe('runIpcHandler', () => {
 })
 
 describe('chatSendInputSchema', () => {
-  it('defaults history to an empty list', async () => {
+  it('defaults history and attachments to empty lists', async () => {
     const result = await runIpcHandler(chatSendInputSchema, async (input) => input, {
       sessionId: 'session-1',
       text: '你好'
     })
     expect(result).toEqual({
       ok: true,
-      data: { sessionId: 'session-1', text: '你好', history: [] }
+      data: { sessionId: 'session-1', text: '你好', history: [], attachments: [] }
     })
+  })
+
+  it('rejects too many attachments and oversized total content', async () => {
+    const attachment = (id: string, content: string) => ({
+      id,
+      type: 'file',
+      relativePath: `${id}.ts`,
+      content
+    })
+    const tooMany = await runIpcHandler(chatSendInputSchema, async (input) => input, {
+      sessionId: 'session-1',
+      text: 'hi',
+      attachments: Array.from({ length: 11 }, (_, i) => attachment(`f${i}`, 'x'))
+    })
+    expect(tooMany.ok).toBe(false)
+
+    const oversized = await runIpcHandler(chatSendInputSchema, async (input) => input, {
+      sessionId: 'session-1',
+      text: 'hi',
+      attachments: [attachment('big', 'x'.repeat(200 * 1024 + 1))]
+    })
+    expect(oversized.ok).toBe(false)
+
+    const ok = await runIpcHandler(chatSendInputSchema, async (input) => input, {
+      sessionId: 'session-1',
+      text: 'hi',
+      attachments: [attachment('a', 'export const a = 1')]
+    })
+    expect(ok.ok).toBe(true)
   })
 
   it('rejects empty text and oversized history', async () => {

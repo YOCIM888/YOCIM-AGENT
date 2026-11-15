@@ -3,6 +3,7 @@ export type IpcErrorCode =
   | 'E_NO_WORKSPACE'
   | 'E_PATH_ESCAPE'
   | 'E_NOT_FOUND'
+  | 'E_EXISTS'
   | 'E_IO'
   | 'E_TOO_LARGE'
   | 'E_UNSUPPORTED'

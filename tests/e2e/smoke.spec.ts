@@ -46,8 +46,8 @@ test('launches the shell, streams a reply and cancels generation', async () => {
 
   try {
     const page = await app.firstWindow()
-    await expect(page).toHaveTitle('YOCIM AGRNT')
-    await expect(page.getByTestId('app-title')).toHaveText('YOCIM AGRNT')
+    await expect(page).toHaveTitle('YOCIM AGENT')
+    await expect(page.getByTestId('app-title')).toHaveText('YOCIM AGENT')
 
     const bridge = await page.evaluate(() => {
       const api = (globalThis as unknown as { yocim?: YocimApi }).yocim
@@ -265,10 +265,12 @@ test('selects a workspace, runs tools with approvals and persists across restart
     await page.getByTestId('workspace-tab-files').click()
     await expect(page.getByTestId('file-tree')).toBeVisible()
     await expect(page.locator('.monaco-editor')).not.toBeVisible()
-    await page.getByTestId('tree-node-src').click()
+    // P1：目录默认折叠，点击按需懒加载展开，再次点击折叠
     await expect(page.getByTestId('tree-node-src/index.ts')).not.toBeVisible()
     await page.getByTestId('tree-node-src').click()
     await expect(page.getByTestId('tree-node-src/index.ts')).toBeVisible()
+    await page.getByTestId('tree-node-src').click()
+    await expect(page.getByTestId('tree-node-src/index.ts')).not.toBeVisible()
     await page.getByTestId('workspace-tab-editor').click()
     await expect(page.locator('.monaco-editor')).toBeVisible()
     await expect(page.locator('.view-lines')).toContainText('hello from e2e')

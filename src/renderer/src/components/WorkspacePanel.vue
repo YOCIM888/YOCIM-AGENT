@@ -1,26 +1,39 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { reactive, watch } from 'vue'
+import type { FsTreeNode } from '@shared/ipc'
+import { WORKSPACE_VIEWS, type WorkspaceView } from '../lib/workspaceViews'
+import { useChatStore } from '../stores/chat'
 import { useProjectsStore } from '../stores/projects'
-import { useSettingsStore, type WorkspaceTab } from '../stores/settings'
+import { useSettingsStore } from '../stores/settings'
 import { useWorkspaceStore } from '../stores/workspace'
 import AuditPanel from './AuditPanel.vue'
 import EditorPane from './EditorPane.vue'
 import FileTreePanel from './FileTreePanel.vue'
+import ViewPlaceholder from './ViewPlaceholder.vue'
+import WorkspaceActivityBar from './WorkspaceActivityBar.vue'
 
 const settings = useSettingsStore()
 const workspace = useWorkspaceStore()
 const projects = useProjectsStore()
-const editorMounted = ref(settings.workspaceTab === 'editor' || Boolean(workspace.activeFile))
+const chat = useChatStore()
 
-const tabs: Array<{ key: WorkspaceTab; label: string }> = [
-  { key: 'files', label: '文件' },
-  { key: 'editor', label: '编辑器' },
-  { key: 'audit', label: '审计' }
-]
+const mountedViews = reactive(new Set<WorkspaceView>([settings.workspaceView]))
+if (workspace.activeFile) mountedViews.add('editor')
 
-function selectTab(tab: WorkspaceTab): void {
-  if (tab === 'editor') editorMounted.value = true
-  settings.setWorkspaceTab(tab)
+const placeholderViews = WORKSPACE_VIEWS.filter((view) => view.phase)
+
+function selectView(view: WorkspaceView): void {
+  mountedViews.add(view)
+  settings.setWorkspaceView(view)
+}
+
+function openFile(node: FsTreeNode, pin: boolean): void {
+  selectView('editor')
+  void workspace.openFile(node, { pin })
+}
+
+function attachFile(node: FsTreeNode): void {
+  void chat.attachFile(node)
 }
 
 async function switchWorkspace(): Promise<void> {
@@ -29,12 +42,9 @@ async function switchWorkspace(): Promise<void> {
 }
 
 watch(
-  () => workspace.activeFile,
-  (file) => {
-    if (file) {
-      editorMounted.value = true
-      settings.setWorkspaceTab('editor')
-    }
+  () => [workspace.pendingReveal, workspace.diff] as const,
+  ([reveal, diff]) => {
+    if (reveal || diff) selectView('editor')
   }
 )
 </script>
@@ -72,22 +82,10 @@ watch(
       </button>
     </div>
 
-    <div class="tabs" role="tablist">
+    <div class="activity-row">
+      <WorkspaceActivityBar :active="settings.workspaceView" @select="selectView" />
       <button
-        v-for="tab in tabs"
-        :key="tab.key"
-        type="button"
-        role="tab"
-        class="tab"
-        :class="{ active: settings.workspaceTab === tab.key }"
-        :aria-selected="settings.workspaceTab === tab.key"
-        :data-testid="tab.key === 'audit' ? 'audit-toggle' : `workspace-tab-${tab.key}`"
-        @click="selectTab(tab.key)"
-      >
-        {{ tab.label }}
-      </button>
-      <button
-        v-if="settings.workspaceTab === 'files'"
+        v-if="settings.workspaceView === 'files'"
         type="button"
         class="tab-action"
         title="刷新文件树"
@@ -99,9 +97,24 @@ watch(
     </div>
 
     <div class="panel-body">
-      <FileTreePanel v-if="settings.workspaceTab === 'files'" />
-      <EditorPane v-if="editorMounted" v-show="settings.workspaceTab === 'editor'" />
-      <AuditPanel v-if="settings.workspaceTab === 'audit'" />
+      <FileTreePanel
+        v-if="mountedViews.has('files')"
+        v-show="settings.workspaceView === 'files'"
+        @open="openFile"
+        @attach="attachFile"
+      />
+      <EditorPane v-if="mountedViews.has('editor')" v-show="settings.workspaceView === 'editor'" />
+      <AuditPanel
+        v-if="mountedViews.has('audit')"
+        v-show="settings.workspaceView === 'audit'"
+        :active="settings.workspaceView === 'audit'"
+      />
+      <ViewPlaceholder
+        v-for="view in placeholderViews"
+        v-show="settings.workspaceView === view.key"
+        :key="view.key"
+        :view="view"
+      />
     </div>
   </aside>
 </template>
@@ -167,36 +180,15 @@ watch(
   color: var(--text);
 }
 
-.tabs {
+.activity-row {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 0 10px;
   border-bottom: 1px solid var(--border);
 }
 
-.tab {
-  padding: 7px 10px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.tab:hover {
-  color: var(--text);
-}
-
-.tab.active {
-  border-bottom-color: var(--accent);
-  color: var(--text);
-}
-
 .tab-action {
-  margin-left: auto;
+  flex: none;
+  margin-right: 8px;
   border: 0;
   background: transparent;
   color: var(--text-muted);

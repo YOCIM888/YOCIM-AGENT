@@ -13,8 +13,17 @@ import type {
   ChatCancelResult,
   ChatSendInput,
   ChatSendResult,
+  ClipboardWriteTextInput,
+  FsClipboardInput,
+  FsClipboardResult,
+  FsCreateEntryInput,
+  FsDeleteResult,
+  FsPathInput,
   FsReadFileInput,
   FsReadFileResult,
+  FsRenameInput,
+  FsTransferInput,
+  FsTransferResult,
   FsTreeNode,
   FsTreeInput,
   IpcResult,
@@ -36,6 +45,10 @@ import type {
   SettingsResult,
   SettingsSetActiveInput,
   SettingsSetApprovalModeInput,
+  TimelineListResult,
+  TimelineReadInput,
+  TimelineReadResult,
+  TimelineRestoreResult,
   WindowControlInput,
   WorkspaceInfo,
   WorkspaceOpenProjectInput
@@ -60,7 +73,20 @@ const api: YocimApi = {
       invoke<IpcResult<WorkspaceInfo>>(IPC_CHANNELS.workspaceOpenProject, input),
     tree: (input: FsTreeInput) => invoke<IpcResult<FsTreeNode[]>>(IPC_CHANNELS.fsTree, input),
     readFile: (input: FsReadFileInput) =>
-      invoke<IpcResult<FsReadFileResult>>(IPC_CHANNELS.fsReadFile, input)
+      invoke<IpcResult<FsReadFileResult>>(IPC_CHANNELS.fsReadFile, input),
+    createFile: (input: FsCreateEntryInput) =>
+      invoke<IpcResult<FsTreeNode>>(IPC_CHANNELS.fsCreateFile, input),
+    createFolder: (input: FsCreateEntryInput) =>
+      invoke<IpcResult<FsTreeNode>>(IPC_CHANNELS.fsCreateFolder, input),
+    rename: (input: FsRenameInput) => invoke<IpcResult<FsTreeNode>>(IPC_CHANNELS.fsRename, input),
+    copy: (input: FsTransferInput) =>
+      invoke<IpcResult<FsTransferResult>>(IPC_CHANNELS.fsCopy, input),
+    move: (input: FsTransferInput) =>
+      invoke<IpcResult<FsTransferResult>>(IPC_CHANNELS.fsMove, input),
+    delete: (input: FsPathInput) => invoke<IpcResult<FsDeleteResult>>(IPC_CHANNELS.fsDelete, input),
+    reveal: (input: FsPathInput) => invoke<IpcResult<null>>(IPC_CHANNELS.fsReveal, input),
+    clipboard: (input: FsClipboardInput) =>
+      invoke<IpcResult<FsClipboardResult>>(IPC_CHANNELS.fsClipboard, input)
   },
   chat: {
     send: (input: ChatSendInput) => invoke<IpcResult<ChatSendResult>>(IPC_CHANNELS.chatSend, input),
@@ -131,6 +157,18 @@ const api: YocimApi = {
   window: {
     control: (input: WindowControlInput) =>
       invoke<IpcResult<null>>(IPC_CHANNELS.windowControl, input)
+  },
+  clipboard: {
+    writeText: (input: ClipboardWriteTextInput) =>
+      invoke<IpcResult<null>>(IPC_CHANNELS.clipboardWriteText, input)
+  },
+  timeline: {
+    list: (input: FsPathInput) =>
+      invoke<IpcResult<TimelineListResult>>(IPC_CHANNELS.timelineList, input),
+    read: (input: TimelineReadInput) =>
+      invoke<IpcResult<TimelineReadResult>>(IPC_CHANNELS.timelineRead, input),
+    restore: (input: TimelineReadInput) =>
+      invoke<IpcResult<TimelineRestoreResult>>(IPC_CHANNELS.timelineRestore, input)
   }
 }
 

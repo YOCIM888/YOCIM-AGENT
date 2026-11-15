@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { languageForPath, monaco } from '../lib/monaco'
+import { useChatStore } from '../stores/chat'
 import { useSettingsStore } from '../stores/settings'
 import { useWorkspaceStore } from '../stores/workspace'
 
 const workspace = useWorkspaceStore()
 const settings = useSettingsStore()
+const chat = useChatStore()
 const container = ref<HTMLDivElement | null>(null)
+const diffContainer = ref<HTMLDivElement | null>(null)
 const models = new Map<string, monaco.editor.ITextModel>()
 let editor: monaco.editor.IStandaloneCodeEditor | null = null
+let diffEditor: monaco.editor.IStandaloneDiffEditor | null = null
+let diffModels: { original: monaco.editor.ITextModel; modified: monaco.editor.ITextModel } | null =
+  null
 
 const monacoTheme = computed(() => (settings.theme === 'dark' ? 'vs-dark' : 'vs'))
 const fileMeta = computed(() => {
@@ -37,6 +43,30 @@ function applyActiveFile(): void {
   editor.setModel(model)
 }
 
+function applyReveal(): void {
+  const request = workspace.pendingReveal
+  if (!request || !editor) return
+  if (workspace.diff) workspace.closeDiff()
+  editor.revealLineInCenter(request.line)
+  editor.setPosition({ lineNumber: request.line, column: request.column })
+  editor.focus()
+  workspace.clearReveal()
+}
+
+function disposeDiff(): void {
+  diffEditor?.dispose()
+  diffEditor = null
+  diffModels?.original.dispose()
+  diffModels?.modified.dispose()
+  diffModels = null
+}
+
+function attachToChat(): void {
+  const file = workspace.activeFile
+  if (!file) return
+  void chat.attachFile({ relativePath: file.relativePath })
+}
+
 onMounted(() => {
   if (!container.value) return
   editor = monaco.editor.create(container.value, {
@@ -51,10 +81,13 @@ onMounted(() => {
     scrollBeyondLastLine: false,
     padding: { top: 8 }
   })
+  editor.onDidChangeCursorPosition((event) => workspace.setCursorLine(event.position.lineNumber))
   applyActiveFile()
+  applyReveal()
 })
 
 watch(() => workspace.activeFile, applyActiveFile)
+watch(() => workspace.pendingReveal, applyReveal)
 watch(
   () => settings.fontSize,
   (value) => editor?.updateOptions({ fontSize: value })
@@ -70,11 +103,35 @@ watch(
 watch(monacoTheme, (value) => monaco.editor.setTheme(value))
 
 watch(
+  () => workspace.diff,
+  async (value) => {
+    disposeDiff()
+    if (!value) return
+    await nextTick()
+    if (!diffContainer.value) return
+    diffEditor = monaco.editor.createDiffEditor(diffContainer.value, {
+      readOnly: true,
+      automaticLayout: true,
+      theme: monacoTheme.value,
+      fontSize: settings.fontSize,
+      renderSideBySide: true,
+      scrollBeyondLastLine: false
+    })
+    const original = monaco.editor.createModel(value.original, value.language)
+    const modified = monaco.editor.createModel(value.modified, value.language)
+    diffModels = { original, modified }
+    diffEditor.setModel({ original, modified })
+  },
+  { immediate: true }
+)
+
+watch(
   () => workspace.info?.root,
   () => {
     editor?.setModel(null)
     models.forEach((model) => model.dispose())
     models.clear()
+    disposeDiff()
     applyActiveFile()
   }
 )
@@ -84,6 +141,7 @@ onBeforeUnmount(() => {
   editor = null
   models.forEach((model) => model.dispose())
   models.clear()
+  disposeDiff()
 })
 </script>
 
@@ -95,10 +153,34 @@ onBeforeUnmount(() => {
       </span>
       <div class="file-actions">
         <span v-if="workspace.activeFile" class="file-meta">{{ fileMeta }}</span>
+        <button
+          v-if="workspace.activeFile"
+          type="button"
+          class="attach-context"
+          title="添加当前文件到对话"
+          data-testid="editor-attach"
+          @click="attachToChat"
+        >
+          添加到对话
+        </button>
         <span v-if="workspace.activeFile" class="badge">只读</span>
       </div>
     </div>
     <div ref="container" class="monaco-container"></div>
+    <div v-if="workspace.diff" class="diff-overlay" data-testid="diff-overlay">
+      <div class="diff-header">
+        <span class="diff-title">{{ workspace.diff.title }}</span>
+        <button
+          type="button"
+          class="diff-close"
+          data-testid="diff-close"
+          @click="workspace.closeDiff()"
+        >
+          关闭 Diff
+        </button>
+      </div>
+      <div ref="diffContainer" class="diff-container"></div>
+    </div>
     <div v-if="!workspace.activeFile" class="editor-empty">
       <h2>未打开文件</h2>
       <p>从右侧文件树选择一个文件，使用 Monaco 查看。</p>
@@ -106,7 +188,7 @@ onBeforeUnmount(() => {
         type="button"
         class="open-tree"
         data-testid="editor-open-tree"
-        @click="settings.setWorkspaceTab('files')"
+        @click="settings.setWorkspaceView('files')"
       >
         打开文件树
       </button>
@@ -153,6 +235,22 @@ onBeforeUnmount(() => {
   color: var(--text-muted);
 }
 
+.attach-context {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.attach-context:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .badge {
   padding: 2px 8px;
   border: 1px solid var(--border);
@@ -162,6 +260,52 @@ onBeforeUnmount(() => {
 }
 
 .monaco-container {
+  flex: 1;
+  min-height: 0;
+}
+
+.diff-overlay {
+  position: absolute;
+  inset: 34px 0 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.diff-title {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-close {
+  flex: none;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.diff-close:hover {
+  background: var(--bg-hover);
+}
+
+.diff-container {
   flex: 1;
   min-height: 0;
 }

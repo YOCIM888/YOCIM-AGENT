@@ -1,4 +1,4 @@
-# YOCIM AGRNT 发布检查清单
+# YOCIM AGENT 发布检查清单
 
 ## 1. 版本与元数据
 
@@ -30,12 +30,12 @@ npm run package
 ```
 
 - [ ] `release/<version>/*-setup.exe` 存在
-- [ ] `release/<version>/win-unpacked/YOCIM AGRNT.exe` 可启动
+- [ ] `release/<version>/win-unpacked/YOCIM AGENT.exe` 可启动
 - [ ] 安装包可安装、可从开始菜单/桌面启动
 
 ## 4. 手动冒烟（安装包或 win-unpacked）
 
-- [ ] 启动后显示 logo 与 YOCIM AGRNT 标题
+- [ ] 启动后显示 logo 与 YOCIM AGENT 标题
 - [ ] 选择工作区 → 文件树显示 → Monaco 打开文件
 - [ ] 新建会话 → 发送消息 → 流式回复完成
 - [ ] 发送 `/tool read <file>` → 返回文件内容

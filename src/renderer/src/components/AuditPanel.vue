@@ -4,6 +4,7 @@ import type { AuditEntry } from '@shared/audit'
 import { useSessionStore } from '../stores/session'
 
 const sessions = useSessionStore()
+const props = defineProps<{ active: boolean }>()
 const entries = ref<AuditEntry[]>([])
 const error = ref('')
 const loading = ref(false)
@@ -53,6 +54,13 @@ watch(
   (sessionId) => {
     if (!sessionId) scope.value = 'all'
     void load()
+  }
+)
+
+watch(
+  () => props.active,
+  (active) => {
+    if (active) void load()
   }
 )
 

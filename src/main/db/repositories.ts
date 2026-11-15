@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type { AuditEntry } from '../../shared/audit'
+import type { TimelineSource } from '../../shared/ipc'
 import type {
   ProjectSummary,
   SessionSummary,
@@ -391,5 +392,103 @@ export class AuditRepository {
       approval: row.approval,
       ok: row.ok === 1
     }))
+  }
+}
+
+export interface FileHistoryRecord {
+  id: string
+  workspaceRoot: string
+  relativePath: string
+  source: TimelineSource
+  size: number
+  contentHash: string
+  storagePath: string
+  createdAt: number
+}
+
+interface FileHistoryRow {
+  id: string
+  workspace_root: string
+  relative_path: string
+  source: TimelineSource
+  size: number
+  content_hash: string
+  storage_path: string
+  created_at: number
+}
+
+function mapFileHistory(row: FileHistoryRow): FileHistoryRecord {
+  return {
+    id: row.id,
+    workspaceRoot: row.workspace_root,
+    relativePath: row.relative_path,
+    source: row.source,
+    size: Number(row.size),
+    contentHash: row.content_hash,
+    storagePath: row.storage_path,
+    createdAt: Number(row.created_at)
+  }
+}
+
+export class FileHistoryRepository {
+  constructor(private readonly db: DatabaseSync) {}
+
+  insert(record: FileHistoryRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO file_history
+         (id, workspace_root, relative_path, source, size, content_hash, storage_path, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        record.id,
+        record.workspaceRoot,
+        record.relativePath,
+        record.source,
+        record.size,
+        record.contentHash,
+        record.storagePath,
+        record.createdAt
+      )
+  }
+
+  list(workspaceRoot: string, relativePath: string, limit = 50): FileHistoryRecord[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM file_history
+         WHERE workspace_root = ? AND relative_path = ?
+         ORDER BY created_at DESC, id DESC LIMIT ?`
+      )
+      .all(workspaceRoot, relativePath, limit) as unknown as FileHistoryRow[]
+    return rows.map(mapFileHistory)
+  }
+
+  get(id: string): FileHistoryRecord | null {
+    const row = this.db.prepare('SELECT * FROM file_history WHERE id = ?').get(id) as
+      FileHistoryRow | undefined
+    return row ? mapFileHistory(row) : null
+  }
+
+  latest(workspaceRoot: string, relativePath: string): FileHistoryRecord | null {
+    return this.list(workspaceRoot, relativePath, 1)[0] ?? null
+  }
+
+  delete(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM file_history WHERE id = ?').run(id)
+    return Number(result.changes) > 0
+  }
+
+  prune(
+    workspaceRoot: string,
+    relativePath: string,
+    keep: number,
+    cutoff: number
+  ): FileHistoryRecord[] {
+    const rows = this.list(workspaceRoot, relativePath, Number.MAX_SAFE_INTEGER)
+    const removed = rows.filter((row, index) => index >= keep || row.createdAt < cutoff)
+    for (const row of removed) {
+      this.delete(row.id)
+    }
+    return removed
   }
 }

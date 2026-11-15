@@ -1,4 +1,4 @@
-# YOCIM AGRNT UI 实现说明
+# YOCIM AGENT UI 实现说明
 
 > 对应 [UI_OPTIMIZATION_PLAN.md](UI_OPTIMIZATION_PLAN.md) 的 UI-0 ~ UI-6，全部阶段已完成（2026-11-15）。
 > 目标：在保留既有 Agent / 工具 / 审批 / 持久化 / 安全边界的前提下，将界面重构为「左侧项目化会话 + 中间纯会话区 + 右侧工作区」的 DeepSeek Harness 风格桌面工作台。
