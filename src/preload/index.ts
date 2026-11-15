@@ -3,17 +3,39 @@ import type { IpcRendererEvent } from 'electron'
 import type { AgentEvent } from '../shared/agent'
 import type { YocimApi } from '../shared/api'
 import type { ApprovalRequest } from '../shared/approval'
-import type { AuditEntry } from '../shared/audit'
 import { IPC_CHANNELS } from '../shared/ipcChannels'
 import type {
   ApprovalRespondInput,
   ApprovalRespondResult,
+  AuditExportInput,
+  AuditFilterInput,
   AuditListInput,
+  AuditQueryInput,
   ChatCancelInput,
   ChatCancelResult,
   ChatSendInput,
   ChatSendResult,
   ClipboardWriteTextInput,
+  DebugBreakpointsInput,
+  DebugBreakpointsResult,
+  DebugCommandInput,
+  DebugEvaluateInput,
+  DebugEvaluateResult,
+  DebugFrameInput,
+  DebugScopesResult,
+  DebugStartInput,
+  DebugStartResult,
+  DebugVariablesInput,
+  DebugVariablesResult,
+  ExtensionContributionsResult,
+  ExtensionInstallResponse,
+  ExtensionListResult,
+  ExtensionsIdInput,
+  ExtensionsImportInput,
+  ExtensionsInstallLocalInput,
+  ExtensionsInstallVsixInput,
+  ExtensionsScanInput,
+  ExtensionsSetEnabledInput,
   FsClipboardInput,
   FsClipboardResult,
   FsCreateEntryInput,
@@ -28,6 +50,10 @@ import type {
   FsTreeInput,
   FsWriteFileInput,
   FsWriteFileResult,
+  GitCheckoutInput,
+  GitCommitInput,
+  GitDiffInput,
+  GitPathsInput,
   IpcResult,
   ProjectListResult,
   SearchCancelInput,
@@ -54,15 +80,32 @@ import type {
   SettingsResult,
   SettingsSetActiveInput,
   SettingsSetApprovalModeInput,
+  TaskListResult,
+  TaskStartInput,
+  TaskStartResult,
+  TaskStopInput,
+  TaskStopResult,
   TimelineListResult,
   TimelineReadInput,
   TimelineReadResult,
   TimelineRestoreResult,
   WindowControlInput,
   WorkspaceInfo,
-  WorkspaceOpenProjectInput
+  WorkspaceOpenProjectInput,
+  VscodeScanResponse
 } from '../shared/ipc'
+import type { DebugConfigFile, DebugEvent } from '../shared/debug'
+import type { TaskEvent } from '../shared/tasks'
 import type { ProjectSummary, SessionSummary } from '../shared/session'
+import type {
+  GitBranches,
+  GitCommitResult,
+  GitDiffResult,
+  GitLogEntry,
+  GitOperationResult,
+  GitStatus
+} from '../shared/git'
+import type { AuditEntry, AuditExportResult, AuditPage, AuditStats } from '../shared/audit'
 
 function invoke<T>(channel: string, payload?: unknown): Promise<T> {
   return ipcRenderer.invoke(channel, payload) as Promise<T>
@@ -144,7 +187,89 @@ const api: YocimApi = {
     }
   },
   audit: {
-    list: (input: AuditListInput) => invoke<IpcResult<AuditEntry[]>>(IPC_CHANNELS.auditList, input)
+    list: (input: AuditListInput) => invoke<IpcResult<AuditEntry[]>>(IPC_CHANNELS.auditList, input),
+    query: (input: AuditQueryInput) => invoke<IpcResult<AuditPage>>(IPC_CHANNELS.auditQuery, input),
+    stats: (input: AuditFilterInput) =>
+      invoke<IpcResult<AuditStats>>(IPC_CHANNELS.auditStats, input),
+    export: (input: AuditExportInput) =>
+      invoke<IpcResult<AuditExportResult>>(IPC_CHANNELS.auditExport, input)
+  },
+  git: {
+    status: () => invoke<IpcResult<GitStatus>>(IPC_CHANNELS.gitStatus),
+    diff: (input: GitDiffInput) => invoke<IpcResult<GitDiffResult>>(IPC_CHANNELS.gitDiff, input),
+    branches: () => invoke<IpcResult<GitBranches>>(IPC_CHANNELS.gitBranches),
+    stage: (input: GitPathsInput) => invoke<IpcResult<GitStatus>>(IPC_CHANNELS.gitStage, input),
+    unstage: (input: GitPathsInput) => invoke<IpcResult<GitStatus>>(IPC_CHANNELS.gitUnstage, input),
+    discard: (input: GitPathsInput) => invoke<IpcResult<GitStatus>>(IPC_CHANNELS.gitDiscard, input),
+    commit: (input: GitCommitInput) =>
+      invoke<IpcResult<GitCommitResult>>(IPC_CHANNELS.gitCommit, input),
+    pull: () => invoke<IpcResult<GitOperationResult>>(IPC_CHANNELS.gitPull),
+    push: () => invoke<IpcResult<GitOperationResult>>(IPC_CHANNELS.gitPush),
+    publish: () => invoke<IpcResult<GitOperationResult>>(IPC_CHANNELS.gitPublish),
+    checkout: (input: GitCheckoutInput) =>
+      invoke<IpcResult<GitStatus>>(IPC_CHANNELS.gitCheckout, input),
+    init: () => invoke<IpcResult<GitStatus>>(IPC_CHANNELS.gitInit),
+    output: () => invoke<IpcResult<GitLogEntry[]>>(IPC_CHANNELS.gitOutput)
+  },
+  tasks: {
+    list: () => invoke<IpcResult<TaskListResult>>(IPC_CHANNELS.tasksList),
+    start: (input: TaskStartInput) =>
+      invoke<IpcResult<TaskStartResult>>(IPC_CHANNELS.tasksStart, input),
+    stop: (input: TaskStopInput) =>
+      invoke<IpcResult<TaskStopResult>>(IPC_CHANNELS.tasksStop, input),
+    onEvent: (listener: (event: TaskEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, payload: TaskEvent): void => {
+        listener(payload)
+      }
+      ipcRenderer.on(IPC_CHANNELS.tasksEvent, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.tasksEvent, handler)
+      }
+    }
+  },
+  debug: {
+    configs: () => invoke<IpcResult<DebugConfigFile>>(IPC_CHANNELS.debugConfigs),
+    start: (input: DebugStartInput) =>
+      invoke<IpcResult<DebugStartResult>>(IPC_CHANNELS.debugStart, input),
+    stop: () => invoke<IpcResult<{ stopped: boolean }>>(IPC_CHANNELS.debugStop),
+    setBreakpoints: (input: DebugBreakpointsInput) =>
+      invoke<IpcResult<DebugBreakpointsResult>>(IPC_CHANNELS.debugSetBreakpoints, input),
+    command: (input: DebugCommandInput) =>
+      invoke<IpcResult<{ ok: boolean }>>(IPC_CHANNELS.debugCommand, input),
+    scopes: (input: DebugFrameInput) =>
+      invoke<IpcResult<DebugScopesResult>>(IPC_CHANNELS.debugScopes, input),
+    variables: (input: DebugVariablesInput) =>
+      invoke<IpcResult<DebugVariablesResult>>(IPC_CHANNELS.debugVariables, input),
+    evaluate: (input: DebugEvaluateInput) =>
+      invoke<IpcResult<DebugEvaluateResult>>(IPC_CHANNELS.debugEvaluate, input),
+    onEvent: (listener: (event: DebugEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, payload: DebugEvent): void => {
+        listener(payload)
+      }
+      ipcRenderer.on(IPC_CHANNELS.debugEvent, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.debugEvent, handler)
+      }
+    }
+  },
+  extensions: {
+    list: () => invoke<IpcResult<ExtensionListResult>>(IPC_CHANNELS.extensionsList),
+    installLocal: (input: ExtensionsInstallLocalInput) =>
+      invoke<IpcResult<ExtensionInstallResponse>>(IPC_CHANNELS.extensionsInstallLocal, input),
+    installVsix: (input: ExtensionsInstallVsixInput) =>
+      invoke<IpcResult<ExtensionInstallResponse>>(IPC_CHANNELS.extensionsInstallVsix, input),
+    scanVscode: (input: ExtensionsScanInput) =>
+      invoke<IpcResult<VscodeScanResponse>>(IPC_CHANNELS.extensionsScanVscode, input),
+    importVscode: (input: ExtensionsImportInput) =>
+      invoke<IpcResult<ExtensionInstallResponse>>(IPC_CHANNELS.extensionsImportVscode, input),
+    setEnabled: (input: ExtensionsSetEnabledInput) =>
+      invoke<IpcResult<ExtensionListResult>>(IPC_CHANNELS.extensionsSetEnabled, input),
+    uninstall: (input: ExtensionsIdInput) =>
+      invoke<IpcResult<ExtensionListResult>>(IPC_CHANNELS.extensionsUninstall, input),
+    contributions: () =>
+      invoke<IpcResult<ExtensionContributionsResult>>(IPC_CHANNELS.extensionsContributions),
+    reveal: (input: ExtensionsIdInput) =>
+      invoke<IpcResult<null>>(IPC_CHANNELS.extensionsReveal, input)
   },
   sessions: {
     list: (input: SessionListInput) =>

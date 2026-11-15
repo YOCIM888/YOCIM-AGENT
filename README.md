@@ -53,7 +53,11 @@
 - OpenAI-compatible 流式对话（默认 Mock Provider，可离线使用）
 - 工具：`list_dir`、`read_file`、`search_files`、`write_file`（含补丁）、`run_command`
 - 写文件与命令执行强制审批；路径守卫、命令白名单、危险命令拦截
-- 审计日志与工具调用记录可查询（持久化 SQLite）
+- 审计面板：统计卡（总调用/失败/批准/拒绝）、工具 / 结果 / 审批 / 时间范围 / 关键字筛选、详情抽屉（参数、结果、runId、callId、耗时）、实时模式、JSON / CSV 导出（持久化 SQLite，DB v4）
+- 源代码管理：系统 Git 检测（缺失时提示安装）、已暂存 / 更改 / 未跟踪分组、暂存与取消暂存、提交与全部提交、Diff 阅读、分支切换与新建、拉取（`--ff-only`）/ 推送 / 发布分支、放弃更改二次确认、Git 输出面板（敏感信息脱敏）、活动栏变更数徽标
+- 运行任务：自动识别 npm / pnpm / yarn 并列出 `package.json` scripts，`.yocim/tasks.json` 可配自定义命令；输出流式追加、可停止（杀进程树）、首次执行自定义命令需确认完整命令
+- Node.js 调试：`.yocim/launch.json`（含 `${workspaceFolder}` / `${file}` / `${env:NAME}` 变量）与 `package.json` `main` 零配置启动；编辑器 glyph margin 断点与条件断点、继续 / 暂停 / 单步跳过 / 进入 / 跳出 / 重启 / 停止、变量树、监视表达式、调用堆栈、调试控制台、当前执行行高亮；首次启动确认完整命令，输出脱敏
+- 扩展管理（第一层，不执行扩展代码）：本地目录 / `.vsix` / VS Code 扩展目录导入、启用禁用、卸载、详情与理由；兼容性分级「仅声明式 / 部分兼容 / 不兼容」，不兼容扩展默认禁用；声明式片段贡献会注册为编辑器补全
 - 会话/消息/设置/项目状态持久化，重启恢复；会话重命名、删除、导出 Markdown
 - 主进程文件日志与崩溃处理
 
@@ -168,6 +172,9 @@ API Key 处理：
 - 所有文件路径经 realpath 守卫，阻止 `..`、绝对路径、符号链接逃逸；
 - 写文件/命令必须审批；命令受白名单与危险模式限制（超时 60s、输出截断 64KB）；
 - 审计日志只追加，记录时间、工具、参数摘要、结果与审批状态；
+- Git 操作全部经主进程 `GitService` 以参数数组 `spawn('git', args)` 调用，不经过 shell；不提供 force push、不跳过 hooks（无 `--no-verify`），拉取默认 `--ff-only`，Git 输出日志对 URL 凭据与 token 脱敏，应用不保存 Git 凭据（交给系统 Git Credential Manager）；
+- 任务与调试启动同样以参数数组 `spawn`（Windows 上 `.cmd`/`.bat` 经 `cmd.exe /d /s /c` 包裹），自定义任务与启动配置首次执行都要用户确认完整命令；`launch.json` 的 `program`/`cwd` 不得越出工作区，调试输出与命令日志统一脱敏、单任务输出上限 512KB、最多 4 个并发任务；
+- 扩展第一层**不执行任何扩展代码**：只解析 `yocim-extension.json` / VS Code `package.json` 的声明式贡献；VSIX 用内置最小 zip 读取器解包，拒绝 zip64 与路径穿越，声明了 `main`/`browser`、`debuggers` 或扩展依赖的扩展判为「不兼容」并保持禁用；
 - 详见 [docs/realized(已实现)/SECURITY.md](docs/realized%28已实现%29/SECURITY.md)。
 
 ## 数据位置
@@ -212,4 +219,6 @@ npm run package
 - 默认为 Mock Provider，真实模型需要自备兼容端点；
 - Monaco 全量语言包使 renderer 体积较大（后续可按需裁剪）；
 - `node:sqlite` 仍标注为实验性 API，但随 Electron 45 / Node 24 内置可用；
+- 调试只支持 Node.js（launch，不含 attach），协议是自研 CDP 适配器而非 DAP；运行输出为只读面板，不提供终端与 stdin 交互；
+- 扩展仅第一层：不执行扩展代码，语法/主题贡献只展示不生效，命令/菜单/快捷键未接入命令面板；
 - 未配置签名与公证，暂不适合直接面向最终用户分发。

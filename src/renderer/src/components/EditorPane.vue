@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { registerExtensionSnippets } from '../lib/extensionSnippets'
 import { languageForPath, monaco } from '../lib/monaco'
 import { useChatStore } from '../stores/chat'
+import { useDebugStore } from '../stores/debug'
+import { useExtensionsStore } from '../stores/extensions'
 import { useSettingsStore } from '../stores/settings'
 import { useWorkspaceStore, type EditorTab } from '../stores/workspace'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -10,11 +13,16 @@ import SaveConflictDialog from './SaveConflictDialog.vue'
 const workspace = useWorkspaceStore()
 const settings = useSettingsStore()
 const chat = useChatStore()
+const debug = useDebugStore()
+const extensions = useExtensionsStore()
 const container = ref<HTMLDivElement | null>(null)
 const diffContainer = ref<HTMLDivElement | null>(null)
 const models = new Map<string, monaco.editor.ITextModel>()
 const viewStates = new Map<string, monaco.editor.ICodeEditorViewState | null>()
 let editor: monaco.editor.IStandaloneCodeEditor | null = null
+let breakpointDecorations: monaco.editor.IEditorDecorationsCollection | null = null
+let pausedDecorations: monaco.editor.IEditorDecorationsCollection | null = null
+let snippetRegistration: { dispose: () => void } | null = null
 let diffEditor: monaco.editor.IStandaloneDiffEditor | null = null
 let diffModels: { original: monaco.editor.ITextModel; modified: monaco.editor.ITextModel } | null =
   null
@@ -85,8 +93,60 @@ function applyReveal(): void {
     endLineNumber: request.line,
     endColumn: request.endColumn ?? request.column
   })
-  editor.focus()
+  // 面板被其他视图占用时编辑器不可见，聚焦会抢走调试面板的输入焦点
+  if (editor.getDomNode()?.offsetParent) editor.focus()
   workspace.clearReveal()
+}
+
+function applyDecorations(): void {
+  if (!editor) return
+  const path = currentModelPath
+  if (!path) {
+    breakpointDecorations?.clear()
+    pausedDecorations?.clear()
+    return
+  }
+
+  const breakpointRanges = debug.breakpoints
+    .filter((bp) => bp.relativePath === path)
+    .map((bp) => ({
+      range: new monaco.Range(bp.line, 1, bp.line, 1),
+      options: {
+        glyphMarginClassName: bp.verified
+          ? 'yocim-bp-glyph yocim-bp-glyph-verified'
+          : 'yocim-bp-glyph',
+        glyphMarginHoverMessage: {
+          value: bp.condition ? `断点（条件：${bp.condition}）` : '断点'
+        },
+        stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
+      }
+    }))
+  breakpointDecorations?.set(breakpointRanges)
+
+  const location = debug.pauseLocation
+  if (location && location.relativePath === path) {
+    pausedDecorations?.set([
+      {
+        range: new monaco.Range(location.line, 1, location.line, 1),
+        options: {
+          isWholeLine: true,
+          className: 'yocim-debug-current-line',
+          glyphMarginClassName: 'yocim-debug-paused-glyph',
+          glyphMarginHoverMessage: { value: '当前执行行' }
+        }
+      }
+    ])
+  } else {
+    pausedDecorations?.clear()
+  }
+}
+
+function onGlyphClick(event: monaco.editor.IEditorMouseEvent): void {
+  if (event.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) return
+  const line = event.target.position?.lineNumber
+  const path = currentModelPath
+  if (!line || !path) return
+  void debug.toggleBreakpoint(path, line)
 }
 
 function applyActiveTab(): void {
@@ -231,8 +291,12 @@ onMounted(() => {
     wordWrap: settings.wordWrap,
     minimap: { enabled: settings.minimap },
     scrollBeyondLastLine: false,
+    glyphMargin: true,
     padding: { top: 8 }
   })
+  breakpointDecorations = editor.createDecorationsCollection()
+  pausedDecorations = editor.createDecorationsCollection()
+  editor.onMouseDown(onGlyphClick)
   editor.onDidChangeCursorPosition((event) => workspace.setCursorLine(event.position.lineNumber))
   editor.onDidChangeModelContent(() => {
     const tab = workspace.activeTab
@@ -251,9 +315,35 @@ onMounted(() => {
     run: () => attachToChat()
   })
   applyActiveTab()
+  applyDecorations()
+  snippetRegistration = registerExtensionSnippets(() => extensions.contributions.snippets)
+  if (!extensions.contributions.version) void extensions.refreshContributions()
 })
 
 watch(() => workspace.activeTabId, applyActiveTab)
+watch(() => workspace.activeTabId, applyDecorations)
+watch(
+  () =>
+    debug.breakpoints
+      .map((bp) => `${bp.id}:${bp.relativePath}:${bp.line}:${bp.verified ?? ''}`)
+      .join('|'),
+  applyDecorations
+)
+watch(
+  () => debug.pauseLocation,
+  async (location) => {
+    if (!location) {
+      applyDecorations()
+      return
+    }
+    if (workspace.activeTab?.relativePath !== location.relativePath) {
+      await workspace.openPath(location.relativePath, { pin: false })
+    }
+    // 断点暂停时不抢占当前视图：只在编辑器内滚动到当前行
+    workspace.requestReveal(location.line, 1, undefined, { keepView: true })
+    applyDecorations()
+  }
+)
 watch(
   () => workspace.activeTab?.content,
   () => {
@@ -326,6 +416,8 @@ watch(
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  snippetRegistration?.dispose()
+  snippetRegistration = null
   editor?.dispose()
   editor = null
   models.forEach((model) => model.dispose())
@@ -448,7 +540,7 @@ onBeforeUnmount(() => {
         <div ref="diffContainer" class="diff-container"></div>
       </div>
 
-      <div v-if="!activeTab" class="editor-empty">
+      <div v-if="!activeTab && !workspace.diff" class="editor-empty">
         <h2>未打开文件</h2>
         <p>从右侧文件树选择一个文件，使用 Monaco 查看与编辑。</p>
         <button
@@ -792,5 +884,40 @@ onBeforeUnmount(() => {
   background: var(--danger-soft);
   color: var(--danger);
   font-size: 11px;
+}
+</style>
+
+<style>
+/* Monaco 装饰类作用在编辑器内部 DOM，不能用 scoped */
+.yocim-bp-glyph::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--danger);
+  border-radius: 50%;
+  background: transparent;
+  transform: translate(-50%, -50%);
+}
+
+.yocim-bp-glyph-verified::after {
+  background: var(--danger);
+}
+
+.yocim-debug-paused-glyph::after {
+  content: '▶';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  color: var(--accent);
+  font-size: 9px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+}
+
+.yocim-debug-current-line {
+  background: rgba(234, 179, 8, 0.16);
 }
 </style>

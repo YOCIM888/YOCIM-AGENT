@@ -24,24 +24,26 @@ function hasTable(db: DatabaseSync, name: string): boolean {
   return Boolean(row)
 }
 
-describe('schema v3 migration', () => {
-  it('creates file_history on a fresh database and reaches v3', () => {
+describe('schema migration', () => {
+  it('creates file_history on a fresh database and reaches the current version', () => {
     const db = memoryDb()
     migrate(db)
     expect(userVersion(db)).toBe(SCHEMA_VERSION)
-    expect(SCHEMA_VERSION).toBe(3)
+    expect(SCHEMA_VERSION).toBe(5)
     expect(hasTable(db, 'file_history')).toBe(true)
+    expect(hasTable(db, 'extensions')).toBe(true)
     db.close()
   })
 
-  it('upgrades a v1 database through v2 to v3', () => {
+  it('upgrades a v1 database through the later migrations', () => {
     const db = memoryDb()
     db.exec(MIGRATION_V1)
     db.exec('PRAGMA user_version = 1')
     migrate(db)
-    expect(userVersion(db)).toBe(3)
+    expect(userVersion(db)).toBe(SCHEMA_VERSION)
     expect(hasTable(db, 'projects')).toBe(true)
     expect(hasTable(db, 'file_history')).toBe(true)
+    expect(hasTable(db, 'extensions')).toBe(true)
     db.close()
   })
 
@@ -49,7 +51,7 @@ describe('schema v3 migration', () => {
     const db = memoryDb()
     migrate(db)
     migrate(db)
-    expect(userVersion(db)).toBe(3)
+    expect(userVersion(db)).toBe(SCHEMA_VERSION)
     db.close()
   })
 })

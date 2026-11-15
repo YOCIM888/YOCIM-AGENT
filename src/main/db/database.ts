@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 5
 
 export const MIGRATION_V1 = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -92,6 +92,25 @@ CREATE TABLE IF NOT EXISTS file_history (
 CREATE INDEX IF NOT EXISTS idx_file_history_path ON file_history(workspace_root, relative_path, created_at);
 `
 
+const MIGRATION_V4 = `
+ALTER TABLE audit_logs ADD COLUMN call_id TEXT;
+ALTER TABLE audit_logs ADD COLUMN duration_ms INTEGER;
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_session ON audit_logs(session_id, ts);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_tool ON audit_logs(tool, ts);
+`
+
+const MIGRATION_V5 = `
+CREATE TABLE IF NOT EXISTS extensions (
+  id TEXT PRIMARY KEY,
+  source TEXT NOT NULL,
+  manifest_json TEXT NOT NULL,
+  enabled INTEGER NOT NULL,
+  compatible INTEGER NOT NULL,
+  installed_at INTEGER NOT NULL
+);
+`
+
 function getUserVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as { user_version?: number } | undefined
   return Number(row?.user_version ?? 0)
@@ -155,6 +174,30 @@ export function migrate(db: DatabaseSync): void {
     try {
       db.exec(MIGRATION_V3)
       db.exec('PRAGMA user_version = 3')
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  if (version < 4) {
+    db.exec('BEGIN')
+    try {
+      db.exec(MIGRATION_V4)
+      db.exec('PRAGMA user_version = 4')
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  if (version < 5) {
+    db.exec('BEGIN')
+    try {
+      db.exec(MIGRATION_V5)
+      db.exec('PRAGMA user_version = 5')
       db.exec('COMMIT')
     } catch (error) {
       db.exec('ROLLBACK')

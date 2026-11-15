@@ -140,8 +140,9 @@ test('editor supports multiple tabs, saving and external-modification conflicts'
     await page.getByTestId('save-conflict-saveas').click()
     await page.getByTestId('save-as-input').fill('copies/copy.ts')
     await page.getByTestId('save-as-confirm').click()
+    // 文件由主进程异步写入，首次 poll 可能还没落盘（ENOENT 会直接中断 poll）
     await expect
-      .poll(() => readFile(join(workspaceDir, 'copies', 'copy.ts'), 'utf8'))
+      .poll(() => readFile(join(workspaceDir, 'copies', 'copy.ts'), 'utf8').catch(() => ''))
       .toContain('save as copy')
     expect(await readFile(join(workspaceDir, 'b.ts'), 'utf8')).toBe('external third\n')
   } finally {

@@ -2,7 +2,14 @@
 import { WORKSPACE_VIEWS, type WorkspaceView } from '../lib/workspaceViews'
 import WorkspaceViewIcon from './WorkspaceViewIcon.vue'
 
-defineProps<{ active: WorkspaceView }>()
+withDefaults(
+  defineProps<{
+    active: WorkspaceView
+    /** 图标右上角徽标数字（例如源代码管理的变更数） */
+    badges?: Partial<Record<WorkspaceView, number>>
+  }>(),
+  { badges: () => ({}) }
+)
 
 const emit = defineEmits<{ select: [view: WorkspaceView] }>()
 </script>
@@ -28,6 +35,14 @@ const emit = defineEmits<{ select: [view: WorkspaceView] }>()
         @click="emit('select', view.key)"
       >
         <WorkspaceViewIcon :name="view.key" />
+        <span
+          v-if="badges[view.key]"
+          class="badge"
+          :data-testid="`${view.testid}-badge`"
+          :title="`${badges[view.key]} 个变更`"
+        >
+          {{ (badges[view.key] ?? 0) > 99 ? '99+' : badges[view.key] }}
+        </span>
       </button>
     </template>
   </div>
@@ -93,5 +108,22 @@ const emit = defineEmits<{ select: [view: WorkspaceView] }>()
   height: 16px;
   margin: 0 4px;
   background: var(--border-strong);
+}
+
+.badge {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  min-width: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 1;
 }
 </style>

@@ -1,15 +1,38 @@
 import type { AgentEvent } from './agent'
 import type { ApprovalRequest } from './approval'
-import type { AuditEntry } from './audit'
+import type { AuditEntry, AuditExportResult, AuditPage, AuditStats } from './audit'
 import type {
+  AuditExportInput,
+  AuditFilterInput,
+  AuditListInput,
+  AuditQueryInput,
   ApprovalRespondInput,
   ApprovalRespondResult,
-  AuditListInput,
   ChatCancelInput,
   ChatCancelResult,
   ChatSendInput,
   ChatSendResult,
   ClipboardWriteTextInput,
+  DebugBreakpointsInput,
+  DebugBreakpointsResult,
+  DebugCommandInput,
+  DebugEvaluateInput,
+  DebugEvaluateResult,
+  DebugFrameInput,
+  DebugScopesResult,
+  DebugStartInput,
+  DebugStartResult,
+  DebugVariablesInput,
+  DebugVariablesResult,
+  ExtensionContributionsResult,
+  ExtensionInstallResponse,
+  ExtensionListResult,
+  ExtensionsIdInput,
+  ExtensionsImportInput,
+  ExtensionsInstallLocalInput,
+  ExtensionsInstallVsixInput,
+  ExtensionsScanInput,
+  ExtensionsSetEnabledInput,
   FsClipboardInput,
   FsClipboardResult,
   FsCreateEntryInput,
@@ -24,6 +47,10 @@ import type {
   FsTreeNode,
   FsWriteFileInput,
   FsWriteFileResult,
+  GitCheckoutInput,
+  GitCommitInput,
+  GitDiffInput,
+  GitPathsInput,
   IpcResult,
   SearchCancelInput,
   SearchCancelResult,
@@ -54,11 +81,27 @@ import type {
   TimelineReadInput,
   TimelineReadResult,
   TimelineRestoreResult,
+  TaskListResult,
+  TaskStartInput,
+  TaskStartResult,
+  TaskStopInput,
+  TaskStopResult,
+  VscodeScanResponse,
   WindowControlInput,
   WorkspaceInfo,
   WorkspaceOpenProjectInput
 } from './ipc'
+import type { DebugConfigFile, DebugEvent } from './debug'
+import type { TaskEvent } from './tasks'
 import type { ProjectSummary, SessionSummary } from './session'
+import type {
+  GitBranches,
+  GitCommitResult,
+  GitDiffResult,
+  GitLogEntry,
+  GitOperationResult,
+  GitStatus
+} from './git'
 
 export interface YocimVersions {
   electron: string
@@ -113,6 +156,56 @@ export interface YocimApprovalApi {
 
 export interface YocimAuditApi {
   list(input: AuditListInput): Promise<IpcResult<AuditEntry[]>>
+  query(input: AuditQueryInput): Promise<IpcResult<AuditPage>>
+  stats(input: AuditFilterInput): Promise<IpcResult<AuditStats>>
+  export(input: AuditExportInput): Promise<IpcResult<AuditExportResult>>
+}
+
+export interface YocimGitApi {
+  status(): Promise<IpcResult<GitStatus>>
+  diff(input: GitDiffInput): Promise<IpcResult<GitDiffResult>>
+  branches(): Promise<IpcResult<GitBranches>>
+  stage(input: GitPathsInput): Promise<IpcResult<GitStatus>>
+  unstage(input: GitPathsInput): Promise<IpcResult<GitStatus>>
+  discard(input: GitPathsInput): Promise<IpcResult<GitStatus>>
+  commit(input: GitCommitInput): Promise<IpcResult<GitCommitResult>>
+  pull(): Promise<IpcResult<GitOperationResult>>
+  push(): Promise<IpcResult<GitOperationResult>>
+  publish(): Promise<IpcResult<GitOperationResult>>
+  checkout(input: GitCheckoutInput): Promise<IpcResult<GitStatus>>
+  init(): Promise<IpcResult<GitStatus>>
+  output(): Promise<IpcResult<GitLogEntry[]>>
+}
+
+export interface YocimTasksApi {
+  list(): Promise<IpcResult<TaskListResult>>
+  start(input: TaskStartInput): Promise<IpcResult<TaskStartResult>>
+  stop(input: TaskStopInput): Promise<IpcResult<TaskStopResult>>
+  onEvent(listener: (event: TaskEvent) => void): () => void
+}
+
+export interface YocimDebugApi {
+  configs(): Promise<IpcResult<DebugConfigFile>>
+  start(input: DebugStartInput): Promise<IpcResult<DebugStartResult>>
+  stop(): Promise<IpcResult<{ stopped: boolean }>>
+  setBreakpoints(input: DebugBreakpointsInput): Promise<IpcResult<DebugBreakpointsResult>>
+  command(input: DebugCommandInput): Promise<IpcResult<{ ok: boolean }>>
+  scopes(input: DebugFrameInput): Promise<IpcResult<DebugScopesResult>>
+  variables(input: DebugVariablesInput): Promise<IpcResult<DebugVariablesResult>>
+  evaluate(input: DebugEvaluateInput): Promise<IpcResult<DebugEvaluateResult>>
+  onEvent(listener: (event: DebugEvent) => void): () => void
+}
+
+export interface YocimExtensionsApi {
+  list(): Promise<IpcResult<ExtensionListResult>>
+  installLocal(input: ExtensionsInstallLocalInput): Promise<IpcResult<ExtensionInstallResponse>>
+  installVsix(input: ExtensionsInstallVsixInput): Promise<IpcResult<ExtensionInstallResponse>>
+  scanVscode(input: ExtensionsScanInput): Promise<IpcResult<VscodeScanResponse>>
+  importVscode(input: ExtensionsImportInput): Promise<IpcResult<ExtensionInstallResponse>>
+  setEnabled(input: ExtensionsSetEnabledInput): Promise<IpcResult<ExtensionListResult>>
+  uninstall(input: ExtensionsIdInput): Promise<IpcResult<ExtensionListResult>>
+  contributions(): Promise<IpcResult<ExtensionContributionsResult>>
+  reveal(input: ExtensionsIdInput): Promise<IpcResult<null>>
 }
 
 export interface YocimSessionApi {
@@ -152,6 +245,10 @@ export interface YocimApi {
   chat: YocimChatApi
   approval: YocimApprovalApi
   audit: YocimAuditApi
+  git: YocimGitApi
+  tasks: YocimTasksApi
+  debug: YocimDebugApi
+  extensions: YocimExtensionsApi
   sessions: YocimSessionApi
   projects: YocimProjectApi
   settings: YocimSettingsApi

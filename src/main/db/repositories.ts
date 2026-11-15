@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
-import type { AuditEntry } from '../../shared/audit'
+import type { AuditEntry, AuditFilter, AuditPage, AuditStats } from '../../shared/audit'
 import type { TimelineSource } from '../../shared/ipc'
 import type {
   ProjectSummary,
@@ -49,6 +49,8 @@ interface AuditRow {
   approval: AuditEntry['approval']
   ok: number
   ts: number
+  call_id: string | null
+  duration_ms: number | null
 }
 
 function mapSession(row: SessionRow): SessionSummary {
@@ -83,6 +85,72 @@ function mapMessage(row: MessageRow): StoredMessage {
     content: row.content,
     createdAt: Number(row.created_at)
   }
+}
+
+function mapAudit(row: AuditRow): AuditEntry {
+  return {
+    id: row.id,
+    ts: Number(row.ts),
+    sessionId: row.session_id,
+    runId: row.run_id,
+    tool: row.tool,
+    argsSummary: row.args_summary,
+    resultSummary: row.result_summary,
+    approval: row.approval,
+    ok: row.ok === 1,
+    ...(row.call_id ? { callId: row.call_id } : {}),
+    ...(row.duration_ms === null || row.duration_ms === undefined
+      ? {}
+      : { durationMs: Number(row.duration_ms) })
+  }
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (character) => `\\${character}`)
+}
+
+interface AuditWhere {
+  clause: string
+  params: Array<string | number>
+}
+
+function buildAuditWhere(filter: AuditFilter): AuditWhere {
+  const clauses: string[] = []
+  const params: Array<string | number> = []
+
+  if (filter.sessionId) {
+    clauses.push('session_id = ?')
+    params.push(filter.sessionId)
+  }
+  if (filter.tool) {
+    clauses.push('tool = ?')
+    params.push(filter.tool)
+  }
+  if (typeof filter.ok === 'boolean') {
+    clauses.push('ok = ?')
+    params.push(filter.ok ? 1 : 0)
+  }
+  if (filter.approval) {
+    clauses.push('approval = ?')
+    params.push(filter.approval)
+  }
+  if (filter.keyword) {
+    const like = `%${escapeLike(filter.keyword)}%`
+    clauses.push(
+      `(tool LIKE ? ESCAPE '\\' OR args_summary LIKE ? ESCAPE '\\' OR result_summary LIKE ? ESCAPE '\\')`
+    )
+    params.push(like, like, like)
+  }
+  if (typeof filter.from === 'number') {
+    clauses.push('ts >= ?')
+    params.push(filter.from)
+  }
+  if (typeof filter.to === 'number') {
+    clauses.push('ts <= ?')
+    params.push(filter.to)
+  }
+
+  return { clause: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params }
 }
 
 export class SessionRepository {
@@ -355,8 +423,8 @@ export class AuditRepository {
     this.db
       .prepare(
         `INSERT INTO audit_logs
-         (id, session_id, run_id, tool, args_summary, result_summary, approval, ok, ts)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, session_id, run_id, tool, args_summary, result_summary, approval, ok, ts, call_id, duration_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         entry.id,
@@ -367,31 +435,85 @@ export class AuditRepository {
         entry.resultSummary,
         entry.approval,
         entry.ok ? 1 : 0,
-        entry.ts
+        entry.ts,
+        entry.callId ?? null,
+        typeof entry.durationMs === 'number' ? Math.round(entry.durationMs) : null
       )
   }
 
   list(options: { sessionId?: string; limit?: number } = {}): AuditEntry[] {
-    const limit = options.limit ?? 50
-    const rows = options.sessionId
-      ? (this.db
-          .prepare('SELECT * FROM audit_logs WHERE session_id = ? ORDER BY ts DESC LIMIT ?')
-          .all(options.sessionId, limit) as unknown as AuditRow[])
-      : (this.db
-          .prepare('SELECT * FROM audit_logs ORDER BY ts DESC LIMIT ?')
-          .all(limit) as unknown as AuditRow[])
+    return this.query({ sessionId: options.sessionId }, 1, options.limit ?? 50).entries
+  }
 
-    return rows.map((row) => ({
-      id: row.id,
-      ts: Number(row.ts),
-      sessionId: row.session_id,
-      runId: row.run_id,
-      tool: row.tool,
-      argsSummary: row.args_summary,
-      resultSummary: row.result_summary,
-      approval: row.approval,
-      ok: row.ok === 1
-    }))
+  query(filter: AuditFilter, page = 1, pageSize = 50): AuditPage {
+    const where = buildAuditWhere(filter)
+    const totalRow = this.db
+      .prepare(`SELECT COUNT(*) AS count FROM audit_logs ${where.clause}`)
+      .get(...where.params) as { count?: number } | undefined
+    const total = Number(totalRow?.count ?? 0)
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM audit_logs ${where.clause} ORDER BY ts DESC, rowid DESC LIMIT ? OFFSET ?`
+      )
+      .all(...where.params, pageSize, Math.max(0, (page - 1) * pageSize)) as unknown as AuditRow[]
+    return { entries: rows.map(mapAudit), total, page, pageSize }
+  }
+
+  stats(filter: AuditFilter): AuditStats {
+    const where = buildAuditWhere(filter)
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS total,
+           COALESCE(SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END), 0) AS ok,
+           COALESCE(SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END), 0) AS failed,
+           COALESCE(SUM(CASE WHEN approval = 'approved' THEN 1 ELSE 0 END), 0) AS approved,
+           COALESCE(SUM(CASE WHEN approval = 'denied' THEN 1 ELSE 0 END), 0) AS denied,
+           COALESCE(SUM(CASE WHEN approval = 'not_required' THEN 1 ELSE 0 END), 0) AS not_required,
+           MIN(ts) AS first_ts,
+           MAX(ts) AS last_ts
+         FROM audit_logs ${where.clause}`
+      )
+      .get(...where.params) as
+      | {
+          total?: number
+          ok?: number
+          failed?: number
+          approved?: number
+          denied?: number
+          not_required?: number
+          first_ts?: number | null
+          last_ts?: number | null
+        }
+      | undefined
+
+    // 工具下拉不应用 tool 条件，否则选中后只剩一个选项
+    const toolWhere = buildAuditWhere({ ...filter, tool: undefined })
+    const toolRows = this.db
+      .prepare(
+        `SELECT DISTINCT tool FROM audit_logs ${toolWhere.clause} ORDER BY tool COLLATE NOCASE ASC`
+      )
+      .all(...toolWhere.params) as unknown as Array<{ tool: string }>
+
+    return {
+      total: Number(row?.total ?? 0),
+      ok: Number(row?.ok ?? 0),
+      failed: Number(row?.failed ?? 0),
+      approved: Number(row?.approved ?? 0),
+      denied: Number(row?.denied ?? 0),
+      notRequired: Number(row?.not_required ?? 0),
+      firstTs: row?.first_ts === null || row?.first_ts === undefined ? null : Number(row.first_ts),
+      lastTs: row?.last_ts === null || row?.last_ts === undefined ? null : Number(row.last_ts),
+      tools: toolRows.map((item) => item.tool)
+    }
+  }
+
+  /** 导出用：按筛选条件返回全部条目（带上限） */
+  all(filter: AuditFilter, limit: number): AuditEntry[] {
+    const where = buildAuditWhere(filter)
+    const rows = this.db
+      .prepare(`SELECT * FROM audit_logs ${where.clause} ORDER BY ts DESC, rowid DESC LIMIT ?`)
+      .all(...where.params, limit) as unknown as AuditRow[]
+    return rows.map(mapAudit)
   }
 }
 
@@ -490,5 +612,94 @@ export class FileHistoryRepository {
       this.delete(row.id)
     }
     return removed
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* P4：扩展管理器                                                              */
+/* -------------------------------------------------------------------------- */
+
+export interface ExtensionRecord {
+  id: string
+  source: string
+  /** 归一化后的清单摘要（NormalizedManifest） */
+  manifestJson: string
+  enabled: boolean
+  compatible: boolean
+  installedAt: number
+}
+
+interface ExtensionRow {
+  id: string
+  source: string
+  manifest_json: string
+  enabled: number
+  compatible: number
+  installed_at: number
+}
+
+function mapExtension(row: ExtensionRow): ExtensionRecord {
+  return {
+    id: row.id,
+    source: row.source,
+    manifestJson: row.manifest_json,
+    enabled: Number(row.enabled) === 1,
+    compatible: Number(row.compatible) === 1,
+    installedAt: Number(row.installed_at)
+  }
+}
+
+export class ExtensionRepository {
+  private readonly db: DatabaseSync
+
+  constructor(db: DatabaseSync) {
+    this.db = db
+  }
+
+  list(): ExtensionRecord[] {
+    const rows = this.db
+      .prepare('SELECT * FROM extensions ORDER BY installed_at DESC')
+      .all() as unknown as ExtensionRow[]
+    return rows.map(mapExtension)
+  }
+
+  get(id: string): ExtensionRecord | null {
+    const row = this.db.prepare('SELECT * FROM extensions WHERE id = ?').get(id) as
+      ExtensionRow | undefined
+    return row ? mapExtension(row) : null
+  }
+
+  upsert(record: ExtensionRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO extensions (id, source, manifest_json, enabled, compatible, installed_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           source = excluded.source,
+           manifest_json = excluded.manifest_json,
+           enabled = excluded.enabled,
+           compatible = excluded.compatible,
+           installed_at = excluded.installed_at`
+      )
+      .run(
+        record.id,
+        record.source,
+        record.manifestJson,
+        record.enabled ? 1 : 0,
+        record.compatible ? 1 : 0,
+        record.installedAt
+      )
+  }
+
+  setEnabled(id: string, enabled: boolean): boolean {
+    const result = this.db
+      .prepare('UPDATE extensions SET enabled = ? WHERE id = ?')
+      .run(enabled ? 1 : 0, id)
+    return Number(result.changes) > 0
+  }
+
+  delete(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM extensions WHERE id = ?').run(id)
+    return Number(result.changes) > 0
   }
 }
