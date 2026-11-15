@@ -18,10 +18,14 @@ import {
   fsRenameInputSchema,
   fsTransferInputSchema,
   fsTreeInputSchema,
+  fsWriteFileInputSchema,
   IPC_CHANNELS,
   projectRenameInputSchema,
   providerDeleteInputSchema,
   providerSaveInputSchema,
+  searchCancelInputSchema,
+  searchQuerySchema,
+  searchReplaceInputSchema,
   sessionArchiveInputSchema,
   sessionCreateInputSchema,
   sessionIdInputSchema,
@@ -55,7 +59,13 @@ import {
   type FsTransferResult,
   type FsTreeNode,
   type FsTreeRequest,
+  type FsWriteFileRequest,
+  type FsWriteFileResult,
   type IpcResult,
+  type SearchCancelRequest,
+  type SearchCancelResult,
+  type SearchEvent,
+  type SearchQuery,
   type ProjectListResult,
   type ProjectRenameRequest,
   type ProviderDeleteRequest,
@@ -70,6 +80,9 @@ import {
   type SessionMessagesResult,
   type SessionMoveRequest,
   type SessionPinRequest,
+  type SearchReplaceRequest,
+  type SearchReplaceResult,
+  type SearchStartResult,
   type SessionRenameRequest,
   type SettingsResult,
   type SettingsSetActiveRequest,
@@ -106,8 +119,9 @@ import {
   renameWorkspaceEntry
 } from '../workspace/fileExplorer'
 import { fileClipboard } from '../workspace/fileClipboard'
+import { SearchService } from '../workspace/searchService'
 import { TimelineService } from '../workspace/timelineService'
-import { readWorkspaceFile, readWorkspaceTree } from '../workspace/workspaceFs'
+import { readWorkspaceFile, readWorkspaceTree, writeWorkspaceFile } from '../workspace/workspaceFs'
 import { workspaceService } from '../workspace/workspaceService'
 import { runIpcHandler, type InputSchema } from './runIpcHandler'
 
@@ -181,6 +195,10 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
     history: fileHistoryRepo,
     baseDir: join(userData, 'timeline')
   })
+  const searchService = new SearchService({
+    getGuard: () => workspaceService.requireGuard(),
+    timeline: timelineService
+  })
   const trashItem = (absolutePath: string): Promise<void> => shell.trashItem(absolutePath)
   const toolService = new ToolService({
     approvals: approvalManager,
@@ -233,7 +251,13 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
   handleIpc<FsReadFileRequest, FsReadFileResult>(
     IPC_CHANNELS.fsReadFile,
     fsReadFileInputSchema,
-    (input) => readWorkspaceFile(workspaceService.requireGuard(), input)
+    (input) => readWorkspaceFile(workspaceService.requireGuard(), input, timelineService)
+  )
+
+  handleIpc<FsWriteFileRequest, FsWriteFileResult>(
+    IPC_CHANNELS.fsWriteFile,
+    fsWriteFileInputSchema,
+    (input) => writeWorkspaceFile(workspaceService.requireGuard(), input, timelineService)
   )
 
   handleIpc<FsCreateEntryRequest, FsTreeNode>(
@@ -350,6 +374,30 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
     IPC_CHANNELS.timelineRestore,
     timelineReadInputSchema,
     (input) => timelineService.restore(input.id, workspaceService.requireGuard())
+  )
+
+  handleIpc<SearchQuery, SearchStartResult>(
+    IPC_CHANNELS.searchStart,
+    searchQuerySchema,
+    async (input, event) =>
+      searchService.start(input, (payload: SearchEvent) => {
+        // 只把流式结果推给发起搜索的窗口
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(IPC_CHANNELS.searchEvent, payload)
+        }
+      })
+  )
+
+  handleIpc<SearchCancelRequest, SearchCancelResult>(
+    IPC_CHANNELS.searchCancel,
+    searchCancelInputSchema,
+    async (input) => searchService.cancel(input.searchId)
+  )
+
+  handleIpc<SearchReplaceRequest, SearchReplaceResult>(
+    IPC_CHANNELS.searchReplace,
+    searchReplaceInputSchema,
+    (input) => searchService.replace(input)
   )
 
   handleIpc<ChatSendRequest, ChatSendResult>(

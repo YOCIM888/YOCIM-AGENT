@@ -2,7 +2,11 @@ import { defineStore } from 'pinia'
 import { computed, ref, toRaw } from 'vue'
 import type { AgentEvent } from '@shared/agent'
 import type { ApprovalDecision, ApprovalRequest } from '@shared/approval'
-import { ATTACHMENT_LIMITS, type ContextAttachment } from '@shared/attachment'
+import {
+  ATTACHMENT_LIMITS,
+  type ContextAttachment,
+  type ContextAttachmentRange
+} from '@shared/attachment'
 import {
   attachStepApproval,
   closePendingApprovals,
@@ -12,7 +16,7 @@ import {
   upsertToolStep,
   type AgentStep
 } from '../lib/agentSteps'
-import { checkAttachment } from '../lib/attachments'
+import { checkAttachment, createSelectionAttachment } from '../lib/attachments'
 import { languageForPath } from '../lib/language'
 import { useSessionStore } from './session'
 
@@ -310,6 +314,23 @@ export const useChatStore = defineStore('chat', () => {
     })
   }
 
+  /** 编辑器选区右键 / 头部按钮：无选区时退化为整文件附件。 */
+  function attachSelection(input: {
+    relativePath: string
+    content: string
+    range: ContextAttachmentRange
+  }): boolean {
+    return addAttachment(
+      createSelectionAttachment({
+        id: createId(),
+        relativePath: input.relativePath,
+        content: input.content,
+        language: languageForPath(input.relativePath),
+        range: input.range
+      })
+    )
+  }
+
   function removeAttachment(id: string): void {
     attachments.value = attachments.value.filter((item) => item.id !== id)
   }
@@ -416,6 +437,7 @@ export const useChatStore = defineStore('chat', () => {
     appendSystem,
     addAttachment,
     attachFile,
+    attachSelection,
     removeAttachment,
     clearAttachments
   }

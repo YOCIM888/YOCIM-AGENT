@@ -40,7 +40,7 @@ const emit = defineEmits<{ select: [view: WorkspaceView] }>()
   align-items: center;
   gap: 2px;
   min-width: 0;
-  height: 36px;
+  height: 41px;
   padding: 0 8px;
   overflow-x: auto;
   overflow-y: hidden;

@@ -1,19 +1,8 @@
-<script setup lang="ts">
-import { computed } from 'vue'
-import { useWorkspaceStore } from '../stores/workspace'
-
-const workspace = useWorkspaceStore()
-const workspaceName = computed(() => workspace.info?.name ?? '未选择工作区')
-</script>
-
 <template>
   <section class="welcome" data-testid="welcome-state">
     <img class="welcome-logo" src="/image/yocim.png" alt="YOCIM" />
     <h1>YOCIM AGENT 让想法落地</h1>
     <span class="badge">测试版</span>
-    <div class="chips">
-      <span class="chip">▤ {{ workspaceName }}</span>
-    </div>
   </section>
 </template>
 
@@ -57,20 +46,5 @@ const workspaceName = computed(() => workspace.info?.name ?? '未选择工作区
   font-size: 13px;
   line-height: 1.7;
   color: var(--text-muted);
-}
-
-.chips {
-  display: flex;
-  gap: 8px;
-  margin-top: 18px;
-}
-
-.chip {
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-subtle);
-  color: var(--text-muted);
-  font-size: 11px;
 }
 </style>

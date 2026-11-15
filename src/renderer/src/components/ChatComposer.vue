@@ -9,13 +9,6 @@ import { useProvidersStore } from '../stores/providers'
 import { useWorkspaceStore } from '../stores/workspace'
 import ContextMenu from './ContextMenu.vue'
 
-const props = withDefaults(
-  defineProps<{
-    showContext?: boolean
-  }>(),
-  { showContext: true }
-)
-
 const chat = useChatStore()
 const workspace = useWorkspaceStore()
 const providers = useProvidersStore()
@@ -195,6 +188,16 @@ onMounted(() => {
     <div class="bar">
       <button
         type="button"
+        class="attach"
+        :disabled="!workspace.activeFile"
+        title="添加当前文件到对话"
+        data-testid="attach-current"
+        @click="attachCurrent"
+      >
+        +
+      </button>
+      <button
+        type="button"
         class="approval"
         :class="preferences.approvalMode"
         :title="approvalTitle"
@@ -204,19 +207,7 @@ onMounted(() => {
         <span class="approval-dot"></span>
         {{ approvalLabel }}
       </button>
-      <button
-        type="button"
-        class="attach"
-        :disabled="!workspace.activeFile"
-        title="添加当前文件到对话"
-        data-testid="attach-current"
-        @click="attachCurrent"
-      >
-        +
-      </button>
-      <template v-if="props.showContext">
-        <span class="chip">▤ {{ workspaceName }}</span>
-      </template>
+      <span class="chip">▤ {{ workspaceName }}</span>
       <span class="spacer"></span>
       <button
         type="button"

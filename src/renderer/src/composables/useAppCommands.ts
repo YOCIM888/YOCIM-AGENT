@@ -6,7 +6,7 @@ import { useSettingsStore } from '../stores/settings'
 import { useWorkspaceStore } from '../stores/workspace'
 
 /**
- * 标题栏菜单、全局快捷键与 rail 共用的应用级命令，避免多处重复会话/工作区逻辑。
+ * 标题栏菜单、全局快捷键与界面按钮共用的应用级命令，避免多处重复会话/工作区逻辑。
  */
 export function useAppCommands() {
   const workspace = useWorkspaceStore()

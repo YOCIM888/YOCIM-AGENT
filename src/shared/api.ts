@@ -22,7 +22,16 @@ import type {
   FsTransferResult,
   FsTreeInput,
   FsTreeNode,
+  FsWriteFileInput,
+  FsWriteFileResult,
   IpcResult,
+  SearchCancelInput,
+  SearchCancelResult,
+  SearchEvent,
+  SearchReplaceInput,
+  SearchReplaceResult,
+  SearchStartInput,
+  SearchStartResult,
   SessionCreateInput,
   SessionDeleteResult,
   SessionExportResult,
@@ -63,6 +72,7 @@ export interface YocimWorkspaceApi {
   openProject(input: WorkspaceOpenProjectInput): Promise<IpcResult<WorkspaceInfo>>
   tree(input: FsTreeInput): Promise<IpcResult<FsTreeNode[]>>
   readFile(input: FsReadFileInput): Promise<IpcResult<FsReadFileResult>>
+  writeFile(input: FsWriteFileInput): Promise<IpcResult<FsWriteFileResult>>
   createFile(input: FsCreateEntryInput): Promise<IpcResult<FsTreeNode>>
   createFolder(input: FsCreateEntryInput): Promise<IpcResult<FsTreeNode>>
   rename(input: FsRenameInput): Promise<IpcResult<FsTreeNode>>
@@ -81,6 +91,13 @@ export interface YocimTimelineApi {
   list(input: FsPathInput): Promise<IpcResult<TimelineListResult>>
   read(input: TimelineReadInput): Promise<IpcResult<TimelineReadResult>>
   restore(input: TimelineReadInput): Promise<IpcResult<TimelineRestoreResult>>
+}
+
+export interface YocimSearchApi {
+  start(input: SearchStartInput): Promise<IpcResult<SearchStartResult>>
+  cancel(input: SearchCancelInput): Promise<IpcResult<SearchCancelResult>>
+  replace(input: SearchReplaceInput): Promise<IpcResult<SearchReplaceResult>>
+  onEvent(listener: (event: SearchEvent) => void): () => void
 }
 
 export interface YocimChatApi {
@@ -131,6 +148,7 @@ export interface YocimApi {
   platform: string
   versions: YocimVersions
   workspace: YocimWorkspaceApi
+  search: YocimSearchApi
   chat: YocimChatApi
   approval: YocimApprovalApi
   audit: YocimAuditApi

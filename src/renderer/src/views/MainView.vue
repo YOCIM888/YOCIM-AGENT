@@ -135,18 +135,6 @@ onBeforeUnmount(() => {
         @reset="settings.setWorkspaceWidth(WORKSPACE_WIDTH_DEFAULT)"
       />
       <WorkspacePanel v-if="!settings.workspaceCollapsed" />
-
-      <nav v-else class="rail right-rail" aria-label="工作区快捷栏">
-        <button
-          type="button"
-          class="rail-button"
-          data-testid="workspace-expand"
-          title="展开工作区 (Ctrl+Shift+B)"
-          @click="settings.setWorkspaceCollapsed(false)"
-        >
-          ‹
-        </button>
-      </nav>
     </div>
 
     <StatusBar />
@@ -174,38 +162,6 @@ onBeforeUnmount(() => {
   min-width: 0;
   min-height: 0;
   background: var(--bg);
-}
-
-.rail {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 46px;
-  padding: 10px 0;
-  background: var(--bg-subtle);
-}
-
-.right-rail {
-  border-left: 1px solid var(--border);
-}
-
-.rail-button {
-  width: 30px;
-  height: 30px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.rail-button:hover {
-  border-color: var(--border);
-  background: var(--bg-hover);
-  color: var(--text);
 }
 
 .error {

@@ -3,6 +3,7 @@ export const IPC_CHANNELS = {
   workspaceCurrent: 'workspace:current',
   fsTree: 'fs:tree',
   fsReadFile: 'fs:readFile',
+  fsWriteFile: 'fs:writeFile',
   fsCreateFile: 'fs:createFile',
   fsCreateFolder: 'fs:createFolder',
   fsRename: 'fs:rename',
@@ -15,6 +16,10 @@ export const IPC_CHANNELS = {
   timelineList: 'timeline:list',
   timelineRead: 'timeline:read',
   timelineRestore: 'timeline:restore',
+  searchStart: 'search:start',
+  searchCancel: 'search:cancel',
+  searchEvent: 'search:event',
+  searchReplace: 'search:replace',
   chatSend: 'chat:send',
   chatCancel: 'chat:cancel',
   chatEvent: 'chat:event',
@@ -46,6 +51,17 @@ export const FS_LIMITS = {
   maxTreeEntries: 500,
   maxDepth: 8,
   maxRelativePathLength: 1024
+} as const
+
+export const SEARCH_LIMITS = {
+  maxQueryLength: 512,
+  maxReplacementLength: 4096,
+  maxPatternLength: 512,
+  maxResults: 5000,
+  maxMatchesPerFile: 2000,
+  maxLineChars: 400,
+  maxFileBytes: 1024 * 1024,
+  maxReplaceFiles: 200
 } as const
 
 export const IGNORED_DIRECTORIES = new Set([

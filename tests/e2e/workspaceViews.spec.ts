@@ -13,7 +13,7 @@ function launch(userDataDir: string): ReturnType<typeof electron.launch> {
 
 const VIEWS = [
   { testid: 'workspace-tab-files', label: '文件', panel: 'file-tree' },
-  { testid: 'workspace-tab-search', label: '搜索', panel: 'search-panel', phase: 'P2' },
+  { testid: 'workspace-tab-search', label: '搜索', panel: 'search-panel' },
   { testid: 'workspace-tab-editor', label: '编辑器', panel: 'editor-pane' },
   { testid: 'audit-toggle', label: '审计', panel: 'audit-panel' },
   { testid: 'workspace-tab-scm', label: '源代码管理', panel: 'scm-panel', phase: 'P3' },
@@ -33,7 +33,8 @@ test('switches all 8 activity bar views and persists the active view', async () 
     await app.evaluate(({ dialog }, target) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [target] })
     }, workspaceDir)
-    await page.getByTestId('workspace-switch').click()
+    await page.getByTestId('menu-edit').click()
+    await page.getByTestId('menu-open-folder').click()
     await expect(page.getByTestId('tree-node-hello.txt')).toBeVisible()
 
     const bar = page.getByTestId('workspace-activity-bar')

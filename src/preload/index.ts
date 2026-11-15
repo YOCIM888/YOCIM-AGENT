@@ -26,8 +26,17 @@ import type {
   FsTransferResult,
   FsTreeNode,
   FsTreeInput,
+  FsWriteFileInput,
+  FsWriteFileResult,
   IpcResult,
   ProjectListResult,
+  SearchCancelInput,
+  SearchCancelResult,
+  SearchEvent,
+  SearchReplaceInput,
+  SearchReplaceResult,
+  SearchStartInput,
+  SearchStartResult,
   ProjectRenameInput,
   ProviderDeleteInput,
   ProviderSaveInput,
@@ -74,6 +83,8 @@ const api: YocimApi = {
     tree: (input: FsTreeInput) => invoke<IpcResult<FsTreeNode[]>>(IPC_CHANNELS.fsTree, input),
     readFile: (input: FsReadFileInput) =>
       invoke<IpcResult<FsReadFileResult>>(IPC_CHANNELS.fsReadFile, input),
+    writeFile: (input: FsWriteFileInput) =>
+      invoke<IpcResult<FsWriteFileResult>>(IPC_CHANNELS.fsWriteFile, input),
     createFile: (input: FsCreateEntryInput) =>
       invoke<IpcResult<FsTreeNode>>(IPC_CHANNELS.fsCreateFile, input),
     createFolder: (input: FsCreateEntryInput) =>
@@ -87,6 +98,23 @@ const api: YocimApi = {
     reveal: (input: FsPathInput) => invoke<IpcResult<null>>(IPC_CHANNELS.fsReveal, input),
     clipboard: (input: FsClipboardInput) =>
       invoke<IpcResult<FsClipboardResult>>(IPC_CHANNELS.fsClipboard, input)
+  },
+  search: {
+    start: (input: SearchStartInput) =>
+      invoke<IpcResult<SearchStartResult>>(IPC_CHANNELS.searchStart, input),
+    cancel: (input: SearchCancelInput) =>
+      invoke<IpcResult<SearchCancelResult>>(IPC_CHANNELS.searchCancel, input),
+    replace: (input: SearchReplaceInput) =>
+      invoke<IpcResult<SearchReplaceResult>>(IPC_CHANNELS.searchReplace, input),
+    onEvent: (listener: (event: SearchEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, payload: SearchEvent): void => {
+        listener(payload)
+      }
+      ipcRenderer.on(IPC_CHANNELS.searchEvent, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.searchEvent, handler)
+      }
+    }
   },
   chat: {
     send: (input: ChatSendInput) => invoke<IpcResult<ChatSendResult>>(IPC_CHANNELS.chatSend, input),

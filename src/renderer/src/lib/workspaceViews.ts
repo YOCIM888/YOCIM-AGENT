@@ -13,17 +13,7 @@ export interface WorkspaceViewDef {
 
 export const WORKSPACE_VIEWS: WorkspaceViewDef[] = [
   { key: 'files', label: '文件', testid: 'workspace-tab-files' },
-  {
-    key: 'search',
-    label: '搜索',
-    testid: 'workspace-tab-search',
-    phase: 'P2',
-    summary: [
-      '工作区全文搜索与替换，支持大小写、全词、正则',
-      'include / exclude glob，遵守 .gitignore',
-      'ripgrep 流式结果，按文件分组，点击跳转编辑器'
-    ]
-  },
+  { key: 'search', label: '搜索', testid: 'workspace-tab-search' },
   { key: 'editor', label: '编辑器', testid: 'workspace-tab-editor' },
   { key: 'audit', label: '审计', testid: 'audit-toggle' },
   {

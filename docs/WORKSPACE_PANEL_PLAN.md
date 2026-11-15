@@ -1,9 +1,9 @@
 # 右侧工作区增强计划（VS Code 风格）
 
-> 状态：**P0、P1 已完成并验收；P2 待实施**（2026-11-15 更新）
+> 状态：**P0、P1、P2 已完成并验收；P3 待实施**（2026-11-15 更新）
 > 已确认决策：编辑器可编辑、扩展第一层、Node.js 调试优先、WSL 先行、打包 ripgrep、依赖系统 Git。
 > 范围：右侧工作区面板从「文件 / 编辑器 / 审计」三个文字 Tab 扩展为 VS Code 风格的图标活动栏与 8 个视图：文件、搜索、编辑器、审计、源代码管理、扩展安装、运行和调试、远程管理器。
-> P0/P1 已按本文档实施（见 §8 阶段标记与 §14 交接）；P2–P6 仍为计划。
+> P0/P1/P2 已按本文档实施（见 §8 阶段标记与 §14 交接）；P3–P6 仍为计划。
 
 ## 1. 现状与目标
 
@@ -387,13 +387,16 @@ interface ContextAttachment {
 - 验收：全部文件操作单测 + e2e；删除可从回收站恢复；默认折叠；时间线可恢复。
 - 结果：`tests/e2e/fileExplorer.spec.ts` 2 例 + 全量 e2e 11 例、单测 150 例、typecheck/lint/format 全绿；回收站/默认折叠/时间线恢复均 e2e 覆盖；light/dark/1024/右键菜单/Diff 视觉验证通过。
 
-### P2：搜索替换与编辑器体验 ⏳ 待实施（下一步）
+### P2：搜索替换与编辑器体验 ✅ 已完成（2026-11-15）
 
 - 搜索/替换面板、ripgrep 流式结果、取消、include/exclude、大小写/全词/正则。
 - 替换预览、hash 冲突检测、单条/文件/全局替换。
 - 多标签、预览标签、可编辑与保存、外部修改冲突处理（已确认：本阶段直接交付可编辑）。
 - 编辑器选区右键「添加到对话」。
 - 验收：搜索大仓库不卡 UI；文件可编辑保存且冲突可处理；替换可回滚（时间线快照）；选区附件正确进入消息。
+- 结果：`tests/e2e/searchEditor.spec.ts` 3 例通过（搜索跳转→全局替换→时间线回滚；多标签/保存/覆盖/重新加载/另存；选区附件随消息发送）；全量 e2e 14 例、单测 194 例、typecheck/lint/format 全绿。
+- 视觉验收：亮色搜索面板、亮/暗编辑器、1024 宽度四张截图复核通过；修掉两处细节——内置搜索的 ripgrep 提示重复（`stores/search.ts` 不再写 `notice`，由 `SearchPanel.vue` 的 `search-engine-notice` 统一展示）、窄面板头部按钮被右侧窗口边缘裁切（`EditorPane.vue` 头部拆成「路径/大小/状态」+「只读/保存/添加到对话」两行，并用 `editor-body` 包裹内容区替代写死的 `inset: 62px`）。修正后已重跑全部回归。
+- 补充交付：用户保存与外部修改均生成时间线快照（`source: user|external`）；图片只读预览与二进制提示；标签与搜索选项持久化；`Ctrl+S` 保存。
 
 ### P3：审计与源代码管理
 
@@ -496,17 +499,17 @@ interface ContextAttachment {
 
 ### 下一步
 
-**P0、P1 已完成。从 P2：搜索替换与编辑器体验 开始实施**（交接见 §14）：
+**P0、P1、P2 已完成。从 P3：审计与源代码管理 开始实施**（交接见 §14）：
 
-1. 搜索/替换面板 + ripgrep 流式结果、取消、include/exclude、大小写/全词/正则；
-2. 替换预览、hash 冲突检测、单条/文件/全局替换；
-3. 编辑器多标签、可编辑与保存、外部修改冲突处理；
-4. 编辑器选区右键「添加到对话」（复用 P1 附件模型）；
-5. 完成后按阶段验收再进入 P3。
+1. 审计统计卡、筛选/分页/详情抽屉、实时模式、JSON/CSV 导出（`audit:query` / `audit:stats`）；
+2. `GitService` + 系统 Git 检测：状态分组、暂存/取消暂存、提交、Diff、分支切换、拉取/推送/发布分支；
+3. 放弃更改需二次确认；Git 输出面板与敏感信息脱敏；
+4. 临时 Git 仓库 e2e 覆盖暂存→提交→分支→Diff；
+5. 完成后按阶段验收再进入 P4。
 
-## 14. 实施状态与交接（2026-11-15，P0/P1 完成）
+## 14. 实施状态与交接（2026-11-15，P0/P1/P2 完成）
 
-> 供接手 P2 的会话快速上手。P0+P1 全部为**未提交**的工作区改动（baseline `c9dbd41` 尚无工作区面板）。
+> 供接手 P3 的会话快速上手。P0+P1+P2 全部为**未提交**的工作区改动（baseline `c9dbd41` 尚无工作区面板）。
 
 ### 14.1 已落地代码
 
@@ -514,17 +517,24 @@ interface ContextAttachment {
 - 共享：`shared/attachment.ts`（ContextAttachment + 限额 10/64KB/200KB）、`shared/ipc.ts` 各 schema。
 - 前端组件：`FileTreePanel/FileTreeNode/FileTypeIcon/TreeNameInput/ContextMenu/ConflictDialog/ConfirmDialog/CollapsibleSection/OutlinePanel/TimelinePanel/WorkspaceActivityBar/WorkspaceViewIcon/ViewPlaceholder`。
 - 前端 store/lib：`stores/workspace.ts`（懒加载树/剪贴板/diff/reveal）、`stores/chat.ts`（附件+发送）、`stores/settings.ts`（视图/区块折叠持久化）、`lib/outline.ts`、`lib/attachments.ts`、`lib/language.ts`、`lib/fileTree.ts`、`lib/fileIcons.ts`、`lib/workspaceViews.ts`。
+- **P2 主进程**：`workspace/searchCore.ts`（匹配器/glob/简化 .gitignore/rg 参数/替换与 hash）、`workspace/ripgrep.ts`（rg 路径探测与 `--json` 解析）、`workspace/searchService.ts`（流式搜索、取消、上限、替换预览/应用/时间线快照）；`workspace/workspaceFs.ts` 扩展 `readWorkspaceFile`（hash/EOL/图片）与 `writeWorkspaceFile`（保存/另存/冲突/快照）；`ipc/index.ts` 注册 `fs:writeFile`、`search:*`。
+- **P2 共享/桥接**：`shared/ipc.ts`（`SearchQuery`/`SearchEvent`/替换与保存 schema）、`shared/ipcChannels.ts`（`SEARCH_LIMITS`、新通道）、`shared/api.ts` + `preload/index.ts`（`yocim.search.*`、`workspace.writeFile`）。
+- **P2 前端**：`components/SearchPanel.vue`、`ReplacePreviewDialog.vue`、`SaveConflictDialog.vue`；`EditorPane.vue` 重写为多标签可编辑；`stores/search.ts`（防抖/事件/选项持久化）、`stores/workspace.ts`（标签、脏状态、保存、冲突、`timelineVersion`）、`stores/chat.ts` + `lib/attachments.ts`（选区附件）；`WorkspacePanel.vue` 常驻挂载搜索/编辑器视图。
 
 ### 14.2 验证基线（接手时请先复跑确认）
 
-- 单测 150（21 文件）；e2e 11（smoke 7 + workspaceViews 2 + fileExplorer 2）；`typecheck:node`、`typecheck:web`、`lint`、`format:check` 全绿。
+- 单测 **194（25 文件）**；e2e **14**（smoke 7 + workspaceViews 2 + fileExplorer 2 + searchEditor 3）；`typecheck`、`lint`、`format:check` 全绿。
 - 命令：`npm test`、`npm run e2e`、`npm run typecheck`、`npm run lint`、`npm run format:check`。
+- 在 WorkBuddy 会话内跑 e2e 需先去掉继承的 `ELECTRON_RUN_AS_NODE=1`（否则 Electron 以 Node 模式启动，报 `bad option: --remote-debugging-port=0`）：`env -u ELECTRON_RUN_AS_NODE npm run e2e`。
+- P2 收尾在视觉修正后复跑：`npm run format` / `typecheck` / `lint` / `npm test`（194 例）/ `format:check` / `env -u ELECTRON_RUN_AS_NODE npm run e2e`（14 例）全部通过；亮色搜索、亮/暗编辑器、1024 宽度截图复核无溢出与重复提示。
 
-### 14.3 与计划的偏差（P2 需留意）
+### 14.3 与计划的偏差（P3 需留意）
 
-- 大纲 TS/JS 目前用**正则提取**（`lib/outline.ts`），未接 §3.1.5 首选的 Monaco TS Worker；P2 可升级。
-- 时间线快照目前仅 **Agent 写入钩子 + 恢复**；「用户保存 / 外部修改检测」快照待 P2 编辑器可编辑后补齐（现无 fs watcher）。
-- 编辑器仍为**只读预览 + 单文件**；多标签/可编辑/保存/冲突属 P2 范围。
+- 大纲 TS/JS 仍用**正则提取**（`lib/outline.ts`），未接 §3.1.5 首选的 Monaco TS Worker；P2 未升级，可后置。
+- **无 fs watcher**：外部修改通过「保存前 hash 校验」与「切换标签时 `expectedHash` 比对」发现，后者会让主进程生成 `external` 快照；不是实时文件监听。
+- **ripgrep 二进制尚未打包**：`findRipgrepPath()` 依次探测 `process.resourcesPath/ripgrep`、`resources/ripgrep`、PATH，缺失时回退内置递归搜索并在 UI 提示；§10 的「打包 rg（+2–4MB）」与 `electron-builder.yml` extraResources 留到 **P6** 发布检查时落地。
+- `.gitignore` 为简化实现（注释/取反/目录/锚定/通配），未覆盖完整 gitignore 规范；include/exclude glob 同样为简化匹配器。
+- 搜索的「仅在打开文件中搜索」不应用 .gitignore（显式打开的文件仍可搜），符合「优先搜已打开文件」的语义。
 
 ### 14.4 交接坑位（已踩过的坑）
 
@@ -533,3 +543,8 @@ interface ContextAttachment {
 3. **Diff 在编辑器视图**：`openDiff` 会自动切到编辑器视图（overlay 在 EditorPane 内）；关闭后不自动回文件视图，交互/e2e 需手动切回 `workspace-tab-files`。
 4. **refreshTree 保留已展开目录**（符合 §3.1.2）；e2e 不要重复点击已展开目录（会折叠）。
 5. **runIpcHandler 捕获所有 handler 错误**返回 `{ok:false}`；invoke 被 reject 通常是克隆/注册问题而非业务错误，排查方向不同。
+6. **P2 再踩一次 Proxy 坑**：`search` store 的替换请求参数原本放进 `ref`，`applyReplace` 把 `pending.query`（reactive Proxy）传给 `search:replace` 直接 reject，表现为「预览正常、应用无反应」。现改为普通局部变量 `let pendingReplace`；新增需要回传 IPC 的中间状态一律不要塞进 `ref`。
+7. **Monaco 选区**：`.view-lines` 是整块容器，点击中心容易落到文件末尾空行，`Home + Shift+End` 选不到内容；e2e 用 `Ctrl+A` 全选验证选区附件。组件内以 `editor.getSelection()` + `getValueLengthInRange()` 判空，无选区退化为整文件附件。
+8. **时间线列表刷新**：`TimelinePanel` 原来只 watch `activeFile.relativePath`；替换/保存在同一文件上发生，路径不变导致快照列表不更新。新增 `workspace.timelineVersion`，磁盘内容变化后递增并触发重新拉取。
+9. **e2e 固定标签**：Playwright 在文件树节点上 `dblclick` 时，第一次单击已切到编辑器视图，第二次点击落不到树节点；固定标签改在标签条上双击（`editor-tab-*`）。
+10. **编辑器 overlay 不要用写死的 `inset`**：头部一旦换行（窄面板两行布局），原来 `diff-overlay` / `editor-empty` 的 `inset: 62px 0 0` 就会错位。现用 `EditorPane.vue` 的 `.editor-body`（`position: relative; flex: 1`）包裹内容区，overlay 改为 `inset: 0`；后续加头部行高不必再改魔法数字。
