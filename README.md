@@ -191,6 +191,7 @@ npm run package
 
 ## 文档
 
+- [右侧工作区增强计划](docs/WORKSPACE_PANEL_PLAN.md)：图标活动栏、文件/搜索/Git/扩展/调试/远程
 - [多模型 Provider 接入方案](docs/realized%28已实现%29/MULTI_PROVIDER_PLAN.md)：Provider 调研、协议、数据模型与实施记录
 - 已实现阶段（归档）：
   - [UI_IMPLEMENTATION](docs/realized%28已实现%29/UI_IMPLEMENTATION.md)：三栏布局、项目化会话、时间线、主题与测试
