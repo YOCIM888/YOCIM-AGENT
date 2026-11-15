@@ -1,7 +1,9 @@
 import { DatabaseSync } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { OpenAICompatibleProvider } from '../../src/main/agent/providers/openaiProvider'
+import { AnthropicProvider } from '../../src/main/agent/providers/anthropicProvider'
+import { GeminiProvider } from '../../src/main/agent/providers/geminiProvider'
 import { MockProvider } from '../../src/main/agent/providers/mockProvider'
+import { OpenAICompatibleProvider } from '../../src/main/agent/providers/openaiProvider'
 import { migrate } from '../../src/main/db/database'
 import { SettingsRepository } from '../../src/main/db/repositories'
 import { SettingsService, type SettingsCrypto } from '../../src/main/settings/settingsService'
@@ -25,73 +27,185 @@ beforeEach(() => {
   service = new SettingsService(repo, crypto, null)
 })
 
-describe('SettingsService', () => {
+function saveDeepSeek(
+  overrides: Partial<Parameters<SettingsService['saveProvider']>[0]> = {}
+): ReturnType<SettingsService['saveProvider']> {
+  return service.saveProvider({
+    presetId: 'deepseek',
+    name: 'DeepSeek',
+    protocol: 'openai',
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
+    models: ['deepseek-chat', 'deepseek-reasoner'],
+    ...overrides
+  })
+}
+
+describe('SettingsService providers', () => {
   it('defaults to the mock provider without secrets', () => {
-    expect(service.getPublic()).toEqual({
-      provider: 'mock',
-      baseUrl: '',
-      model: '',
+    const settings = service.getPublic()
+    expect(settings.activeProviderId).toBe('mock')
+    expect(settings.activeModel).toBe('mock')
+    expect(settings.approvalMode).toBe('manual')
+    expect(settings.providers).toHaveLength(1)
+    expect(settings.providers[0]).toMatchObject({
+      id: 'mock',
+      name: 'Mock（离线）',
       hasApiKey: false
     })
     expect(service.createProvider()).toBeInstanceOf(MockProvider)
     db.close()
   })
 
-  it('stores the API key encrypted and never returns it', () => {
-    const settings = service.update({
-      provider: 'openai',
-      baseUrl: ' https://api.example.com/v1 ',
-      model: ' test-model ',
-      apiKey: 'sk-secret'
-    })
+  it('persists the approval mode', () => {
+    expect(service.getApprovalMode()).toBe('manual')
+    expect(service.setApprovalMode({ mode: 'auto' }).approvalMode).toBe('auto')
+    expect(service.getApprovalMode()).toBe('auto')
+    expect(service.setApprovalMode({ mode: 'open' }).approvalMode).toBe('open')
+    expect(service.getApprovalMode()).toBe('open')
+    db.close()
+  })
 
-    expect(settings).toMatchObject({
-      provider: 'openai',
-      baseUrl: 'https://api.example.com/v1',
-      model: 'test-model',
-      hasApiKey: true
-    })
-    expect(JSON.stringify(settings)).not.toContain('sk-secret')
+  it('adds a provider, stores its key encrypted and activates it', () => {
+    const settings = saveDeepSeek({ apiKey: 'sk-deepseek' })
+    const provider = settings.providers.find((item) => item.presetId === 'deepseek')
 
-    const stored = repo.get('apiKeyEncrypted')
+    expect(provider).toBeDefined()
+    expect(provider?.hasApiKey).toBe(true)
+    expect(settings.activeProviderId).toBe(provider?.id)
+    expect(settings.activeModel).toBe('deepseek-chat')
+    expect(JSON.stringify(settings)).not.toContain('sk-deepseek')
+
+    const stored = repo.get(`providerApiKey:${provider?.id}`)
     expect(typeof stored).toBe('string')
-    expect(stored).not.toContain('sk-secret')
-    expect(service.getApiKey()).toBe('sk-secret')
+    expect(stored).not.toContain('sk-deepseek')
     expect(service.createProvider()).toBeInstanceOf(OpenAICompatibleProvider)
     db.close()
   })
 
-  it('clears the stored key when an empty apiKey is provided', () => {
-    service.update({
-      provider: 'openai',
-      baseUrl: 'https://api.example.com/v1',
-      model: 'm',
-      apiKey: 'sk-secret'
+  it('updates a provider, switches models and clears the key', () => {
+    const settings = saveDeepSeek({ apiKey: 'sk-deepseek' })
+    const provider = settings.providers.find((item) => item.presetId === 'deepseek')
+    expect(provider).toBeDefined()
+    if (!provider) return
+
+    const updated = service.saveProvider({
+      id: provider.id,
+      presetId: 'deepseek',
+      name: 'DeepSeek 主账号',
+      protocol: 'openai',
+      baseUrl: 'https://api.deepseek.com/v1',
+      model: 'deepseek-reasoner',
+      models: ['deepseek-chat', 'deepseek-reasoner']
     })
-    const settings = service.update({
-      provider: 'openai',
-      baseUrl: 'https://api.example.com/v1',
-      model: 'm',
+    expect(updated.providers.find((item) => item.id === provider.id)?.name).toBe('DeepSeek 主账号')
+    expect(updated.activeModel).toBe('deepseek-reasoner')
+
+    const switched = service.setActive({ providerId: provider.id, model: 'deepseek-chat' })
+    expect(switched.activeModel).toBe('deepseek-chat')
+
+    const cleared = service.saveProvider({
+      id: provider.id,
+      presetId: 'deepseek',
+      name: 'DeepSeek',
+      protocol: 'openai',
+      baseUrl: 'https://api.deepseek.com/v1',
+      model: 'deepseek-chat',
+      models: ['deepseek-chat'],
       apiKey: ''
     })
-    expect(settings.hasApiKey).toBe(false)
-    expect(service.getApiKey()).toBeNull()
+    expect(cleared.providers.find((item) => item.id === provider.id)?.hasApiKey).toBe(false)
     db.close()
   })
 
-  it('refuses to create an OpenAI provider without complete configuration', () => {
-    service.update({ provider: 'openai', baseUrl: '', model: '' })
-    expect(() => service.createProvider()).toThrow(/Base URL/)
+  it('deletes a provider and falls back to mock', () => {
+    const settings = saveDeepSeek({ apiKey: 'sk' })
+    const provider = settings.providers.find((item) => item.presetId === 'deepseek')
+    expect(provider).toBeDefined()
+    if (!provider) return
+
+    const next = service.deleteProvider({ providerId: provider.id })
+    expect(next.providers.map((item) => item.id)).toEqual(['mock'])
+    expect(next.activeProviderId).toBe('mock')
+    expect(repo.get(`providerApiKey:${provider.id}`)).toBeUndefined()
+    expect(() => service.deleteProvider({ providerId: 'mock' })).toThrow(/不可删除/)
+    db.close()
+  })
+
+  it('rejects incomplete cloud providers at creation time', () => {
+    saveDeepSeek()
+    expect(() => service.createProvider()).toThrow(/API Key/)
+    db.close()
+  })
+
+  it('supports local providers without API keys', () => {
+    const settings = service.saveProvider({
+      presetId: 'ollama',
+      name: '本地 Ollama',
+      protocol: 'openai',
+      baseUrl: 'http://localhost:11434/v1',
+      model: 'qwen3',
+      models: ['qwen3']
+    })
+    expect(settings.activeProviderId).toContain('ollama')
+    expect(service.createProvider()).toBeInstanceOf(OpenAICompatibleProvider)
+    db.close()
+  })
+
+  it('creates Anthropic and Gemini providers by protocol', () => {
+    service.saveProvider({
+      presetId: 'claude',
+      name: 'Claude',
+      protocol: 'anthropic',
+      baseUrl: 'https://api.anthropic.com/v1',
+      model: 'claude-sonnet-4-5',
+      models: ['claude-sonnet-4-5'],
+      apiKey: 'sk-ant'
+    })
+    expect(service.createProvider()).toBeInstanceOf(AnthropicProvider)
+
+    service.saveProvider({
+      presetId: 'gemini',
+      name: 'Gemini',
+      protocol: 'gemini',
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+      model: 'gemini-2.5-pro',
+      models: ['gemini-2.5-pro'],
+      apiKey: 'gemini-key'
+    })
+    expect(service.createProvider()).toBeInstanceOf(GeminiProvider)
+    db.close()
+  })
+
+  it('migrates legacy single-provider settings', () => {
+    repo.set('provider', 'openai')
+    repo.set('baseUrl', 'https://api.example.com/v1')
+    repo.set('model', 'legacy-model')
+    repo.set('apiKeyEncrypted', crypto.encrypt('legacy-key'))
+
+    const settings = service.getPublic()
+    const custom = settings.providers.find((item) => item.presetId === 'custom')
+    expect(custom).toMatchObject({
+      id: 'custom',
+      baseUrl: 'https://api.example.com/v1',
+      model: 'legacy-model',
+      hasApiKey: true
+    })
+    expect(settings.activeProviderId).toBe('custom')
+    expect(service.createProvider()).toBeInstanceOf(OpenAICompatibleProvider)
     db.close()
   })
 
   it('fails to store keys when secure storage is unavailable', () => {
     const insecure = new SettingsService(repo, null, null)
     expect(() =>
-      insecure.update({
-        provider: 'openai',
-        baseUrl: 'https://api.example.com/v1',
-        model: 'm',
+      insecure.saveProvider({
+        presetId: 'deepseek',
+        name: 'DeepSeek',
+        protocol: 'openai',
+        baseUrl: 'https://api.deepseek.com/v1',
+        model: 'deepseek-chat',
+        models: ['deepseek-chat'],
         apiKey: 'sk-secret'
       })
     ).toThrow(/安全存储/)

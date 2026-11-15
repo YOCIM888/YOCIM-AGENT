@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type { ChatMessage } from '../stores/chat'
 import { useChatStore } from '../stores/chat'
 import { useProjectsStore } from '../stores/projects'
@@ -14,7 +14,6 @@ const sessions = useSessionStore()
 const projects = useProjectsStore()
 const listRef = ref<HTMLDivElement | null>(null)
 const stickToBottom = ref(true)
-const modelLabel = ref('Mock Provider')
 
 const projectName = computed(() => {
   const projectId = sessions.activeSession?.projectId
@@ -67,13 +66,6 @@ watch(
   () => chat.pendingApprovals.length,
   () => scrollToBottom(true)
 )
-
-onMounted(async () => {
-  const result = await window.yocim.settings.get()
-  if (result.ok && result.data.provider === 'openai' && result.data.model) {
-    modelLabel.value = result.data.model
-  }
-})
 </script>
 
 <template>
@@ -93,7 +85,7 @@ onMounted(async () => {
       <div class="welcome-wrap">
         <WelcomeState />
         <div class="welcome-composer">
-          <ChatComposer :model-label="modelLabel" :show-context="false" />
+          <ChatComposer :show-context="false" />
         </div>
       </div>
     </template>
@@ -147,7 +139,7 @@ onMounted(async () => {
       </div>
 
       <div class="bottom-composer">
-        <ChatComposer :model-label="modelLabel" />
+        <ChatComposer />
       </div>
     </template>
   </section>

@@ -4,12 +4,21 @@ import { ref } from 'vue'
 export type ThemeMode = 'light' | 'dark'
 export type WorkspaceTab = 'files' | 'editor' | 'audit'
 
+export const SESSION_WIDTH_MIN = 220
+export const SESSION_WIDTH_MAX = 420
+export const WORKSPACE_WIDTH_MIN = 220
+export const WORKSPACE_WIDTH_MAX = 420
+export const SESSION_WIDTH_DEFAULT = 300
+export const WORKSPACE_WIDTH_DEFAULT = 280
+
 const STORAGE_KEYS = {
   theme: 'yocim.theme',
   sessionCollapsed: 'yocim.ui.sessionCollapsed',
   workspaceCollapsed: 'yocim.ui.workspaceCollapsed',
   statusExpanded: 'yocim.ui.statusExpanded',
-  workspaceTab: 'yocim.ui.workspaceTab'
+  workspaceTab: 'yocim.ui.workspaceTab',
+  sessionWidth: 'yocim.ui.sessionWidth',
+  workspaceWidth: 'yocim.ui.workspaceWidth'
 } as const
 
 function readStorage(key: string): string | null {
@@ -35,6 +44,15 @@ function readBoolean(key: string, fallback: boolean): boolean {
   return fallback
 }
 
+function clampWidth(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback
+  return Math.min(max, Math.max(min, Math.round(value)))
+}
+
+function readWidth(key: string, min: number, max: number, fallback: number): number {
+  return clampWidth(Number(readStorage(key)), min, max, fallback)
+}
+
 function readTheme(): ThemeMode {
   return readStorage(STORAGE_KEYS.theme) === 'dark' ? 'dark' : 'light'
 }
@@ -58,6 +76,22 @@ export const useSettingsStore = defineStore('settings', () => {
   const workspaceCollapsed = ref(readBoolean(STORAGE_KEYS.workspaceCollapsed, false))
   const statusExpanded = ref(readBoolean(STORAGE_KEYS.statusExpanded, false))
   const workspaceTab = ref<WorkspaceTab>(readTab())
+  const sessionWidth = ref(
+    readWidth(
+      STORAGE_KEYS.sessionWidth,
+      SESSION_WIDTH_MIN,
+      SESSION_WIDTH_MAX,
+      SESSION_WIDTH_DEFAULT
+    )
+  )
+  const workspaceWidth = ref(
+    readWidth(
+      STORAGE_KEYS.workspaceWidth,
+      WORKSPACE_WIDTH_MIN,
+      WORKSPACE_WIDTH_MAX,
+      WORKSPACE_WIDTH_DEFAULT
+    )
+  )
 
   applyTheme(theme.value)
 
@@ -91,6 +125,26 @@ export const useSettingsStore = defineStore('settings', () => {
     writeStorage(STORAGE_KEYS.workspaceTab, value)
   }
 
+  function setSessionWidth(value: number): void {
+    sessionWidth.value = clampWidth(
+      value,
+      SESSION_WIDTH_MIN,
+      SESSION_WIDTH_MAX,
+      SESSION_WIDTH_DEFAULT
+    )
+    writeStorage(STORAGE_KEYS.sessionWidth, String(sessionWidth.value))
+  }
+
+  function setWorkspaceWidth(value: number): void {
+    workspaceWidth.value = clampWidth(
+      value,
+      WORKSPACE_WIDTH_MIN,
+      WORKSPACE_WIDTH_MAX,
+      WORKSPACE_WIDTH_DEFAULT
+    )
+    writeStorage(STORAGE_KEYS.workspaceWidth, String(workspaceWidth.value))
+  }
+
   return {
     theme,
     fontSize,
@@ -100,11 +154,15 @@ export const useSettingsStore = defineStore('settings', () => {
     workspaceCollapsed,
     statusExpanded,
     workspaceTab,
+    sessionWidth,
+    workspaceWidth,
     setTheme,
     toggleTheme,
     setSessionCollapsed,
     setWorkspaceCollapsed,
     setStatusExpanded,
-    setWorkspaceTab
+    setWorkspaceTab,
+    setSessionWidth,
+    setWorkspaceWidth
   }
 })

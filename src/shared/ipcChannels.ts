@@ -22,7 +22,10 @@ export const IPC_CHANNELS = {
   projectRename: 'project:rename',
   workspaceOpenProject: 'workspace:openProject',
   settingsGet: 'settings:get',
-  settingsSet: 'settings:set',
+  settingsSaveProvider: 'settings:saveProvider',
+  settingsDeleteProvider: 'settings:deleteProvider',
+  settingsSetActive: 'settings:setActive',
+  settingsSetApprovalMode: 'settings:setApprovalMode',
   windowControl: 'window:control'
 } as const
 

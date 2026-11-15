@@ -102,6 +102,12 @@ textarea {
   user-select: text;
 }
 
+body.col-resizing,
+body.col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

@@ -102,12 +102,14 @@ export class OpenAICompatibleProvider implements ChatProvider {
       }))
     }
 
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (this.options.apiKey) {
+      headers.Authorization = `Bearer ${this.options.apiKey}`
+    }
+
     const response = await this.fetchImpl(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.options.apiKey}`
-      },
+      headers,
       body: JSON.stringify(body),
       signal
     })

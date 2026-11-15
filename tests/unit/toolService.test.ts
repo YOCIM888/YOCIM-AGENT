@@ -166,6 +166,65 @@ describe('write_file approval', () => {
   })
 })
 
+describe('approval modes', () => {
+  it('auto mode approves writes but still asks for commands', async () => {
+    const autoService = new ToolService({
+      approvals,
+      audit,
+      requireGuard: () => guard,
+      getApprovalMode: () => 'auto'
+    })
+
+    const writeOutcome = await autoService.execute(
+      toolCall('write_file', { relativePath: 'notes/auto.txt', content: 'auto' }),
+      context()
+    )
+    expect(writeOutcome.ok).toBe(true)
+    expect(requests).toHaveLength(0)
+    expect(await readFile(path.join(workspaceRoot, 'notes', 'auto.txt'), 'utf8')).toBe('auto')
+    expect(audit.list()[0]).toMatchObject({
+      tool: 'write_file',
+      approval: 'not_required',
+      ok: true
+    })
+
+    const commandRun = autoService.execute(
+      toolCall('run_command', { command: 'node -e "console.log(1)"' }),
+      context()
+    )
+    expect(requests).toHaveLength(1)
+    approvals.respond(requests[0].approvalId, 'approve')
+    expect((await commandRun).ok).toBe(true)
+  })
+
+  it('open mode approves writes and commands without requests', async () => {
+    const openService = new ToolService({
+      approvals,
+      audit,
+      requireGuard: () => guard,
+      getApprovalMode: () => 'open'
+    })
+
+    const writeOutcome = await openService.execute(
+      toolCall('write_file', { relativePath: 'notes/open.txt', content: 'open' }),
+      context()
+    )
+    expect(writeOutcome.ok).toBe(true)
+
+    const commandOutcome = await openService.execute(
+      toolCall('run_command', { command: 'node -e "console.log(2)"' }),
+      context()
+    )
+    expect(commandOutcome.ok).toBe(true)
+    expect(requests).toHaveLength(0)
+    expect(audit.list()[0]).toMatchObject({
+      tool: 'run_command',
+      approval: 'not_required',
+      ok: true
+    })
+  })
+})
+
 describe('run_command protection', () => {
   it('rejects dangerous commands without approval', async () => {
     const outcome = await service.execute(

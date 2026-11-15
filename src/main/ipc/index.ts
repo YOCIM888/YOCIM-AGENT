@@ -13,6 +13,8 @@ import {
   fsTreeInputSchema,
   IPC_CHANNELS,
   projectRenameInputSchema,
+  providerDeleteInputSchema,
+  providerSaveInputSchema,
   sessionArchiveInputSchema,
   sessionCreateInputSchema,
   sessionIdInputSchema,
@@ -20,7 +22,8 @@ import {
   sessionMoveInputSchema,
   sessionPinInputSchema,
   sessionRenameInputSchema,
-  settingsUpdateInputSchema,
+  settingsSetActiveInputSchema,
+  settingsSetApprovalModeInputSchema,
   windowControlInputSchema,
   workspaceOpenProjectInputSchema,
   type ApprovalRespondRequest,
@@ -38,6 +41,8 @@ import {
   type IpcResult,
   type ProjectListResult,
   type ProjectRenameRequest,
+  type ProviderDeleteRequest,
+  type ProviderSaveRequest,
   type SessionArchiveRequest,
   type SessionCreateRequest,
   type SessionDeleteResult,
@@ -50,7 +55,8 @@ import {
   type SessionPinRequest,
   type SessionRenameRequest,
   type SettingsResult,
-  type SettingsUpdateRequest,
+  type SettingsSetActiveRequest,
+  type SettingsSetApprovalModeRequest,
   type WindowControlRequest,
   type WorkspaceInfo,
   type WorkspaceOpenProjectRequest
@@ -138,11 +144,13 @@ export function registerIpcHandlers(db: DatabaseSync): void {
 
   const auditStore = new AuditStore({ repo: auditRepo })
   const approvalManager = new ApprovalManager(broadcastApprovalRequest)
+  const settingsService = new SettingsService(settingsRepo, createSettingsCrypto())
   const toolService = new ToolService({
     approvals: approvalManager,
     audit: auditStore,
     toolCalls: toolCallRepo,
-    requireGuard: () => workspaceService.requireGuard()
+    requireGuard: () => workspaceService.requireGuard(),
+    getApprovalMode: () => settingsService.getApprovalMode()
   })
   const sessionService = new SessionService({
     sessions: sessionRepo,
@@ -151,7 +159,6 @@ export function registerIpcHandlers(db: DatabaseSync): void {
     getWorkspaceRoot: () => workspaceService.current()?.root ?? null
   })
   sessionService.ensureProjectForCurrentWorkspace()
-  const settingsService = new SettingsService(settingsRepo, createSettingsCrypto())
 
   const agentService = new AgentService({
     resolveProvider: () => settingsService.createProvider(),
@@ -285,10 +292,28 @@ export function registerIpcHandlers(db: DatabaseSync): void {
     settingsService.getPublic()
   )
 
-  handleIpc<SettingsUpdateRequest, SettingsResult>(
-    IPC_CHANNELS.settingsSet,
-    settingsUpdateInputSchema,
-    async (input) => settingsService.update(input)
+  handleIpc<ProviderSaveRequest, SettingsResult>(
+    IPC_CHANNELS.settingsSaveProvider,
+    providerSaveInputSchema,
+    async (input) => settingsService.saveProvider(input)
+  )
+
+  handleIpc<ProviderDeleteRequest, SettingsResult>(
+    IPC_CHANNELS.settingsDeleteProvider,
+    providerDeleteInputSchema,
+    async (input) => settingsService.deleteProvider(input)
+  )
+
+  handleIpc<SettingsSetActiveRequest, SettingsResult>(
+    IPC_CHANNELS.settingsSetActive,
+    settingsSetActiveInputSchema,
+    async (input) => settingsService.setActive(input)
+  )
+
+  handleIpc<SettingsSetApprovalModeRequest, SettingsResult>(
+    IPC_CHANNELS.settingsSetApprovalMode,
+    settingsSetApprovalModeInputSchema,
+    async (input) => settingsService.setApprovalMode(input)
   )
 
   handleIpc<WindowControlRequest, null>(

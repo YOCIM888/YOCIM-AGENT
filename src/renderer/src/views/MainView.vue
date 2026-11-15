@@ -1,21 +1,34 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted } from 'vue'
 import ChatPanel from '../components/ChatPanel.vue'
+import ResizeHandle from '../components/ResizeHandle.vue'
 import SessionSidebar from '../components/SessionSidebar.vue'
 import StatusBar from '../components/StatusBar.vue'
 import TitleBar from '../components/TitleBar.vue'
 import WorkspacePanel from '../components/WorkspacePanel.vue'
 import { useAppCommands } from '../composables/useAppCommands'
 import { useChatStore } from '../stores/chat'
+import { usePreferencesStore } from '../stores/preferences'
 import { useProjectsStore } from '../stores/projects'
+import { useProvidersStore } from '../stores/providers'
 import { useSessionStore } from '../stores/session'
-import { useSettingsStore } from '../stores/settings'
+import {
+  SESSION_WIDTH_DEFAULT,
+  SESSION_WIDTH_MAX,
+  SESSION_WIDTH_MIN,
+  WORKSPACE_WIDTH_DEFAULT,
+  WORKSPACE_WIDTH_MAX,
+  WORKSPACE_WIDTH_MIN,
+  useSettingsStore
+} from '../stores/settings'
 import { useWorkspaceStore } from '../stores/workspace'
 
 const workspace = useWorkspaceStore()
 const sessions = useSessionStore()
 const projects = useProjectsStore()
 const chat = useChatStore()
+const providers = useProvidersStore()
+const preferences = usePreferencesStore()
 const settings = useSettingsStore()
 const commands = useAppCommands()
 
@@ -65,6 +78,8 @@ function handleKeydown(event: KeyboardEvent): void {
 async function bootstrap(): Promise<void> {
   await workspace.restore()
   await projects.refresh()
+  await providers.refresh()
+  await preferences.refresh()
   await sessions.init()
   const active = sessions.activeSession
   if (active?.projectId && active.workspaceRoot !== workspace.info?.root) {
@@ -96,11 +111,29 @@ onBeforeUnmount(() => {
 
     <div class="shell-body">
       <SessionSidebar v-if="!settings.sessionCollapsed" />
+      <ResizeHandle
+        v-if="!settings.sessionCollapsed"
+        side="left"
+        :value="settings.sessionWidth"
+        :min="SESSION_WIDTH_MIN"
+        :max="SESSION_WIDTH_MAX"
+        @update="settings.setSessionWidth"
+        @reset="settings.setSessionWidth(SESSION_WIDTH_DEFAULT)"
+      />
 
       <main class="conversation">
         <ChatPanel />
       </main>
 
+      <ResizeHandle
+        v-if="!settings.workspaceCollapsed"
+        side="right"
+        :value="settings.workspaceWidth"
+        :min="WORKSPACE_WIDTH_MIN"
+        :max="WORKSPACE_WIDTH_MAX"
+        @update="settings.setWorkspaceWidth"
+        @reset="settings.setWorkspaceWidth(WORKSPACE_WIDTH_DEFAULT)"
+      />
       <WorkspacePanel v-if="!settings.workspaceCollapsed" />
 
       <nav v-else class="rail right-rail" aria-label="工作区快捷栏">
