@@ -68,6 +68,7 @@ export class ToolService {
   }
 
   async execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolExecutionOutcome> {
+    const startedAt = Date.now()
     const argsSummary = summarizeArgs(call)
     let approval: AuditApproval = 'not_required'
     let parsed: ParsedToolArguments
@@ -87,7 +88,7 @@ export class ToolService {
         content: `工具调用被拒绝：${message}`,
         summary: message
       }
-      this.record(context, call, argsSummary, approval, outcome)
+      this.record(context, call, argsSummary, approval, outcome, Date.now() - startedAt)
       return outcome
     }
 
@@ -112,7 +113,7 @@ export class ToolService {
             content: '用户拒绝了该操作，未执行。',
             summary: '审批被拒绝'
           }
-          this.record(context, call, argsSummary, approval, outcome)
+          this.record(context, call, argsSummary, approval, outcome, Date.now() - startedAt)
           return outcome
         }
       }
@@ -126,7 +127,7 @@ export class ToolService {
       outcome = { ok: false, content: `工具执行失败：${message}`, summary: message }
     }
 
-    this.record(context, call, argsSummary, approval, outcome)
+    this.record(context, call, argsSummary, approval, outcome, Date.now() - startedAt)
     return outcome
   }
 
@@ -189,7 +190,8 @@ export class ToolService {
     call: ToolCall,
     argsSummary: string,
     approval: AuditApproval,
-    outcome: ToolExecutionOutcome
+    outcome: ToolExecutionOutcome,
+    durationMs: number
   ): void {
     this.deps.audit.record({
       sessionId: context.sessionId,
@@ -198,7 +200,9 @@ export class ToolService {
       argsSummary,
       resultSummary: outcome.summary,
       approval,
-      ok: outcome.ok
+      ok: outcome.ok,
+      callId: call.id,
+      durationMs: Math.max(0, Math.round(durationMs))
     })
     this.deps.toolCalls?.insert({
       id: randomUUID(),

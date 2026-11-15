@@ -52,6 +52,8 @@ export interface RevealRequest {
   line: number
   column: number
   endColumn?: number
+  /** 调试暂停等自动定位场景：滚动编辑器但不抢占当前工作区视图。 */
+  keepView?: boolean
 }
 
 export const MAX_EDITOR_TABS = 12
@@ -531,8 +533,18 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     cursorLine.value = line
   }
 
-  function requestReveal(line: number, column = 1, endColumn?: number): void {
-    pendingReveal.value = { line, column, ...(endColumn ? { endColumn } : {}) }
+  function requestReveal(
+    line: number,
+    column = 1,
+    endColumn?: number,
+    options: { keepView?: boolean } = {}
+  ): void {
+    pendingReveal.value = {
+      line,
+      column,
+      ...(endColumn ? { endColumn } : {}),
+      ...(options.keepView ? { keepView: true } : {})
+    }
   }
 
   function clearReveal(): void {

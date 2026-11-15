@@ -1,13 +1,37 @@
 import { z } from 'zod'
 import { ATTACHMENT_LIMITS, contextAttachmentSchema } from './attachment'
 import type { IpcErrorCode } from './errors'
-import { FS_LIMITS, SEARCH_LIMITS } from './ipcChannels'
-import type { AuditEntry } from './audit'
+import { AUDIT_LIMITS, DEBUG_LIMITS, FS_LIMITS, GIT_LIMITS, SEARCH_LIMITS } from './ipcChannels'
+import type { AuditEntry, AuditExportResult, AuditPage, AuditStats } from './audit'
+import type {
+  DebugBreakpoint,
+  DebugEvaluation,
+  DebugScope,
+  DebugSession,
+  DebugVariable
+} from './debug'
+import type {
+  ExtensionContributionBundle,
+  ExtensionInfo,
+  ExtensionInstallResult,
+  VscodeScanResult
+} from './extensions'
+import type { TaskDiscovery, TaskRun } from './tasks'
 import { PROVIDER_PRESET_IDS } from './providers'
 import type { PublicSettings, ProjectSummary, SessionSummary, StoredMessage } from './session'
 
 export type { IpcErrorCode } from './errors'
-export { FS_LIMITS, IGNORED_DIRECTORIES, IPC_CHANNELS, SEARCH_LIMITS } from './ipcChannels'
+export {
+  AUDIT_LIMITS,
+  DEBUG_LIMITS,
+  EXTENSION_LIMITS,
+  FS_LIMITS,
+  GIT_LIMITS,
+  IGNORED_DIRECTORIES,
+  IPC_CHANNELS,
+  SEARCH_LIMITS,
+  TASK_LIMITS
+} from './ipcChannels'
 export {
   ATTACHMENT_LIMITS,
   contextAttachmentSchema,
@@ -534,3 +558,228 @@ export interface SearchReplaceResult {
   conflicts: string[]
   applied: boolean
 }
+
+/* -------------------------------------------------------------------------- */
+/* P3：审计查询与源代码管理                                                    */
+/* -------------------------------------------------------------------------- */
+
+export const auditFilterSchema = z.object({
+  sessionId: z.string().min(1).max(64).optional(),
+  tool: z.string().min(1).max(64).optional(),
+  ok: z.boolean().optional(),
+  approval: z.enum(['not_required', 'approved', 'denied']).optional(),
+  keyword: z.string().max(AUDIT_LIMITS.maxKeywordLength).optional(),
+  from: z.number().int().nonnegative().optional(),
+  to: z.number().int().nonnegative().optional()
+})
+
+export type AuditFilterInput = z.input<typeof auditFilterSchema>
+export type AuditFilterRequest = z.output<typeof auditFilterSchema>
+
+export const auditQueryInputSchema = auditFilterSchema.extend({
+  page: z.number().int().min(1).optional().default(1),
+  pageSize: z
+    .number()
+    .int()
+    .min(1)
+    .max(AUDIT_LIMITS.maxPageSize)
+    .optional()
+    .default(AUDIT_LIMITS.defaultPageSize)
+})
+
+export type AuditQueryInput = z.input<typeof auditQueryInputSchema>
+export type AuditQueryRequest = z.output<typeof auditQueryInputSchema>
+export type AuditQueryResult = AuditPage
+export type AuditStatsResult = AuditStats
+
+export const auditExportInputSchema = auditFilterSchema.extend({
+  format: z.enum(['json', 'csv'])
+})
+
+export type AuditExportInput = z.input<typeof auditExportInputSchema>
+export type AuditExportRequest = z.output<typeof auditExportInputSchema>
+export type AuditExportResponse = AuditExportResult
+
+export const gitDiffInputSchema = z.object({
+  relativePath: relativePathSchema,
+  /** true：对比 HEAD 与索引区；false：对比索引区与工作区 */
+  staged: z.boolean().optional().default(false)
+})
+
+export type GitDiffInput = z.input<typeof gitDiffInputSchema>
+export type GitDiffRequest = z.output<typeof gitDiffInputSchema>
+
+export const gitPathsInputSchema = z.object({
+  paths: z.array(relativePathSchema).min(1).max(GIT_LIMITS.maxPathsPerRequest)
+})
+
+export type GitPathsInput = z.input<typeof gitPathsInputSchema>
+export type GitPathsRequest = z.output<typeof gitPathsInputSchema>
+
+export const gitCommitInputSchema = z.object({
+  message: z.string().min(1).max(GIT_LIMITS.maxMessageLength),
+  /** true：先暂存全部变更（含未跟踪）再提交 */
+  all: z.boolean().optional().default(false)
+})
+
+export type GitCommitInput = z.input<typeof gitCommitInputSchema>
+export type GitCommitRequest = z.output<typeof gitCommitInputSchema>
+
+export const gitCheckoutInputSchema = z.object({
+  branch: z.string().min(1).max(GIT_LIMITS.maxBranchLength),
+  create: z.boolean().optional().default(false)
+})
+
+export type GitCheckoutInput = z.input<typeof gitCheckoutInputSchema>
+export type GitCheckoutRequest = z.output<typeof gitCheckoutInputSchema>
+
+/* -------------------------------------------------------------------------- */
+/* P4：运行任务、Node 调试、扩展管理器                                         */
+/* -------------------------------------------------------------------------- */
+
+const taskIdSchema = z.string().min(1).max(400)
+
+export const taskStartInputSchema = z.object({
+  taskId: taskIdSchema,
+  /** 已确认过完整命令的自定义任务无需再次确认；未确认时由渲染层弹窗 */
+  confirmed: z.boolean().optional().default(false)
+})
+
+export type TaskStartInput = z.input<typeof taskStartInputSchema>
+export type TaskStartRequest = z.output<typeof taskStartInputSchema>
+export type TaskStartResult = TaskRun
+export type TaskListResult = TaskDiscovery
+export type TaskStopResult = { stopped: boolean; runId: string }
+
+export const taskStopInputSchema = z.object({
+  runId: z.string().min(1).max(64)
+})
+
+export type TaskStopInput = z.input<typeof taskStopInputSchema>
+export type TaskStopRequest = z.output<typeof taskStopInputSchema>
+
+const breakpointSchema = z.object({
+  id: z.string().min(1).max(120),
+  relativePath: relativePathSchema,
+  line: z.number().int().min(1).max(1_000_000),
+  enabled: z.boolean().optional().default(true),
+  condition: z.string().max(DEBUG_LIMITS.maxConditionLength).optional()
+})
+
+export type DebugBreakpointInput = z.input<typeof breakpointSchema>
+export type DebugBreakpointRequest = z.output<typeof breakpointSchema>
+
+export const debugStartInputSchema = z.object({
+  configId: z.string().min(1).max(200),
+  /** 当前活动文件相对路径，用于 `${file}` 变量 */
+  activeFile: relativePathSchema.optional(),
+  breakpoints: z.array(breakpointSchema).max(DEBUG_LIMITS.maxBreakpoints).optional().default([])
+})
+
+export type DebugStartInput = z.input<typeof debugStartInputSchema>
+export type DebugStartRequest = z.output<typeof debugStartInputSchema>
+export type DebugStartResult = { session: DebugSession; commandLine: string }
+
+export const debugBreakpointsInputSchema = z.object({
+  breakpoints: z.array(breakpointSchema).max(DEBUG_LIMITS.maxBreakpoints)
+})
+
+export type DebugBreakpointsInput = z.input<typeof debugBreakpointsInputSchema>
+export type DebugBreakpointsRequest = z.output<typeof debugBreakpointsInputSchema>
+export type DebugBreakpointsResult = DebugBreakpoint[]
+
+export const debugCommandInputSchema = z.object({
+  command: z.enum(['continue', 'pause', 'stepOver', 'stepInto', 'stepOut', 'restart'])
+})
+
+export type DebugCommandInput = z.input<typeof debugCommandInputSchema>
+export type DebugCommandRequest = z.output<typeof debugCommandInputSchema>
+
+export const debugFrameInputSchema = z.object({
+  frameId: z.string().min(1).max(200)
+})
+
+export type DebugFrameInput = z.input<typeof debugFrameInputSchema>
+export type DebugFrameRequest = z.output<typeof debugFrameInputSchema>
+export type DebugScopesResult = DebugScope[]
+
+export const debugVariablesInputSchema = z.object({
+  variablesReference: z.string().min(1).max(200)
+})
+
+export type DebugVariablesInput = z.input<typeof debugVariablesInputSchema>
+export type DebugVariablesRequest = z.output<typeof debugVariablesInputSchema>
+export type DebugVariablesResult = DebugVariable[]
+
+export const debugEvaluateInputSchema = z.object({
+  expression: z.string().min(1).max(DEBUG_LIMITS.maxExpressionLength),
+  frameId: z.string().min(1).max(200).optional()
+})
+
+export type DebugEvaluateInput = z.input<typeof debugEvaluateInputSchema>
+export type DebugEvaluateRequest = z.output<typeof debugEvaluateInputSchema>
+export type DebugEvaluateResult = DebugEvaluation
+
+export const extensionsInstallLocalInputSchema = z.object({
+  /** 绝对路径；为空时由主进程弹出目录选择框 */
+  directory: z
+    .string()
+    .max(FS_LIMITS.maxRelativePathLength * 4)
+    .optional()
+})
+
+export type ExtensionsInstallLocalInput = z.input<typeof extensionsInstallLocalInputSchema>
+export type ExtensionsInstallLocalRequest = z.output<typeof extensionsInstallLocalInputSchema>
+
+export const extensionsInstallVsixInputSchema = z.object({
+  /** 绝对路径；为空时由主进程弹出文件选择框 */
+  filePath: z
+    .string()
+    .max(FS_LIMITS.maxRelativePathLength * 4)
+    .optional()
+})
+
+export type ExtensionsInstallVsixInput = z.input<typeof extensionsInstallVsixInputSchema>
+export type ExtensionsInstallVsixRequest = z.output<typeof extensionsInstallVsixInputSchema>
+
+export const extensionsScanInputSchema = z.object({
+  /** 默认为 %USERPROFILE%/.vscode/extensions */
+  directory: z
+    .string()
+    .max(FS_LIMITS.maxRelativePathLength * 4)
+    .optional()
+})
+
+export type ExtensionsScanInput = z.input<typeof extensionsScanInputSchema>
+export type ExtensionsScanRequest = z.output<typeof extensionsScanInputSchema>
+
+export const extensionsImportInputSchema = z.object({
+  /** 候选 id（VS Code 扩展目录名或 publisher.name） */
+  id: z.string().min(1).max(200),
+  directory: z
+    .string()
+    .max(FS_LIMITS.maxRelativePathLength * 4)
+    .optional()
+})
+
+export type ExtensionsImportInput = z.input<typeof extensionsImportInputSchema>
+export type ExtensionsImportRequest = z.output<typeof extensionsImportInputSchema>
+
+export const extensionsSetEnabledInputSchema = z.object({
+  id: z.string().min(1).max(200),
+  enabled: z.boolean()
+})
+
+export type ExtensionsSetEnabledInput = z.input<typeof extensionsSetEnabledInputSchema>
+export type ExtensionsSetEnabledRequest = z.output<typeof extensionsSetEnabledInputSchema>
+
+export const extensionsIdInputSchema = z.object({
+  id: z.string().min(1).max(200)
+})
+
+export type ExtensionsIdInput = z.input<typeof extensionsIdInputSchema>
+export type ExtensionsIdRequest = z.output<typeof extensionsIdInputSchema>
+export type ExtensionListResult = ExtensionInfo[]
+export type ExtensionInstallResponse = ExtensionInstallResult
+export type VscodeScanResponse = VscodeScanResult
+export type ExtensionContributionsResult = ExtensionContributionBundle

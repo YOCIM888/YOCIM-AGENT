@@ -4,11 +4,29 @@ import { isWorkspaceView, type WorkspaceView } from '../lib/workspaceViews'
 
 export type ThemeMode = 'light' | 'dark'
 
-export type WorkspaceSection = 'outline' | 'timeline'
+export type WorkspaceSection =
+  | 'outline'
+  | 'timeline'
+  | 'runConfigs'
+  | 'runTasks'
+  | 'debugVariables'
+  | 'debugWatches'
+  | 'debugCallstack'
+  | 'debugBreakpoints'
+  | 'debugConsole'
+  | 'runOutput'
 
 export interface WorkspaceSections {
   outline: boolean
   timeline: boolean
+  runConfigs: boolean
+  runTasks: boolean
+  debugVariables: boolean
+  debugWatches: boolean
+  debugCallstack: boolean
+  debugBreakpoints: boolean
+  debugConsole: boolean
+  runOutput: boolean
 }
 
 export const SESSION_WIDTH_MIN = 220
@@ -71,14 +89,33 @@ function readView(): WorkspaceView {
 }
 
 function readSections(): WorkspaceSections {
-  const fallback: WorkspaceSections = { outline: true, timeline: true }
+  const fallback: WorkspaceSections = {
+    outline: true,
+    timeline: true,
+    runConfigs: false,
+    runTasks: false,
+    debugVariables: false,
+    debugWatches: false,
+    debugCallstack: false,
+    debugBreakpoints: false,
+    debugConsole: false,
+    runOutput: false
+  }
   const raw = readStorage(STORAGE_KEYS.workspaceSections)
   if (!raw) return fallback
   try {
     const parsed = JSON.parse(raw) as Partial<WorkspaceSections>
     return {
       outline: typeof parsed.outline === 'boolean' ? parsed.outline : true,
-      timeline: typeof parsed.timeline === 'boolean' ? parsed.timeline : true
+      timeline: typeof parsed.timeline === 'boolean' ? parsed.timeline : true,
+      runConfigs: parsed.runConfigs === true,
+      runTasks: parsed.runTasks === true,
+      debugVariables: parsed.debugVariables === true,
+      debugWatches: parsed.debugWatches === true,
+      debugCallstack: parsed.debugCallstack === true,
+      debugBreakpoints: parsed.debugBreakpoints === true,
+      debugConsole: parsed.debugConsole === true,
+      runOutput: parsed.runOutput === true
     }
   } catch {
     return fallback

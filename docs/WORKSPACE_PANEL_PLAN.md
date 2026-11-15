@@ -1,9 +1,9 @@
 # 右侧工作区增强计划（VS Code 风格）
 
-> 状态：**P0、P1、P2 已完成并验收；P3 待实施**（2026-11-15 更新）
+> 状态：**P0、P1、P2、P3、P4 已完成并验收；P5a 待实施**（2026-11-16 更新）
 > 已确认决策：编辑器可编辑、扩展第一层、Node.js 调试优先、WSL 先行、打包 ripgrep、依赖系统 Git。
 > 范围：右侧工作区面板从「文件 / 编辑器 / 审计」三个文字 Tab 扩展为 VS Code 风格的图标活动栏与 8 个视图：文件、搜索、编辑器、审计、源代码管理、扩展安装、运行和调试、远程管理器。
-> P0/P1/P2 已按本文档实施（见 §8 阶段标记与 §14 交接）；P3–P6 仍为计划。
+> P0–P4 已按本文档实施（见 §8 阶段标记与 §14 交接）；P5–P6 仍为计划。
 
 ## 1. 现状与目标
 
@@ -148,6 +148,8 @@
 - 导出当前筛选结果为 JSON / CSV。
 - 主进程增加 `audit:query`（筛选、分页）与 `audit:stats`，现有 `audit:list` 保留兼容。
 
+> 实现状态：✅ P3 已交付（见 §8 P3 与 §14.1）；`audit:export` 导出为补充通道，DB 升到 v4 增加 `call_id`/`duration_ms`，细节偏差见 §14.3。
+
 ### 3.5 源代码管理
 
 - 依赖系统 `git`；未安装时面板提示安装并禁用操作。
@@ -165,6 +167,8 @@
 - Git 输出面板显示最近命令与错误，敏感信息不打印。
 - 全部操作经主进程 `GitService`，参数数组调用 `spawn('git', args)`，不经过 shell，不使用 `--no-verify`。
 - 凭据交给系统 Git Credential Manager；应用不保存 Git token。
+
+> 实现状态：✅ P3 已交付（`src/main/git/`，见 §8 P3 与 §14.1）。补充：活动栏显示变更数徽标；路径以**工作区根**为基准（非仓库根）；放弃未跟踪文件被拒绝；「添加远程」未做，发布分支要求已有 `origin`。细节偏差见 §14.3。
 
 ### 3.6 扩展安装
 
@@ -185,6 +189,8 @@
   - 「部分兼容」：包含命令/菜单等可映射贡献；
   - 「不兼容」：依赖 `main`/`browser` 运行时代码或未支持的 API。
 - 不执行未受信任扩展的 Node 代码。
+
+> 实现状态：✅ P4 已交付（`src/main/extensions/`，见 §8 P4 与 §14.1）。清单优先 `yocim-extension.json`，其次 VS Code `package.json`；VSIX 用自研最小 zip 读取器（不引入 `yauzl`）；不兼容扩展（有 `main`/`browser`、`debuggers`、扩展依赖）安装后默认禁用且「启用」被拒绝；片段贡献通过 Monaco `CompletionItemProvider` 真正生效，语法/主题贡献只做清单展示（未接入 Monaco tokenizer/主题，见 §14.3）。
 
 #### 第二层（后续，本期不实施）
 
@@ -210,6 +216,8 @@
   - 当前执行行在编辑器中高亮。
 - 后续通过 DAP 接入 Python（debugpy）、Go（dlv）等，避免为每种语言重写 UI。
 - 安全：启动配置可执行任意程序，首次运行展示完整命令并要求确认；不把环境变量密钥写入日志。
+
+> 实现状态：✅ P4 已交付（`src/main/tasks/`、`src/main/debug/`，见 §8 P4 与 §14.1）。**调试选型结论：自研 CDP 直连**（`node --inspect-brk=127.0.0.1:0` + 全局 `WebSocket`），未引入 js-debug/`vscode-jsonrpc`；接口按适配器抽象，后续可换 DAP。条件断点、单步、监视、调用堆栈、作用域、当前行高亮全部可用；`.yocim/launch.json` 支持 `${workspaceFolder}`/`${workspaceFolderBasename}`/`${file}`/`${env:NAME}`，但**未接 JSON Schema 校验**（非法 JSON 给可读提示，字段级校验按白名单归一化），见 §14.3。
 
 ### 3.8 远程管理器
 
@@ -261,16 +269,17 @@ interface WorkspaceProvider {
 
 ### 4.2 新增主进程服务
 
-| 服务                           | 职责                                                            |
-| ------------------------------ | --------------------------------------------------------------- |
-| `FileExplorerService`          | 懒加载目录、新建、重命名、复制/移动、删除、回收站、内部剪贴板   |
-| `SearchService`                | ripgrep 封装、流式结果、取消、替换与冲突校验                    |
-| `GitService`                   | status/log/diff/branches/stage/commit/pull/push/publish/discard |
-| `TimelineService`              | 文件快照、去重、保留策略、Diff 数据、恢复                       |
-| `ExtensionService`             | 扩展安装/卸载/启停、VSIX/VS Code 导入、清单解析、兼容性判断     |
-| `DebugService`                 | 启动配置、任务执行、DAP 客户端、断点与调试会话                  |
-| `RemoteService`                | WSL/SSH 目标、连接、凭据、provider 生命周期                     |
-| `OutlineService`（可选主进程） | 非 Monaco 语言的符号提取，后续 LSP 接入                         |
+| 服务                           | 职责                                                              |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `FileExplorerService`          | 懒加载目录、新建、重命名、复制/移动、删除、回收站、内部剪贴板     |
+| `SearchService`                | ripgrep 封装、流式结果、取消、替换与冲突校验                      |
+| `GitService`                   | status/log/diff/branches/stage/commit/pull/push/publish/discard   |
+| `TimelineService`              | 文件快照、去重、保留策略、Diff 数据、恢复                         |
+| `ExtensionService`             | 扩展安装/卸载/启停、VSIX/VS Code 导入、清单解析、兼容性判断       |
+| `TaskService`                  | npm scripts 与 `.yocim/tasks.json` 发现、spawn/停止、输出流与脱敏 |
+| `DebugService`                 | 启动配置解析、调试会话、断点、栈帧/变量求值、命令分发             |
+| `RemoteService`                | WSL/SSH 目标、连接、凭据、provider 生命周期                       |
+| `OutlineService`（可选主进程） | 非 Monaco 语言的符号提取，后续 LSP 接入                           |
 
 ### 4.3 IPC 与 preload
 
@@ -284,7 +293,9 @@ interface WorkspaceProvider {
 - `debug:configs`、`debug:start`、`debug:stop`、`debug:breakpoints`、`debug:event`、`debug:evaluate`
 - `remote:targets`、`remote:listWsl`、`remote:connect`、`remote:disconnect`
 
-### 4.4 数据模型（DB v3）
+### 4.4 数据模型（DB v5）
+
+> 实际迁移版本：v3 建立 `file_history`、v4 给 `audit_logs` 增列（P3）、**v5 建立 `extensions`**（P4）。`remote_targets` 仍留待 P5a。
 
 ```sql
 CREATE TABLE file_history (
@@ -398,18 +409,25 @@ interface ContextAttachment {
 - 视觉验收：亮色搜索面板、亮/暗编辑器、1024 宽度四张截图复核通过；修掉两处细节——内置搜索的 ripgrep 提示重复（`stores/search.ts` 不再写 `notice`，由 `SearchPanel.vue` 的 `search-engine-notice` 统一展示）、窄面板头部按钮被右侧窗口边缘裁切（`EditorPane.vue` 头部拆成「路径/大小/状态」+「只读/保存/添加到对话」两行，并用 `editor-body` 包裹内容区替代写死的 `inset: 62px`）。修正后已重跑全部回归。
 - 补充交付：用户保存与外部修改均生成时间线快照（`source: user|external`）；图片只读预览与二进制提示；标签与搜索选项持久化；`Ctrl+S` 保存。
 
-### P3：审计与源代码管理
+### P3：审计与源代码管理 ✅ 已完成（2026-11-15）
 
 - 审计筛选、统计、详情、导出、实时模式。
 - Git 面板：状态、暂存/取消暂存、提交、拉取、推送、发布分支、刷新、Diff、分支切换、放弃更改。
 - 验收：临时 Git 仓库 e2e 覆盖暂存→提交→分支→Diff；冲突与错误可读；系统 Git 缺失时给出安装提示。
+- 结果：`tests/e2e/scmAudit.spec.ts` 3 例通过——① 临时仓库全链路（活动栏徽标 → Diff → 暂存 → 提交（`git log -1` 反查）→ 建分支 `feature/p3` → 放弃更改二次确认 → 未跟踪文件拒绝放弃 → Git 输出只有 `git add` 不含 `git status`）；② 非仓库提示 + 初始化；③ 审计（统计卡 → 详情抽屉 → 关键字筛选 → 工具筛选 → 实时模式追加 → JSON/CSV 导出，导出走 stub 的 `dialog.showSaveDialog`）。全量 e2e **17 例**、单测 **221 例（28 文件）**、typecheck/lint/format 全绿。
+- 视觉验收：亮/暗 SCM 面板、分支菜单、Git 输出、1024 宽度；审计亮/暗、筛选展开、详情抽屉。修掉三处细节——审计统计卡在 220px 面板内标签竖排换行（改 2 列 grid、标签与数值同行两端对齐）、SCM 文件行 `<li>` 与行内按钮重复触发点击（点击迁到内层 `.file-main`，操作区 `@click.stop`）、活动栏徽标被 `overflow-x:auto` 纵向裁切（改 `top:-3px; right:-5px`，实测 1024 下不越界）。
+- 额外交付（设计未写）：活动栏 SCM 变更数徽标（未打开视图也静默刷新）、审计「加载更多」分页与关键字 300ms 防抖、审计实时模式 2.5s 轮询可暂停、Git 输出面板只记录写操作命令。
 
-### P4：运行调试与扩展
+### P4：运行调试与扩展 ✅ 已完成（2026-11-16）
 
 - 运行 npm scripts/任务、输出面板、停止。
 - Node.js 调试（已确认首个且本期唯一语言）：DAP/CDP 选型、断点、单步、变量、调用堆栈、监视。
 - 扩展管理器第一层（已确认本期范围）：本地/VSIX/VS Code 导入、启停/卸载、兼容性标记、声明式贡献；Extension Host 延后。
 - 验收：Node 脚本断点命中与变量查看；安装本地示例扩展后命令/片段生效；VS Code 扩展显示兼容性分级；不兼容扩展明确提示且不执行代码。
+- 选型 spike（`test-results` 下的临时脚本，已删除）：先用 js-debug 试跑，需要额外拉取 `@vscode/js-debug`/`vscode-jsonrpc` 并维护 DAP 会话与 `initialize/launch/attach` 时序；改用 `node --inspect-brk` + CDP 直连后，Electron 45（Node 24）自带全局 `WebSocket`，零新增依赖即打通断点、条件断点、单步、作用域变量、表达式求值、退出。**结论：自研 CDP 适配器**，对外仍按 `DebugAdapter` 接口抽象（`applyBreakpoints/start/stop/command/scopes/variables/evaluate`），后续接 Python/Go 时只替换适配器。
+- 结果：`tests/e2e/runDebugExtensions.spec.ts` 3 例通过——① npm scripts 流式输出 + 长任务停止 + 自定义任务首次确认；② Node 断点调试（glyph margin 点击设断点 → 首次确认 → 已暂停 → 局部变量 `a=21/b=2` → 监视 `a + b=23` → 编辑器当前行高亮 → 单步跳到 `main.js:3` → 继续输出 `total 23` → 调试结束、工具栏消失）；③ 扩展（本地安装→部分兼容→详情理由→片段补全→禁用/启用计数→VS Code 三级兼容性扫描→导入声明式/不兼容→卸载确认）。全量 e2e **20 例**、单测 **255 例（32 文件）**、typecheck/lint/format 全绿。
+- 视觉验收：亮色运行面板（运行配置/任务/断点/控制台/任务输出）、断点 glyph 与当前行、确认弹窗、调试暂停（变量/监视/调用堆栈）、深色调试面板、1024 宽度、扩展面板三级徽标与 VS Code 导入弹窗，共 13 张截图复核。修掉四处细节——区块默认折叠导致暂停后看不到变量（会话启动/暂停时自动展开 `debugBreakpoints/debugVariables/debugWatches/debugCallstack/debugConsole`）、断点暂停会抢走「运行和调试」视图（新增 `RevealRequest.keepView`，`WorkspacePanel` 的 reveal watcher 不再无脑切到编辑器）、调试目标输出带 ANSI 颜色码（新增 `util/ansi.ts`，任务与调试输出统一清洗，含跨 chunk 半截转义）、控制台重复打印「继续运行…」（按 `paused → running` 状态变化去重）。
+- 额外交付（设计未写）：`package.json` 的 `main` 自动生成零配置启动项；`.yocim/tasks.json` 自定义任务（label/command/args/cwd/detail，cwd 限制在工作区内）；断点与监视按工作区根隔离持久化；断点条件输入框（Enter/失焦写入）；变量树按 `variablesReference` 懒加载并缓存；启动/运行命令统一脱敏 + 输出上限（512KB）与并发上限（4）。
 
 ### P5a：WSL 远程（先行）
 
@@ -452,16 +470,16 @@ interface ContextAttachment {
 
 ## 10. 依赖与技术选型
 
-| 能力        | 方案                     | 说明                                                    |
-| ----------- | ------------------------ | ------------------------------------------------------- |
-| 搜索        | `ripgrep` 二进制         | 已确认打包到 resources（约 +2–4MB），缺失时回退 JS 搜索 |
-| SSH/SFTP    | 系统 OpenSSH（优先）     | 已确认 SSH 后置；必要时用 `ssh2` 补齐 SFTP              |
-| VSIX 解压   | `yauzl`                  | 仅读取清单与声明式资源                                  |
-| launch.json | `jsonc-parser`           | 支持注释与错误定位                                      |
-| 调试协议    | DAP + `vscode-jsonrpc`   | 已确认 Node.js 为唯一首期语言，架构预留 Python/Go       |
-| 符号大纲    | Monaco Worker + 正则兜底 | 后续可接 LSP                                            |
-| Git         | 系统 `git`               | 已确认依赖用户已安装 Git；启动时检测并提示              |
-| 扩展兼容    | 清单扫描 + 声明式贡献    | 已确认第一层方案；第二层 Extension Host 延后            |
+| 能力        | 方案                     | 说明                                                                                |
+| ----------- | ------------------------ | ----------------------------------------------------------------------------------- |
+| 搜索        | `ripgrep` 二进制         | 已确认打包到 resources（约 +2–4MB），缺失时回退 JS 搜索                             |
+| SSH/SFTP    | 系统 OpenSSH（优先）     | 已确认 SSH 后置；必要时用 `ssh2` 补齐 SFTP                                          |
+| VSIX 解压   | **自研最小 zip 读取器**  | 仅读清单与声明式资源；支持 stored/deflate，拒绝 zip64 与路径穿越，不引入 `yauzl`    |
+| launch.json | 手写归一化 + 变量替换    | 未接 `jsonc-parser`/JSON Schema；非法 JSON 给可读提示，字段按白名单收敛             |
+| 调试协议    | **自研 CDP 直连**        | 已确认 Node.js 为唯一首期语言；`node --inspect-brk` + CDP，无新增依赖，架构预留 DAP |
+| 符号大纲    | Monaco Worker + 正则兜底 | 后续可接 LSP                                                                        |
+| Git         | 系统 `git`               | 已确认依赖用户已安装 Git；启动时检测并提示                                          |
+| 扩展兼容    | 清单扫描 + 声明式贡献    | 已确认第一层方案；第二层 Extension Host 延后                                        |
 
 ## 11. 风险与对策
 
@@ -499,17 +517,16 @@ interface ContextAttachment {
 
 ### 下一步
 
-**P0、P1、P2 已完成。从 P3：审计与源代码管理 开始实施**（交接见 §14）：
+**P0–P4 已完成。从 P5a：WSL 远程 开始实施**（交接见 §14）：
 
-1. 审计统计卡、筛选/分页/详情抽屉、实时模式、JSON/CSV 导出（`audit:query` / `audit:stats`）；
-2. `GitService` + 系统 Git 检测：状态分组、暂存/取消暂存、提交、Diff、分支切换、拉取/推送/发布分支；
-3. 放弃更改需二次确认；Git 输出面板与敏感信息脱敏；
-4. 临时 Git 仓库 e2e 覆盖暂存→提交→分支→Diff；
-5. 完成后按阶段验收再进入 P4。
+1. `WorkspaceProvider` 抽象与 `LocalWorkspaceProvider` 包装（文件、搜索、Git、运行四类调用先迁移）；
+2. WSL 枚举（`wsl.exe -l -q`）、`\\wsl.localhost\<distro>\<path>` UNC 路径接入、WSL 内 Git/搜索/运行；
+3. 远程管理器视图替换占位页，目标与连接状态持久化；
+4. 验收后再进入 P5b SSH 远程。
 
-## 14. 实施状态与交接（2026-11-15，P0/P1/P2 完成）
+## 14. 实施状态与交接（2026-11-16，P0–P4 完成）
 
-> 供接手 P3 的会话快速上手。P0+P1+P2 全部为**未提交**的工作区改动（baseline `c9dbd41` 尚无工作区面板）。
+> 供接手 P5a 的会话快速上手。P0–P4 全部为**未提交**的工作区改动（baseline `c9dbd41` 尚无工作区面板）。
 
 ### 14.1 已落地代码
 
@@ -520,21 +537,45 @@ interface ContextAttachment {
 - **P2 主进程**：`workspace/searchCore.ts`（匹配器/glob/简化 .gitignore/rg 参数/替换与 hash）、`workspace/ripgrep.ts`（rg 路径探测与 `--json` 解析）、`workspace/searchService.ts`（流式搜索、取消、上限、替换预览/应用/时间线快照）；`workspace/workspaceFs.ts` 扩展 `readWorkspaceFile`（hash/EOL/图片）与 `writeWorkspaceFile`（保存/另存/冲突/快照）；`ipc/index.ts` 注册 `fs:writeFile`、`search:*`。
 - **P2 共享/桥接**：`shared/ipc.ts`（`SearchQuery`/`SearchEvent`/替换与保存 schema）、`shared/ipcChannels.ts`（`SEARCH_LIMITS`、新通道）、`shared/api.ts` + `preload/index.ts`（`yocim.search.*`、`workspace.writeFile`）。
 - **P2 前端**：`components/SearchPanel.vue`、`ReplacePreviewDialog.vue`、`SaveConflictDialog.vue`；`EditorPane.vue` 重写为多标签可编辑；`stores/search.ts`（防抖/事件/选项持久化）、`stores/workspace.ts`（标签、脏状态、保存、冲突、`timelineVersion`）、`stores/chat.ts` + `lib/attachments.ts`（选区附件）；`WorkspacePanel.vue` 常驻挂载搜索/编辑器视图。
+- **P3 主进程**：`git/gitRunner.ts`（`spawn('git', args)` 不走 shell、超时 kill、4MB 输出上限 + stderr 尾部保留、`redactGitText` 脱敏、`detectGit()`、`gitFailureMessage()` 中文错误映射）、`git/gitStatus.ts`（porcelain v2 解析：`1`/`2`/`u`/`?` 记录、重命名原路径、八进制转义路径按字节还原 UTF-8）、`git/gitService.ts`（`status/diff/branches/stage/unstage/discard/commit/pull/push/publish/checkout/init/outputLog`，依赖可注入便于单测）；`audit/auditExport.ts`（JSON/CSV，UTF-8 BOM + CRLF + 公式注入防护）；`db` **v4** 迁移（`audit_logs.call_id`/`duration_ms` + 会话/工具索引）；`db/repositories.ts` 新增 `query/stats/all` 与 `buildAuditWhere`（LIKE 通配符转义）。
+- **P3 共享/桥接**：`shared/git.ts`（`GitStatus`/`GitFileChange`/`GitDiffResult`/`GitBranches`/`GitOperationResult`/`GitLogEntry` + `countGitChanges`）、`shared/audit.ts`（`AuditFilter`/`AuditPage`/`AuditStats`/`AuditExportResult`）、`shared/ipcChannels.ts`（`AUDIT_LIMITS`/`GIT_LIMITS` + `audit:*`/`git:*` 通道）、`shared/ipc.ts`（各 zod schema）、`shared/api.ts` + `preload/index.ts`（`yocim.audit.query/stats/export`、`yocim.git.*`）。
+- **P3 前端**：`components/AuditPanel.vue` 重写（统计卡/关键字防抖/筛选/加载更多/实时模式/JSON-CSV 导出）、`AuditDetail.vue`（右侧详情抽屉 + 复制）、`ScmPanel.vue`（分支菜单与新建、提交/全部提交、三组变更与行内操作、Git 输出面板）、`stores/audit.ts`、`stores/scm.ts`、`WorkspaceActivityBar.vue` 徽标（`badges` prop）、`WorkspacePanel.vue` 常驻挂载 SCM 并静默刷新徽标。
+- **P4 主进程**：`tasks/taskService.ts`（`package.json` scripts 名白名单 `[A-Za-z0-9:_.-]{1,200}`、`.yocim/tasks.json` 自定义任务、`detectPackageManager`（pnpm/yarn 锁文件）、`buildSpawnSpec`（Windows `.cmd/.bat` 经 `cmd.exe /d /s /c` 包裹）、输出上限 + `redactSecrets` + ANSI 清洗、`taskkill /pid <pid> /T /F` 停止进程树）；`debug/launchConfig.ts`（`.yocim/launch.json` + `package.json main` 零配置项、变量替换、`buildLaunchPlan` 越界拒绝）；`debug/cdpClient.ts`（全局 `WebSocket` 的最小 CDP 客户端：`send`/`onEvent`/超时）；`debug/nodeDebugAdapter.ts`（`--inspect-brk=127.0.0.1:0` 启动、stderr 抓 ws 地址、`Debugger.setBreakpointByUrl` 按 `file://` URL、`scriptParsed` 记录 `scriptId→url`、`Runtime.executionContextDestroyed` 主动断连、作用域中文名）；`debug/debugService.ts`（先设断点再启动、命令分发、`DebugEvent` 广播、restart = stop+start）；`extensions/zip.ts`（EOCD/中央目录/本地头、stored+deflate、拒绝 zip64 与穿越）、`extensions/manifest.ts`（归一化 + 三级兼容性）、`extensions/snippets.ts`（片段文件解析与语言匹配）、`extensions/extensionService.ts`（本地/VSIX/VS Code 安装、`safeJoin`、`copyTree` 跳过 `node_modules/.git/out/dist`、不兼容默认禁用、贡献聚合）；`util/redact.ts`（`redactSecrets`，Git 复用）、`util/ansi.ts`（跨 chunk ANSI 清洗）；`db` **v5** 迁移（`extensions` 表）+ `ExtensionRepository`。
+- **P4 共享/桥接**：`shared/tasks.ts`（`TaskDefinition`/`TaskDiscovery`/`TaskRun`/`TaskEvent`）、`shared/debug.ts`（`DebugConfig`/`DebugBreakpoint`/`DebugSession`/`DebugPausedInfo`/`DebugEvent`/`DebugCommand`）、`shared/extensions.ts`（`ExtensionInfo`/`ExtensionCompatibility`/`ExtensionContributions`/`VscodeExtensionCandidate`）、`shared/ipcChannels.ts`（`TASK_LIMITS`/`DEBUG_LIMITS`/`EXTENSION_LIMITS` + `tasks:*`/`debug:*`/`extensions:*`）、`shared/ipc.ts`（P4 全部 zod schema）、`shared/api.ts` + `preload/index.ts`（`yocim.tasks/debug/extensions`）。
+- **P4 前端**：`components/RunPanel.vue`（调试工具栏、运行配置、任务、断点、控制台、任务输出、首次确认弹窗）、`DebugInspector.vue`（变量/监视/调用堆栈）、`DebugBreakpoints.vue`（常驻断点列表 + 条件输入）、`DebugVariableTree.vue`（递归懒加载）、`ExtensionsPanel.vue`（安装/扫描/启停/卸载/详情/VS Code 导入弹窗）、`lib/extensionSnippets.ts`（14 种语言的 Monaco 片段补全）；`stores/tasks.ts`、`stores/debug.ts`、`stores/extensions.ts`；`EditorPane.vue` 增加 glyph margin 断点与当前行装饰、暂停自动定位（`keepView`）；`stores/settings.ts` 新增 9 个区块折叠项。
 
 ### 14.2 验证基线（接手时请先复跑确认）
 
-- 单测 **194（25 文件）**；e2e **14**（smoke 7 + workspaceViews 2 + fileExplorer 2 + searchEditor 3）；`typecheck`、`lint`、`format:check` 全绿。
+- 单测 **255（32 文件）**；e2e **20**（smoke 7 + workspaceViews 2 + fileExplorer 2 + searchEditor 3 + scmAudit 3 + runDebugExtensions 3）；`typecheck`、`lint`、`format:check` 全绿。
 - 命令：`npm test`、`npm run e2e`、`npm run typecheck`、`npm run lint`、`npm run format:check`。
 - 在 WorkBuddy 会话内跑 e2e 需先去掉继承的 `ELECTRON_RUN_AS_NODE=1`（否则 Electron 以 Node 模式启动，报 `bad option: --remote-debugging-port=0`）：`env -u ELECTRON_RUN_AS_NODE npm run e2e`。
-- P2 收尾在视觉修正后复跑：`npm run format` / `typecheck` / `lint` / `npm test`（194 例）/ `format:check` / `env -u ELECTRON_RUN_AS_NODE npm run e2e`（14 例）全部通过；亮色搜索、亮/暗编辑器、1024 宽度截图复核无溢出与重复提示。
+- 本会话内 `npm test` 的默认线程池会抛 `Vitest failed to find the runner`（WorkBuddy 沙箱的 `NODE_OPTIONS` require-shim 与 tinypool worker 冲突，最小 smoke 用例同样复现，与本项目代码无关）。用 `npx vitest run --pool=vmThreads` 可正常跑完；离开该环境后默认池恢复可用。
+- P4 收尾复跑：`npm run format` / `typecheck` / `lint` / `npx vitest run --pool=vmThreads`（255 例）/ `format:check` / `env -u ELECTRON_RUN_AS_NODE npx playwright test`（20 例）全部通过；亮/暗运行调试面板、断点 glyph 与当前行、确认弹窗、扩展面板与 VS Code 导入弹窗、1024 宽度 13 张截图复核无溢出与裁切。
 
-### 14.3 与计划的偏差（P3 需留意）
+### 14.3 与计划的偏差（P4 需留意）
 
 - 大纲 TS/JS 仍用**正则提取**（`lib/outline.ts`），未接 §3.1.5 首选的 Monaco TS Worker；P2 未升级，可后置。
 - **无 fs watcher**：外部修改通过「保存前 hash 校验」与「切换标签时 `expectedHash` 比对」发现，后者会让主进程生成 `external` 快照；不是实时文件监听。
 - **ripgrep 二进制尚未打包**：`findRipgrepPath()` 依次探测 `process.resourcesPath/ripgrep`、`resources/ripgrep`、PATH，缺失时回退内置递归搜索并在 UI 提示；§10 的「打包 rg（+2–4MB）」与 `electron-builder.yml` extraResources 留到 **P6** 发布检查时落地。
 - `.gitignore` 为简化实现（注释/取反/目录/锚定/通配），未覆盖完整 gitignore 规范；include/exclude glob 同样为简化匹配器。
 - 搜索的「仅在打开文件中搜索」不应用 .gitignore（显式打开的文件仍可搜），符合「优先搜已打开文件」的语义。
+- **审计 DB 升到 v4**（超出 §4.4 的 v3 设计）：`audit_logs` 增 `call_id`/`duration_ms` 两列，供详情抽屉展示；旧行这两列为 `NULL`，UI 显示「-」。
+- **Git 路径基准是工作区根，不是仓库根**：`GitService` 用 `git rev-parse --show-toplevel` 定位仓库，但所有命令以工作区根为 `cwd` 并加 `-- .` pathspec，`git show :./path` / `HEAD:./path` 也相对 `cwd`。因此工作区是仓库子目录时，面板只反映/操作工作区范围内的文件（符合「工作区即项目」的定位，但与 VS Code 显示整个仓库不同）。
+- **取消暂存/放弃更改有降级链**：`restore --staged` → `reset -q HEAD --` → `rm --cached`（首次提交前无 HEAD 时）；`restore --worktree` → `checkout --`。兼容旧版 git。
+- **放弃更改拒绝未跟踪文件**：`assertNoUntracked` 直接报错「未跟踪文件无法放弃，请手动删除」，避免误删新文件。
+- **Git 输出面板只记录写操作**（`status/diff/log/rev-parse/branch --list` 等只读命令不入日志），且仅内存保存、重启清空，未落库。
+- 审计 `stats` 的**工具下拉不受 tool 筛选影响**（否则选中后只剩一个选项无法回切），其余筛选对统计生效。
+- 分支名校验为简化实现：拒绝 `..`、空白、`~^:?*[\`、控制字符、首尾 `.`/`/`，未完全对齐 `git check-ref-format`。
+- 合并冲突第一阶段只**只读展示**（porcelain v2 `u` 记录 → `conflicted` 分组并标记），未提供接受当前/传入的合并操作，符合 §12 非目标。
+- **调试用自研 CDP，不是 DAP + js-debug**（§3.7/§10 的原始设想）：spike 后判定 js-debug 需额外依赖与 DAP 时序，收益不抵成本。`DebugAdapter` 接口保留 `applyBreakpoints/start/stop/command/scopes/variables/evaluate`，接 Python/Go 时新增适配器即可，但**当前没有任何 DAP 实现代码**。
+- **`launch.json` 无 JSON Schema 校验**：只做 JSON 可解析性提示 + 字段白名单归一化（`type` 仅 `node`/`pwa-node`，必须有 `program`）；不支持注释（JSONC）。`jsonc-parser` 未引入。
+- **调试目标必须注入 `ELECTRON_RUN_AS_NODE=1`**：Electron 主进程里 `process.execPath` 是 `electron.exe`，不注入会被当作 Electron 应用启动，永远不命中用户断点。
+- **VSIX 用自研最小 zip 读取器**（不引入 `yauzl`）：仅支持 stored/deflate，拒绝 zip64、路径穿越与绝对路径；条目/解压上限来自 `EXTENSION_LIMITS`。真实 VSIX 均满足，但遇到 zip64 打包的包会报「不支持 zip64」。
+- **扩展的语法/主题贡献只展示不生效**：`contributions` 会解析并统计 languages/grammars/themes，但未注册 Monaco tokenizer、未应用主题；只有 `snippets` 通过 `CompletionItemProvider` 真正可用。命令/菜单/快捷键同样只在详情里列出。
+- **片段补全按片段文件声明的语言注册**（14 种常见语言），`scope` 为 `*` 的片段按 `*` 匹配全部注册语言；不处理 `${1:占位}` 之外的高级片段语法（变量/嵌套/正则变换），原文插入。
+- **任务/调试输出做 ANSI 清洗**：面板是纯文本，Node 在继承 `NODE_OPTIONS` 等环境下会给 `console.log` 着色，直接显示会变 `\x1b[33m` 乱码。
+- **没有终端**：运行输出是只读追加面板（§12 非目标），不支持 stdin 交互；`npm run watch` 这类长任务靠停止按钮结束（`taskkill /T /F` 杀进程树）。
+- **调试只支持 launch，不支持 attach**：CDP 端有 `Runtime.enable` 等能力，但 UI 未提供端口 attach 入口。
 
 ### 14.4 交接坑位（已踩过的坑）
 
@@ -548,3 +589,16 @@ interface ContextAttachment {
 8. **时间线列表刷新**：`TimelinePanel` 原来只 watch `activeFile.relativePath`；替换/保存在同一文件上发生，路径不变导致快照列表不更新。新增 `workspace.timelineVersion`，磁盘内容变化后递增并触发重新拉取。
 9. **e2e 固定标签**：Playwright 在文件树节点上 `dblclick` 时，第一次单击已切到编辑器视图，第二次点击落不到树节点；固定标签改在标签条上双击（`editor-tab-*`）。
 10. **编辑器 overlay 不要用写死的 `inset`**：头部一旦换行（窄面板两行布局），原来 `diff-overlay` / `editor-empty` 的 `inset: 62px 0 0` 就会错位。现用 `EditorPane.vue` 的 `.editor-body`（`position: relative; flex: 1`）包裹内容区，overlay 改为 `inset: 0`；后续加头部行高不必再改魔法数字。
+11. **编辑器的空态会挡住 Diff**：`editor-empty` 原来只在 `!activeTab` 时显示，但 Git 可在「无打开标签」时打开 Diff，空态覆盖整个内容区导致 `diff-close` 点不到。现为 `v-if="!activeTab && !workspace.diff"`。
+12. **SCM 行内点击会重复触发**：`.file-row`（`<li>`）上挂 `@click` 打开 Diff、行内又有暂存/放弃按钮时，点按钮会冒泡两次（先开 Diff 又立刻暂存）。现点击事件在内层 `<button class="file-main">`，操作区 `.actions` 用 `@click.stop`；新增行内操作沿用此结构。
+13. **活动栏徽标会被裁切**：`.activity-bar` 是 `overflow-x: auto`（此时 `overflow-y` 只能是 `hidden`），徽标的负偏移不能过大。现 `top: -3px; right: -5px` + `z-index: 1`，1024 下实测 `badge.top(40.5) > bar.top(36)`、`badge.right(967) < bar.right(994)`，未越界；调这个位置时请用 `getBoundingClientRect()` 实测而不是目测。
+14. **实时模式必须走静默刷新**：审计轮询用 `refresh({ silent: true })`（不清 `notice`、不动筛选），关掉实时要清定时器（`syncLive` + `onScopeDispose`），否则离开视图仍在拉数据。
+15. **git 非 ASCII 路径转义**：git 默认把中文路径输出成八进制 C 风格转义。`runGit` 统一加 `-c core.quotePath=false`，但 `unquoteGitPath` 仍按字节累积后用 `Buffer.from(bytes).toString('utf8')` 还原（直接 `String.fromCharCode` 会得到 `ä¸­æ` 乱码），单测已覆盖。
+16. **只读子命令别进 Git 日志**：`git status` 在每次刷新都会跑，若不排除会让输出面板被刷屏；`READ_ONLY_COMMANDS` 集合需随新增只读命令同步维护。
+17. **Windows 上 `.cmd`/`.bat` 不能直接 `spawn`**（Node ≥20 抛 `EINVAL`）：`spawn('npm', ['run', name])` 会在 Windows 上立刻失败。必须 `cmd.exe /d /s /c "<命令行>"` 包裹（`buildSpawnSpec`），参数仍走数组拼接后整体引用，不经 shell 解释用户输入。
+18. **调试要在 `start()` 之前设断点**：`DebugService.start` 原本 `await adapter.start()` 之后才 `setBreakpoints`，导致首次运行断点不生效；现在先 `await adapter.setBreakpoints(...)` 再启动（`--inspect-brk` 会停在入口，来得及）。
+19. **暂停帧的 `callFrame.url` 常为空串**：只有 `location.scriptId`。适配器在 `Debugger.scriptParsed` 时记录 `scriptId → url`，暂停时回查才能算出 `relativePath`，否则调用堆栈全是「内部帧」。
+20. **`--inspect-brk` 会先停在模块包装帧**（命中 `Break on start`，作用域里 `require`/`module` 而不是用户变量）：适配器收到首个 `paused` 且 `reason === 'Break on start'` 时自动 `Debugger.resume`，不要把它当成用户断点展示。
+21. **Node 进程结束后不会自己退出**（等调试器 disconnect）：`Runtime.notifyWhenWaitingForDisconnect` 无效；收到 `Runtime.executionContextDestroyed` 后主动 `cdp.close()` 才能让子进程退出，否则任务永远「运行中」。
+22. **区块折叠会吃掉 e2e 断言**：`CollapsibleSection` 默认折叠（`v-show`），`toBeVisible()` 会报 hidden 而 locator 明明已 resolve。调试会话启动时统一展开相关区块（`stores/debug.ts` 的 `revealSections`），新增需要「自动出现」的区块请一并加入 `REVEAL_SECTIONS`。
+23. **`pendingReveal` 会连带切视图**：`WorkspacePanel` 的 watcher 一旦看到 `pendingReveal` 就把活动视图切到编辑器，调试暂停时会把「运行和调试」顶掉。现在 `RevealRequest.keepView` 显式声明「只滚动不切视图」，调试暂停用它；e2e 里点 glyph 前也要先等 `.monaco-editor .view-lines` 出现，否则 `currentModelPath` 仍是 null，断点加不上。

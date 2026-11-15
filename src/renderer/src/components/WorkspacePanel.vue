@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import type { FsTreeNode } from '@shared/ipc'
 import { WORKSPACE_VIEWS, type WorkspaceView } from '../lib/workspaceViews'
 import { useChatStore } from '../stores/chat'
+import { useScmStore } from '../stores/scm'
 import { useSettingsStore } from '../stores/settings'
 import { useWorkspaceStore } from '../stores/workspace'
 import AuditPanel from './AuditPanel.vue'
 import EditorPane from './EditorPane.vue'
+import ExtensionsPanel from './ExtensionsPanel.vue'
 import FileTreePanel from './FileTreePanel.vue'
+import RunPanel from './RunPanel.vue'
+import ScmPanel from './ScmPanel.vue'
 import SearchPanel from './SearchPanel.vue'
 import ViewPlaceholder from './ViewPlaceholder.vue'
 import WorkspaceActivityBar from './WorkspaceActivityBar.vue'
@@ -15,11 +19,14 @@ import WorkspaceActivityBar from './WorkspaceActivityBar.vue'
 const settings = useSettingsStore()
 const workspace = useWorkspaceStore()
 const chat = useChatStore()
+const scm = useScmStore()
 
 // 编辑器与搜索视图常驻挂载（v-show），保留各自标签、滚动位置与输入状态
 const mountedViews = reactive(new Set<WorkspaceView>([settings.workspaceView, 'editor']))
 
 const placeholderViews = WORKSPACE_VIEWS.filter((view) => view.phase)
+
+const activityBadges = computed(() => ({ scm: scm.changeCount }))
 
 function selectView(view: WorkspaceView): void {
   mountedViews.add(view)
@@ -38,8 +45,17 @@ function attachFile(node: FsTreeNode): void {
 watch(
   () => [workspace.pendingReveal, workspace.diff] as const,
   ([reveal, diff]) => {
-    if (reveal || diff) selectView('editor')
+    if (diff || (reveal && !reveal.keepView)) selectView('editor')
   }
+)
+
+// 工作区变化后刷新 Git 变更数，活动栏 badge 不依赖是否打开过源代码管理
+watch(
+  () => workspace.info?.root,
+  () => {
+    if (workspace.info) void scm.refresh({ silent: true })
+  },
+  { immediate: true }
 )
 </script>
 
@@ -50,7 +66,11 @@ watch(
     :style="{ width: `${settings.workspaceWidth}px` }"
   >
     <div class="activity-row">
-      <WorkspaceActivityBar :active="settings.workspaceView" @select="selectView" />
+      <WorkspaceActivityBar
+        :active="settings.workspaceView"
+        :badges="activityBadges"
+        @select="selectView"
+      />
       <button
         v-if="settings.workspaceView === 'files'"
         type="button"
@@ -76,6 +96,21 @@ watch(
         v-if="mountedViews.has('audit')"
         v-show="settings.workspaceView === 'audit'"
         :active="settings.workspaceView === 'audit'"
+      />
+      <ScmPanel
+        v-if="mountedViews.has('scm')"
+        v-show="settings.workspaceView === 'scm'"
+        :active="settings.workspaceView === 'scm'"
+      />
+      <ExtensionsPanel
+        v-if="mountedViews.has('extensions')"
+        v-show="settings.workspaceView === 'extensions'"
+        :active="settings.workspaceView === 'extensions'"
+      />
+      <RunPanel
+        v-if="mountedViews.has('debug')"
+        v-show="settings.workspaceView === 'debug'"
+        :active="settings.workspaceView === 'debug'"
       />
       <ViewPlaceholder
         v-for="view in placeholderViews"

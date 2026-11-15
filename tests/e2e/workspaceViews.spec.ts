@@ -16,9 +16,9 @@ const VIEWS = [
   { testid: 'workspace-tab-search', label: '搜索', panel: 'search-panel' },
   { testid: 'workspace-tab-editor', label: '编辑器', panel: 'editor-pane' },
   { testid: 'audit-toggle', label: '审计', panel: 'audit-panel' },
-  { testid: 'workspace-tab-scm', label: '源代码管理', panel: 'scm-panel', phase: 'P3' },
-  { testid: 'workspace-tab-extensions', label: '扩展安装', panel: 'extensions-panel', phase: 'P4' },
-  { testid: 'workspace-tab-debug', label: '运行和调试', panel: 'debug-panel', phase: 'P4' },
+  { testid: 'workspace-tab-scm', label: '源代码管理', panel: 'scm-panel' },
+  { testid: 'workspace-tab-extensions', label: '扩展安装', panel: 'extensions-panel' },
+  { testid: 'workspace-tab-debug', label: '运行和调试', panel: 'run-panel' },
   { testid: 'workspace-tab-remote', label: '远程管理器', panel: 'remote-panel', phase: 'P5' }
 ] as const
 
