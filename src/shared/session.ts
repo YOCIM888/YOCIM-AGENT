@@ -1,6 +1,6 @@
 import type { ApprovalMode } from './approval'
 import type { PublicProvider } from './providers'
-import type { ModelPricing, SearchSettings, StorageSettings } from './settings'
+import type { ImageSettings, ModelPricing, SearchSettings, StorageSettings } from './settings'
 
 export interface SessionSummary {
   id: string
@@ -39,6 +39,8 @@ export interface PublicSettings {
   approvalMode: ApprovalMode
   /** 联网搜索设置（Tavily） */
   search: SearchSettings
+  /** 生图设置（智谱 cogview-3-flash / 自定义） */
+  image: ImageSettings
   /** 模型价格表：用于账单里的费用估算 */
   pricing: ModelPricing[]
   /** 存储设置（数据目录） */

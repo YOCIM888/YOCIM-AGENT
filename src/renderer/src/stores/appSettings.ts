@@ -2,12 +2,15 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { BillingSummary, ProviderBalance, StorageInfo } from '@shared/billing'
 import type {
+  SettingsSetImageInput,
   SettingsSetPricingInput,
   SettingsSetSearchInput,
   SettingsSetStorageInput
 } from '@shared/ipc'
 import {
+  IMAGE_SETTINGS_DEFAULTS,
   SEARCH_SETTINGS_DEFAULTS,
+  type ImageSettings,
   type ModelPricing,
   type SearchSettings,
   type StorageSettings
@@ -19,6 +22,7 @@ import {
  */
 export const useAppSettingsStore = defineStore('appSettings', () => {
   const search = ref<SearchSettings>({ ...SEARCH_SETTINGS_DEFAULTS })
+  const image = ref<ImageSettings>({ ...IMAGE_SETTINGS_DEFAULTS })
   const pricing = ref<ModelPricing[]>([])
   const storage = ref<StorageSettings>({ dataDir: '' })
   const balances = ref<Record<string, ProviderBalance>>({})
@@ -29,13 +33,16 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
   const notice = ref('')
 
   const searchReady = computed(() => search.value.enabled && search.value.hasApiKey)
+  const imageReady = computed(() => image.value.enabled && image.value.hasApiKey)
 
   function apply(settings: {
     search: SearchSettings
+    image: ImageSettings
     pricing: ModelPricing[]
     storage: StorageSettings
   }): void {
     search.value = { ...settings.search }
+    image.value = { ...settings.image }
     pricing.value = settings.pricing.map((item) => ({ ...item }))
     storage.value = { ...settings.storage }
   }
@@ -69,6 +76,28 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
   async function clearSearchKey(): Promise<boolean> {
     error.value = ''
     const result = await window.yocim.settings.clearSearchKey()
+    if (result.ok) {
+      apply(result.data)
+      return true
+    }
+    error.value = result.error.message
+    return false
+  }
+
+  async function setImage(input: SettingsSetImageInput): Promise<boolean> {
+    error.value = ''
+    const result = await window.yocim.settings.setImage(input)
+    if (result.ok) {
+      apply(result.data)
+      return true
+    }
+    error.value = result.error.message
+    return false
+  }
+
+  async function clearImageKey(): Promise<boolean> {
+    error.value = ''
+    const result = await window.yocim.settings.clearImageKey()
     if (result.ok) {
       apply(result.data)
       return true
@@ -131,8 +160,13 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
   }
 
   async function pickStorageDirectory(): Promise<string | null> {
+    error.value = ''
     const result = await window.yocim.storage.pick()
-    return result.ok ? result.data : null
+    if (!result.ok) {
+      error.value = result.error.message
+      return null
+    }
+    return result.data
   }
 
   async function openStorageDirectory(): Promise<void> {
@@ -142,6 +176,7 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
 
   return {
     search,
+    image,
     pricing,
     storage,
     balances,
@@ -151,9 +186,12 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
     error,
     notice,
     searchReady,
+    imageReady,
     refresh,
     setSearch,
     clearSearchKey,
+    setImage,
+    clearImageKey,
     setPricing,
     setStorage,
     fetchBalance,

@@ -3,7 +3,9 @@ import { computed, ref } from 'vue'
 import {
   countGitChanges,
   type GitBranches,
+  type GitCommitDetail,
   type GitFileChange,
+  type GitGraph,
   type GitLogEntry,
   type GitStatus
 } from '@shared/git'
@@ -57,6 +59,16 @@ export const useScmStore = defineStore('scm', () => {
   const busy = ref('')
   const error = ref('')
   const notice = ref('')
+
+  /* 提交图 */
+  const graph = ref<GitGraph | null>(null)
+  const graphLoading = ref(false)
+  const graphError = ref('')
+  const graphBranch = ref('all')
+  /** 展开详情的提交 sha（同一时刻只展开一个） */
+  const expandedSha = ref<string | null>(null)
+  const commitDetails = ref<Record<string, GitCommitDetail>>({})
+  const detailLoading = ref('')
 
   const changeCount = computed(() => (status.value ? countGitChanges(status.value) : 0))
   const hasRepo = computed(() => Boolean(status.value?.isRepo))
@@ -258,6 +270,60 @@ export const useScmStore = defineStore('scm', () => {
     persistCollapsed(collapsed.value)
   }
 
+  /* ------------------------------------------------------------------ */
+  /* 提交图                                                              */
+  /* ------------------------------------------------------------------ */
+
+  async function loadGraph(): Promise<void> {
+    if (graphLoading.value) return
+    graphLoading.value = true
+    graphError.value = ''
+    try {
+      const response = await window.yocim.git.graph({
+        limit: 200,
+        branch: graphBranch.value
+      })
+      if (!response.ok) {
+        graphError.value = response.error.message
+        return
+      }
+      graph.value = response.data
+      // 展开中的提交若已不在结果里，收起详情
+      if (expandedSha.value && !response.data.commits.some((c) => c.sha === expandedSha.value)) {
+        expandedSha.value = null
+      }
+    } finally {
+      graphLoading.value = false
+    }
+  }
+
+  async function setGraphBranch(branch: string): Promise<void> {
+    graphBranch.value = branch
+    expandedSha.value = null
+    await loadGraph()
+  }
+
+  /** 点击提交：展开详情；再次点击同一个则收起 */
+  async function toggleCommit(sha: string): Promise<void> {
+    if (expandedSha.value === sha) {
+      expandedSha.value = null
+      return
+    }
+    expandedSha.value = sha
+    if (commitDetails.value[sha]) return
+    detailLoading.value = sha
+    try {
+      const response = await window.yocim.git.commitDetail({ sha })
+      if (!response.ok) {
+        graphError.value = response.error.message
+        return
+      }
+      commitDetails.value = { ...commitDetails.value, [sha]: response.data }
+    } finally {
+      detailLoading.value = ''
+    }
+  }
+
   function reset(): void {
     status.value = null
     branches.value = null
@@ -266,6 +332,10 @@ export const useScmStore = defineStore('scm', () => {
     error.value = ''
     notice.value = ''
     busy.value = ''
+    graph.value = null
+    graphError.value = ''
+    expandedSha.value = null
+    commitDetails.value = {}
   }
 
   return {
@@ -299,6 +369,16 @@ export const useScmStore = defineStore('scm', () => {
     openFile,
     reveal,
     toggleGroup,
+    graph,
+    graphLoading,
+    graphError,
+    graphBranch,
+    expandedSha,
+    commitDetails,
+    detailLoading,
+    loadGraph,
+    setGraphBranch,
+    toggleCommit,
     reset
   }
 })

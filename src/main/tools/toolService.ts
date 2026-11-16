@@ -39,6 +39,7 @@ import {
   type GitDiffRunner
 } from './verifyTools'
 import { runWebSearch, type WebSearchRunner } from './webSearchTools'
+import { runGenerateImage, type ImageGenRunner } from './imageGenTools'
 
 const TOOL_RISK: Record<ToolName, 'medium' | 'high'> = {
   list_dir: 'medium',
@@ -52,7 +53,8 @@ const TOOL_RISK: Record<ToolName, 'medium' | 'high'> = {
   run_lint: 'medium',
   get_git_diff: 'medium',
   update_plan: 'medium',
-  web_search: 'medium'
+  web_search: 'medium',
+  generate_image: 'medium'
 }
 
 function describeError(error: unknown): string {
@@ -97,6 +99,10 @@ export interface ToolServiceDeps {
   webSearch?: WebSearchRunner
   /** 联网搜索是否可用：用于决定是否把 web_search 放进工具列表 */
   webSearchEnabled?: () => boolean
+  /** 生图执行器（智谱 / 自定义）；缺省或未配置 Key 时 generate_image 工具不会暴露给模型 */
+  imageGen?: ImageGenRunner
+  /** 生图是否可用：用于决定是否把 generate_image 放进工具列表 */
+  imageGenEnabled?: () => boolean
 }
 
 export class ToolService {
@@ -118,11 +124,16 @@ export class ToolService {
   }
 
   getDefinitions(): typeof TOOL_DEFINITIONS {
-    // 联网搜索没配好时不对模型暴露：暴露了模型就会反复调用一个必然失败的工具
-    if (this.deps.webSearch && this.deps.webSearchEnabled?.() !== false) {
-      return TOOL_DEFINITIONS
-    }
-    return TOOL_DEFINITIONS.filter((definition) => definition.name !== 'web_search')
+    // 没配好的工具不对模型暴露：暴露了模型就会反复调用一个必然失败的工具
+    return TOOL_DEFINITIONS.filter((definition) => {
+      if (definition.name === 'web_search') {
+        return Boolean(this.deps.webSearch && this.deps.webSearchEnabled?.() !== false)
+      }
+      if (definition.name === 'generate_image') {
+        return Boolean(this.deps.imageGen && this.deps.imageGenEnabled?.() !== false)
+      }
+      return true
+    })
   }
 
   async execute(call: ToolCall, context: ToolExecutionContext): Promise<ToolExecutionOutcome> {
@@ -351,6 +362,12 @@ export class ToolService {
           throw new AppError('E_UNSUPPORTED', '联网搜索未配置')
         }
         return runWebSearch(parsed.args, this.deps.webSearch, context.signal)
+      }
+      case 'generate_image': {
+        if (!this.deps.imageGen) {
+          throw new AppError('E_UNSUPPORTED', '生图未配置')
+        }
+        return runGenerateImage(parsed.args, this.deps.imageGen, context.signal)
       }
     }
   }

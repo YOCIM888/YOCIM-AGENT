@@ -1,244 +1,143 @@
 # YOCIM AGENT
 
-本地优先的桌面 AI 编程助手（Electron + Vue 3 + TypeScript）。可选择本地工作区，与模型对话，在审批后读取/修改文件并执行受控命令。
+[English](README.md) | [中文](README.zh-CN.md)
 
-## 界面预览
+A local-first desktop AI coding assistant (Electron + Vue 3 + TypeScript). Pick a local workspace, chat with a model, and let it read/modify files and run controlled commands after your approval.
 
-三栏工作台：左侧项目化会话，中间纯会话区，右侧工作区面板（8 个图标视图：文件 / 搜索 / 编辑器 / 审计 / 源代码管理 / 扩展 / 调试 / 远程）。
+## Features
 
-### 欢迎态
+- **Multi-model support**: DeepSeek, Qwen, BigModel, Kimi, MiniMax, Tencent Cloud, Alibaba Cloud, SiliconFlow, Volcano Engine, ChatGPT, Claude, Gemini, Grok, local Ollama, and custom endpoints. Add them in Settings and switch from the bottom-right of the composer (grouped by provider, model name only, selected item marked with a green filled circle).
+- **Tabbed settings**: Billing, Models, Search, Image Generation, Appearance, Storage, and Browser. Approval mode (Manual / Auto / Open) is toggled at the bottom-left of the composer and persisted.
+- **Three-pane workspace**: project-based session list on the left, a pure chat area in the middle, and an 8-view icon activity bar on the right (Files / Search / Editor / Audit / Source Control / Extensions / Debug / Remote). Side panels can be collapsed and resized by dragging, with state persisted across restarts.
+- **Workspace-wide search & replace**: streaming results, cancellation, include/exclude, case/whole-word/regex options, replace preview with hash-conflict checks, and timeline rollback (ripgrep first, falling back to the built-in search engine).
+- **Monaco multi-tab editor**: preview/pinned tabs, `Ctrl+S` saving, dirty state, external-change conflicts (overwrite / reload / save as), image preview, and "Add to chat" from a selection.
+- **Projects & sessions**: one workspace = one project, with multiple sessions per project; search, pin, archive/unarchive, and move across projects. Session and project actions live in context menus.
+- **Assistant messages**: Markdown rendering (marked + DOMPurify); tool calls shown as expandable step timelines, with approval cards inline. Light theme by default plus a pure-black dark theme; the status bar collapses to a single line by default and can be expanded.
+- **Approval experience**: write-file approval cards include a syntax-highlighted diff preview (all hunks of an `edit_file` patch at once). "Allow in session / Allow in project" rules skip future identical approvals (allowlisted and dangerous commands cannot be bypassed by rules; the rule name is recorded in the audit log). Files are re-checked for external modification before execution.
+- **Task planning**: the agent maintains a plan card above the chat via `update_plan` (todo / in progress / done + progress bar). Reaching the round limit automatically pauses the run and it can be resumed with one click. Round limits are adaptive (6 read-only / 20 single-file / 60 multi-file).
+- **Context management**: a usage ring to the left of the model button (hover for used/window, click to compact manually). Old content is automatically compacted into a structured summary at 80% of the window (hard trim beyond 95%). The window defaults to 200K and is adjustable from 200K to 1000K in the model menu; reasoning effort is also adjustable (default / low / medium / high, mapped per protocol). Model-side conversation streams (including tool calls and results) are persisted to SQLite and fully replayed across rounds — compaction only affects what is sent to the model, never the chat history. Read-only tools run concurrently (up to 4), while write tools and commands run serially.
+- **Project rules & structure injection**: `AGENTS.md` / `.yocim/rules.md` take precedence over default habits, and a lightweight repo map helps the model understand the directory layout on the first turn. The currently open and unsaved files are injected with each request.
+- **Tools**: `list_dir` (glob filtering + file size/line count), `read_file` (line numbers + offset/limit paging), `search_files` (ripgrep, regex / include / exclude / context lines), `write_file`, `edit_file` (atomic multi-hunk patches with indentation tolerance), `run_command` (allowlist + `.yocim/commands.json` extensions, streaming output), `run_tests` (auto-detects vitest/jest/pytest/go), `run_typecheck` / `run_lint` (compact file:line:col format), `get_git_diff`, `update_plan` (structured plan fed back to the model each round).
+- **Audit panel**: statistics cards (total / failed / approved / denied calls), filters by tool / result / approval / time range / keyword, detail drawer, live mode, and JSON/CSV export (persisted in SQLite, DB v4).
+- **Source control**: system Git detection (with an install hint if missing), staged / changed / untracked groups, stage and commit, branch switch/create, pull (`--ff-only`) / push / publish, diff viewer, second confirmation for discarding changes, redacted Git output, and a change-count badge.
+- **Graphical commit graph**: vertical lanes with status dots (hollow for merge commits, glow for HEAD), branch / remote / tag capsules attached to their commits, and conventional-prefix coloring. Click a commit to expand its changed-file list with insertion/deletion counts; click again to collapse.
+- **Run tasks**: auto-detects npm / pnpm / yarn and lists `package.json` scripts; `.yocim/tasks.json` can define custom commands. Output streams incrementally, tasks can be stopped (killing the process tree), and a custom command must be confirmed in full on first run.
+- **Node.js debugging**: zero-config launch from `.yocim/launch.json` (with `${workspaceFolder}` / `${file}` / `${env:NAME}` variables) or `package.json` `main`. Breakpoints and conditional breakpoints in the editor glyph margin, continue / pause / step over / into / out / restart / stop, variable tree, watch expressions, call stack, debug console, and current-line highlighting. The full command must be confirmed on first launch; output is redacted.
+- **Remote workspaces (WSL / SSH)**: manage targets and probe environments, then browse / edit / search / use Git / run tasks directly in the right panel. WSL uses `\\wsl.localhost` UNC paths plus `wsl.exe --exec`; SSH uses the built-in `ssh2` (SFTP + exec), with TOFU host fingerprint verification and passwords encrypted via `safeStorage`.
+- **Extensions (first layer)**: no extension code is executed. Import from local directories / `.vsix` / the VS Code extensions directory, enable/disable, uninstall, and view details. Compatibility is graded as "declarative only / partial / incompatible", with incompatible extensions disabled by default. Declarative snippet contributions are registered as editor completions.
+- **Persistence**: sessions / messages / settings / project state survive restarts; sessions can be renamed, deleted, and exported to Markdown. Main-process file logging and crash handling.
 
-![欢迎态](docs/screenshots/welcome-light.png)
+## Interface & Keyboard Shortcuts
 
-### 会话右键菜单
+- **Left**: brand and "New Session" at the top, then search, workspace count, pinned section, and project groups. Right-click a session to rename / export / pin / archive / move / delete; right-click a project to create a session / rename.
+- **Middle**: empty sessions show a welcome state and a large composer; streaming replies can be stopped; tool steps collapse into "N steps executed · Xs" and expand to show arguments and results; failures show a retryable error card.
+- **Right**: the 8 icon views; clicking a file switches to the editor, and a search hit can be jumped to and selected. The divider can be dragged to resize, double-clicked to reset, or nudged with arrow keys when focused.
+- **Title bar**: the "Application" menu switches workspace / theme and opens Settings; the "Edit" menu creates/searches sessions, collapses the workspace, and toggles the status bar.
 
-![会话右键菜单](docs/screenshots/session-menu-light.png)
+| Shortcut       | Action                           |
+| -------------- | -------------------------------- |
+| `Ctrl+B`       | Toggle the session sidebar       |
+| `Ctrl+Shift+B` | Toggle the workspace panel       |
+| `Ctrl+N`       | New session                      |
+| `Ctrl+K`       | Focus session search             |
+| `Ctrl+J`       | Expand / collapse the status bar |
+| `Ctrl+S`       | Save the current editor file     |
 
-### 深色模式与步骤时间线
+> On macOS, use `Cmd` instead of `Ctrl`.
 
-![深色模式与步骤时间线](docs/screenshots/timeline-dark.png)
+## Approval Modes
 
-### 助手 Markdown 渲染
+| Mode   | Behavior                                                   |
+| ------ | ---------------------------------------------------------- |
+| Manual | Both file writes and commands require approval (default)    |
+| Auto   | File writes are approved automatically; commands still ask  |
+| Open   | File writes and commands are auto-approved, no approval card |
 
-![助手 Markdown 渲染](docs/screenshots/chat-light.png)
+Open mode is still constrained by the workspace path guard, command allowlist, and dangerous-command blocking — approval modes never bypass these security boundaries.
 
-### 工作区与 Monaco 编辑器
+## Requirements
 
-![工作区与 Monaco 编辑器](docs/screenshots/workspace-light.png)
+- Node.js >= 22.12 (verified in this repo on Node 24 / npm 11)
+- Windows 10+ (primary validation platform), macOS, and Linux
+- No native build toolchain required (the database uses Electron/Node's built-in `node:sqlite`)
 
-### 文件树与编辑器标签
-
-![文件树与编辑器标签](docs/screenshots/p6-workspace-files.png)
-
-### 全文搜索与替换
-
-![全文搜索与替换](docs/screenshots/p6-workspace-search.png)
-
-### 源代码管理
-
-![源代码管理](docs/screenshots/p6-workspace-scm.png)
-
-### Node.js 调试
-
-![Node.js 调试](docs/screenshots/p6-workspace-debug.png)
-
-### 扩展管理（兼容性分级）
-
-![扩展管理](docs/screenshots/p6-workspace-extensions.png)
-
-### 远程管理器
-
-![远程管理器](docs/screenshots/p6-workspace-remote.png)
-
-### 深色主题下的调试视图
-
-![深色主题下的调试视图](docs/screenshots/p6-workspace-dark.png)
-
-### 多模型 Provider 设置
-
-![多模型 Provider 设置](docs/screenshots/providers-settings.png)
-
-### 输入卡模型切换
-
-![输入卡模型切换](docs/screenshots/model-switcher.png)
-
-### 审批模式
-
-![审批模式](docs/screenshots/approval-modes.png)
-
-## 功能
-
-- 多模型接入：DeepSeek、Qwen、BigModel、Kimi、MiniMax、腾讯云、阿里云、硅基流动、火山引擎、ChatGPT、Claude、Gemini、Grok、本地 Ollama 与自定义端点；设置中添加，输入卡右下角切换
-- 分栏设置：账单（余额 + 用量费用估算）、模型、搜索（Tavily 联网搜索）、外观、存储（可自定义数据目录）、浏览器（占位）
-- 输入卡左下角审批模式：手动 / 自动 / 开放，切换后持久化
-- 无边框自定义标题栏：左上「应用 / 编辑」菜单，右上最小化 / 最大化 / 关闭；左栏顶部为品牌 Logo
-- 三栏工作台：左侧项目化会话列表、中间纯会话区、右侧图标活动栏（文件、搜索、编辑器、审计等 8 个视图）；左右栏可折叠、可拖动调宽，状态与宽度重启后保留
-- 工作区全文搜索与替换：流式结果、取消、include/exclude、大小写/全词/正则、替换预览与 hash 冲突校验、时间线回滚（优先 ripgrep，缺失时回退内置搜索）
-- Monaco 多标签编辑器：预览/固定标签、可编辑与 `Ctrl+S` 保存、脏状态、外部修改冲突（覆盖 / 重新加载 / 另存）、图片预览、选区「添加到对话」
-- 一个工作区 = 一个项目，同项目多会话；支持搜索、置顶、归档/取消归档、跨项目迁移
-- 会话与项目操作收进右键菜单，避免行内小按钮堆叠
-- 助手消息 Markdown 渲染（marked + DOMPurify）；工具调用以可展开步骤时间线展示，审批卡内联
-- 浅色默认 + 纯黑深色主题；状态栏默认折叠为单行，可展开并持久化
-- OpenAI-compatible 流式对话（默认 Mock Provider，可离线使用）
-- 审批体验：写文件审批卡内置着色 diff 预览（edit_file 多块补丁一次预览全部改动）；支持「会话内允许 / 项目内允许」记住规则跳过后续同类审批（白名单与危险命令拦截不可被规则绕过，审计记录规则名）；审批通过后执行前校验文件未被外部修改
-  任务计划：多步骤任务由 Agent 用 update_plan 维护计划，聊天区顶部展示计划卡（待办/进行中/完成 + 进度条），轮次用尽自动暂停并可一键继续；轮次上限自适应（只读 6 / 单文件 20 / 多文件 60）
-  上下文管理：输入卡模型按钮左侧有用量圆环（悬停看 `已用/窗口`，点击手动压缩）；上下文接近窗口 80% 时自动压缩旧内容为结构化摘要（超过 95% 再硬裁剪）；每个模型的窗口默认 200K，可在模型菜单底部调整（200K–1000K）；思考强度也可在模型菜单底部调整（默认/低/中/高，按协议映射 reasoning_effort / thinking / thinkingConfig）；模型侧对话流（含工具调用与结果）持久化到 SQLite，跨轮次完整回放，压缩只影响发给模型的内容、不改聊天记录；只读工具并发执行（上限 4），写工具与命令串行
-- 项目规则与项目结构自动注入：`AGENTS.md` / `.yocim/rules.md` 优先于默认习惯，轻量 repo map 让模型第一轮就了解目录形状；当前打开文件与未保存文件随请求注入
-- 工具：`list_dir`（glob 过滤 + 文件大小/行数）、`read_file`（带行号，支持 offset/limit 分页）、`search_files`（ripgrep，支持正则 / include / exclude / 上下文行）、`write_file`（新建或整文件覆盖）、`edit_file`（多块原子补丁，缩进差异容错）、`run_command`（白名单内置 + `.yocim/commands.json` 扩展，输出流式展示）、`run_tests`（自动识别 vitest/jest/pytest/go，只回结构化摘要）、`run_typecheck` / `run_lint`（file:line:col 紧凑格式）、`get_git_diff`（未提交 diff 自审）、`update_plan`（结构化审批体验：写文件审批卡内置着色 diff 预览（edit_file 多块补丁一次预览全部改动）；支持「会话内允许 / 项目内允许」记住规则跳过后续同类审批（白名单与危险命令拦截不可被规则绕过，审计记录规则名）；审批通过后执行前校验文件未被外部修改
-  任务计划：计划卡实时展示进度，每轮自动回传给模型）
-- 写文件、应用补丁与命令执行强制审批；路径守卫、命令白名单、危险命令拦截
-- 审计面板：统计卡（总调用/失败/批准/拒绝）、工具 / 结果 / 审批 / 时间范围 / 关键字筛选、详情抽屉（参数、结果、runId、callId、耗时）、实时模式、JSON / CSV 导出（持久化 SQLite，DB v4）
-- 源代码管理：系统 Git 检测（缺失时提示安装）、已暂存 / 更改 / 未跟踪分组、暂存与取消暂存、提交与全部提交、Diff 阅读、分支切换与新建、拉取（`--ff-only`）/ 推送 / 发布分支、放弃更改二次确认、Git 输出面板（敏感信息脱敏）、活动栏变更数徽标
-- 运行任务：自动识别 npm / pnpm / yarn 并列出 `package.json` scripts，`.yocim/tasks.json` 可配自定义命令；输出流式追加、可停止（杀进程树）、首次执行自定义命令需确认完整命令
-- Node.js 调试：`.yocim/launch.json`（含 `${workspaceFolder}` / `${file}` / `${env:NAME}` 变量）与 `package.json` `main` 零配置启动；编辑器 glyph margin 断点与条件断点、继续 / 暂停 / 单步跳过 / 进入 / 跳出 / 重启 / 停止、变量树、监视表达式、调用堆栈、调试控制台、当前执行行高亮；首次启动确认完整命令，输出脱敏
-- 远程工作区（WSL / SSH）：目标管理与环境探测、连接后直接在右侧面板浏览/编辑/搜索/Git/运行；WSL 走 `\\wsl.localhost` UNC 路径 + 发行版内 `wsl.exe --exec`，SSH 走内置 `ssh2`（SFTP 文件 + 远端 exec），主机指纹 TOFU 校验、口令经 `safeStorage` 加密、连接状态与错误在状态栏/面板可见
-- 扩展管理（第一层，不执行扩展代码）：本地目录 / `.vsix` / VS Code 扩展目录导入、启用禁用、卸载、详情与理由；兼容性分级「仅声明式 / 部分兼容 / 不兼容」，不兼容扩展默认禁用；声明式片段贡献会注册为编辑器补全
-- 会话/消息/设置/项目状态持久化，重启恢复；会话重命名、删除、导出 Markdown
-- 主进程文件日志与崩溃处理
-
-## 界面与快捷键
-
-- 左侧：顶部品牌与「新会话」按钮，下方搜索、工作区计数、置顶区与项目分组；右键会话可重命名 / 导出 / 置顶 / 归档 / 迁移 / 删除，右键项目可新建会话 / 重命名。
-- 中间：空会话显示欢迎态与大输入卡；流式回复可停止；工具步骤折叠为「已执行 N 个步骤 · Xs」，展开查看参数与结果；审批卡内联并在待审批时自动展开；失败显示可重试错误卡。
-- 右侧：8 个图标视图（文件、搜索、编辑器、审计、源代码管理、扩展、运行调试、远程）；点击文件自动切到编辑器，搜索命中可跳转并选中。
-- 左右栏之间的分隔条可拖动调节宽度，双击恢复默认；聚焦分隔条后也可用方向键微调。
-- 标题栏「应用」菜单：切换工作区、切换主题、设置；「编辑」菜单：新建会话、搜索会话、折叠工作区、状态栏。
-- 快捷键（macOS 上为 `Cmd`）：
-
-| 快捷键         | 作用               |
-| -------------- | ------------------ |
-| `Ctrl+B`       | 折叠 / 展开会话栏  |
-| `Ctrl+Shift+B` | 折叠 / 展开工作区  |
-| `Ctrl+N`       | 新建会话           |
-| `Ctrl+K`       | 聚焦会话搜索       |
-| `Ctrl+J`       | 展开 / 收起状态栏  |
-| `Ctrl+S`       | 保存当前编辑器文件 |
-
-## 审批模式
-
-输入卡左下角可切换 Agent 工具审批模式，切换后写入设置并在重启后保留：
-
-| 模式     | 行为                                 |
-| -------- | ------------------------------------ |
-| 手动模式 | 写文件与命令执行都需要审批（默认）   |
-| 自动模式 | 自动批准写文件，命令执行仍需审批     |
-| 开放模式 | 自动批准写文件与命令，不再弹出审批卡 |
-
-开放模式仍受工作区路径守卫、命令白名单与危险命令拦截约束，审批模式不会绕过这些安全边界。
-
-## 环境要求
-
-- Node.js >= 22.12（本仓库在 Node 24 / npm 11 验证）
-- Windows 10+（主要验证平台）、macOS、Linux
-- 无需原生编译工具链（数据库使用 Electron/Node 内置 `node:sqlite`）
-
-## 安装与开发
+## Install & Develop
 
 ```powershell
 npm install
 npm run dev
 ```
 
-若 Electron 运行时下载失败（国内网络常见），使用镜像补齐：
+If the Electron runtime download fails (common on some networks), fill it in using a mirror:
 
 ```powershell
 $env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'
 node node_modules/electron/install.js
 ```
 
-常用脚本：
+| Command               | Description                                                              |
+| --------------------- | ------------------------------------------------------------------------ |
+| `npm run dev`         | Start the dev window (Vite HMR)                                          |
+| `npm run typecheck`   | TypeScript / Vue type checking                                           |
+| `npm run lint`        | ESLint                                                                   |
+| `npm run test`        | Vitest unit tests                                                        |
+| `npm run build`       | Build main / preload / renderer                                          |
+| `npx playwright test` | Electron e2e smoke tests (build first)                                   |
+| `npm run e2e`         | Build + e2e                                                              |
+| `npm run package`     | Build an installer for the current platform (`release/<version>/`)       |
+| `npm run package:dir` | Build an unpacked directory only (debugging packaging)                   |
 
-| 命令                  | 说明                                              |
-| --------------------- | ------------------------------------------------- |
-| `npm run dev`         | 启动开发窗口（Vite HMR）                          |
-| `npm run typecheck`   | TypeScript / Vue 类型检查                         |
-| `npm run lint`        | ESLint                                            |
-| `npm run test`        | Vitest 单元测试                                   |
-| `npm run build`       | 构建 main / preload / renderer                    |
-| `npx playwright test` | Electron e2e 冒烟（需先 build）                   |
-| `npm run e2e`         | build + e2e                                       |
-| `npm run package`     | 生成当前平台安装包（输出到 `release/<version>/`） |
-| `npm run package:dir` | 仅生成解包目录（调试打包）                        |
+## Model Configuration
 
-## 模型配置
+The **Mock Provider** is used by default and makes no network requests. Demo commands: `/tool read <path>` (no approval), `/tool write <path>` and `/tool command <command>` (trigger approval).
 
-默认使用 **Mock Provider**，不访问网络。支持 `/tool` 演示命令：
+To connect a real model: title bar "Application" → "Settings…" → "Models" → "Add Provider", pick a preset, then fill in the Base URL, model list, and API key. Saving switches to that provider automatically. Use the model button at the bottom-right of the composer to switch providers/models at any time.
 
-- `/tool read <path>`：调用 `read_file`（免审批）
-- `/tool write <path>`：调用 `write_file`（触发审批）
-- `/tool command <command>`：调用 `run_command`（触发审批）
+Built-in endpoints:
 
-接入真实模型：
-
-1. 点击标题栏「应用」→「设置…」；
-2. 切到「模型」分页，点击「添加提供商」，选择预设（DeepSeek / Qwen / BigModel / Kimi / MiniMax / 腾讯云 / 阿里云 / 硅基流动 / 火山引擎 / ChatGPT / Claude / Gemini / Grok / 本地 Ollama / 自定义）；
-3. 按需调整 Base URL、模型列表与 API Key，保存后自动切换为该 Provider；
-4. 在中间输入卡右下角的模型按钮中切换 Provider / 模型。
-
-### 设置分页
-
-| 分页   | 能做什么                                                                               |
-| ------ | -------------------------------------------------------------------------------------- |
-| 账单   | 查 DeepSeek 官方余额；按 provider + 模型统计 token 用量，用手填的输入/输出单价估算费用 |
-| 模型   | 管理 Provider、Base URL、模型列表与 API Key                                            |
-| 搜索   | 填 Tavily API Key，给 Agent 开放 `web_search` 工具；可设最大结果条数、搜索强度、主题   |
-| 外观   | 主题、字号、自动换行、代码缩略图                                                       |
-| 存储   | 查看数据目录与占用，并可自定义目录（重启后生效）                                       |
-| 浏览器 | 浏览器自动化的占位页，等功能落地                                                       |
-
-联网搜索需要 Tavily Key（在 Tavily 控制台申请）。开启后 Agent 会多出 `web_search` 工具，
-用来查最新的文档、版本号、报错含义等本地代码里查不到的信息；没配 Key 时该工具不会出现在工具列表里。
-
-内置端点：
-
-| Provider          | Base URL                                            | 协议                        |
+| Provider          | Base URL                                            | Protocol                    |
 | ----------------- | --------------------------------------------------- | --------------------------- |
-| DeepSeek          | `https://api.deepseek.com/v1`                       | OpenAI 兼容                 |
-| Qwen（通义千问）  | `https://dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI 兼容                 |
-| BigModel（智谱）  | `https://open.bigmodel.cn/api/paas/v4`              | OpenAI 兼容                 |
-| Kimi（Moonshot）  | `https://api.moonshot.cn/v1`                        | OpenAI 兼容                 |
-| MiniMax           | `https://api.minimaxi.com/v1`                       | OpenAI 兼容                 |
-| 腾讯云（混元）    | `https://api.hunyuan.cloud.tencent.com/v1`          | OpenAI 兼容                 |
-| 阿里云（百炼）    | `https://dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI 兼容                 |
-| 硅基流动          | `https://api.siliconflow.cn/v1`                     | OpenAI 兼容                 |
-| 火山引擎（方舟）  | `https://ark.cn-beijing.volces.com/api/v3`          | OpenAI 兼容                 |
-| ChatGPT（OpenAI） | `https://api.openai.com/v1`                         | OpenAI 兼容                 |
+| DeepSeek          | `https://api.deepseek.com/v1`                       | OpenAI-compatible           |
+| Qwen (Tongyi)     | `https://dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI-compatible           |
+| BigModel (Zhipu)  | `https://open.bigmodel.cn/api/paas/v4`              | OpenAI-compatible           |
+| Kimi (Moonshot)   | `https://api.moonshot.cn/v1`                        | OpenAI-compatible           |
+| MiniMax           | `https://api.minimaxi.com/v1`                       | OpenAI-compatible           |
+| Tencent Cloud     | `https://api.hunyuan.cloud.tencent.com/v1`          | OpenAI-compatible           |
+| Alibaba Cloud     | `https://dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI-compatible           |
+| SiliconFlow       | `https://api.siliconflow.cn/v1`                     | OpenAI-compatible           |
+| Volcano Engine    | `https://ark.cn-beijing.volces.com/api/v3`          | OpenAI-compatible           |
+| ChatGPT (OpenAI)  | `https://api.openai.com/v1`                         | OpenAI-compatible           |
 | Claude            | `https://api.anthropic.com/v1`                      | Anthropic Messages          |
 | Gemini            | `https://generativelanguage.googleapis.com/v1beta`  | Gemini GenerateContent      |
-| Grok              | `https://api.x.ai/v1`                               | OpenAI 兼容                 |
-| 本地 Ollama       | `http://localhost:11434/v1`                         | OpenAI 兼容（无需 Key）     |
-| 自定义            | 自行填写                                            | OpenAI / Anthropic / Gemini |
+| Grok              | `https://api.x.ai/v1`                               | OpenAI-compatible           |
+| Local Ollama      | `http://localhost:11434/v1`                         | OpenAI-compatible (no key)  |
+| Custom            | Enter your own                                      | OpenAI / Anthropic / Gemini |
 
-API Key 处理：
+Settings tabs: Billing (DeepSeek balance + token usage by provider/model with hand-entered unit prices), Models, Search (Tavily key — enables `web_search`; the tool is hidden when no key is set), Image Generation (Zhipu key, free `cogview-3-flash` by default — enables `generate_image`, with a custom OpenAI-image-format endpoint option), Appearance (theme / font size / word wrap / code minimap), Storage (view and change the data directory, effective after restart), and Browser (placeholder).
 
-- 每个 Provider 的 Key 独立通过 Electron `safeStorage` 加密后存入 `settings`，不会明文落库；
-- 也可用环境变量回退（如 `DEEPSEEK_API_KEY`、`DASHSCOPE_API_KEY`、`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`GEMINI_API_KEY`、`XAI_API_KEY`、`TAVILY_API_KEY` 等）；
-- renderer 只能读取 `hasApiKey`，无法拿到明文。
+API key handling: each provider's key is encrypted with Electron `safeStorage` before being stored in `settings` — never in plaintext; the renderer can only read `hasApiKey`. Environment variables are also supported as a fallback (`DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, `TAVILY_API_KEY`, `ZHIPU_API_KEY`, etc.).
 
-## 安全说明
+## Security
 
-- renderer 无 Node/fs/child_process 权限，只能经 preload 白名单 API 调用主进程；
-- IPC handler 校验 `senderFrame` 来源，非应用页面返回 `E_FORBIDDEN`；
-- 所有文件路径经 realpath 守卫，阻止 `..`、绝对路径、符号链接逃逸；
-- 写文件/命令必须审批；命令受白名单与危险模式限制（超时 60s、输出截断 64KB）；
-- 审计日志只追加，记录时间、工具、参数摘要、结果与审批状态；
-- Git 操作全部经主进程 `GitService` 以参数数组 `spawn('git', args)` 调用，不经过 shell；不提供 force push、不跳过 hooks（无 `--no-verify`），拉取默认 `--ff-only`，Git 输出日志对 URL 凭据与 token 脱敏，应用不保存 Git 凭据（交给系统 Git Credential Manager）；
-- 任务与调试启动同样以参数数组 `spawn`（Windows 上 `.cmd`/`.bat` 经 `cmd.exe /d /s /c` 包裹），自定义任务与启动配置首次执行都要用户确认完整命令；`launch.json` 的 `program`/`cwd` 不得越出工作区，调试输出与命令日志统一脱敏、单任务输出上限 512KB、最多 4 个并发任务；
-- 远程工作区：WSL 目标经 `wsl.exe --exec` 执行，参数按数组传递、不经 shell；SSH 使用内置 `ssh2`，认证支持私钥/密码/ssh-agent，口令只在主进程用 `safeStorage` 加密保存（renderer 只知 `hasSecret`），主机指纹按 TOFU 首次确认、之后变化即阻断；远端路径全部做 `..` 穿越校验；远程调试与批量替换在 UI 层显式禁用；
-- 扩展第一层**不执行任何扩展代码**：只解析 `yocim-extension.json` / VS Code `package.json` 的声明式贡献；VSIX 用内置最小 zip 读取器解包，拒绝 zip64 与路径穿越，声明了 `main`/`browser`、`debuggers` 或扩展依赖的扩展判为「不兼容」并保持禁用；
-- 详见 [docs/realized(已实现)/SECURITY.md](docs/realized%28已实现%29/SECURITY.md)。
+- The renderer has no Node/fs/child_process access and can only call the main process through the preload allowlist; IPC handlers validate `senderFrame` and return `E_FORBIDDEN` for non-application pages.
+- All file paths go through a realpath guard that blocks `..`, absolute paths, and symlink escapes. File writes and commands require approval, and commands are restricted by an allowlist and dangerous-pattern checks (60s timeout, 64KB output truncation).
+- The audit log is append-only, recording time, tool, argument summary, result, and approval status.
+- Git operations go through the main-process `GitService` using `spawn('git', args)` with no shell. No force push, no skipping hooks, pull defaults to `--ff-only`, Git output is redacted for URLs/credentials/tokens, and credentials are delegated to the system Git Credential Manager.
+- Tasks and debug sessions also use argument-array `spawn` (on Windows, `.cmd`/`.bat` are wrapped with `cmd.exe /d /s /c`). Custom tasks and launch configs must be confirmed in full on first run; `launch.json` `program`/`cwd` may not escape the workspace; output is redacted, capped at 512KB per task, with at most 4 concurrent tasks.
+- Remote workspaces: WSL runs via `wsl.exe --exec` with array arguments and no shell. SSH uses the built-in `ssh2` with private key / password / ssh-agent auth; secrets are only saved encrypted with `safeStorage` (the renderer knows only `hasSecret`); host fingerprints are TOFU-verified on first use and blocked if they change; remote paths are checked for `..` traversal. Remote debugging and bulk replace are explicitly disabled in the UI.
+- The first extension layer **executes no extension code**: only declarative contributions are parsed. VSIX archives are unpacked with a built-in minimal zip reader that rejects zip64 and path traversal; extensions declaring `main`/`browser`, `debuggers`, or extension dependencies are marked "incompatible" and stay disabled.
 
-## 数据位置
+## Data Location
 
-位于 Electron `userData` 目录（Windows 通常为 `%APPDATA%\YOCIM AGENT`）：
+Under Electron's `userData` directory (on Windows typically `%APPDATA%\YOCIM AGENT`):
 
-- `yocim.db`：项目、会话、消息、工具调用、设置、审计、token 用量
-- `workspace.json`：上次打开的工作区
-- `logs/main.log`：主进程日志（超过 2MB 轮转为 `main.old.log`）
+- `yocim.db`: projects, sessions, messages, tool calls, settings, audit, and token usage
+- `workspace.json`: the last opened workspace
+- `logs/main.log`: main-process log (rotates to `main.old.log` above 2MB)
 
-在「设置 → 存储」里可以改成自定义目录（数据库、日志、时间线快照、扩展一起搬）；改动需要重启应用才生效。
+"Settings → Storage" can point to a custom directory (database, logs, timeline snapshots, and extensions move together); the change takes effect after a restart.
 
-## 打包
+## Packaging
 
 ```powershell
 $env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'
@@ -246,36 +145,7 @@ $env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-bu
 npm run package
 ```
 
-- Windows 产物：`release/0.1.0/YOCIM AGENT-0.1.0-x64-setup.exe` 与 `release/0.1.0/win-unpacked/`
-- 应用图标：`build/icon.png`（由 `public/image/yocim.png` 复制）
-- 内置 ripgrep：`resources/ripgrep/rg.exe`（14.1.1）经 `extraResources` 放到 `resources/ripgrep/`，缺失时回退 PATH 里的 `rg` 与内置 JS 搜索；升级见该目录的 README
-- 运行依赖：`zod` 与 `ssh2`（含 `asn1` / `bcrypt-pbkdf` / `tweetnacl` / `safer-buffer`）以 `externalizeDepsPlugin` 保持外置并打进 asar；`cpu-features` 是 ssh2 的可选原生加速依赖，未编译也不打包，ssh2 会自动回退纯 JS
-- `npmRebuild: false`：本项目没有需要按 Electron ABI 重编译的原生模块，同时规避「项目路径含空格时 node-gyp 失败」
-- 当前未配置代码签名；安装时可能出现 SmartScreen 提示
-
-发布前请按 [docs/realized(已实现)/RELEASE_CHECKLIST.md](docs/realized%28已实现%29/RELEASE_CHECKLIST.md) 执行检查。
-
-## 文档
-
-- [多模型 Provider 接入方案](docs/realized%28已实现%29/MULTI_PROVIDER_PLAN.md)：Provider 调研、协议、数据模型与实施记录
-- 已实现阶段（归档）：
-  - [WORKSPACE_PANEL_PLAN](docs/realized%28已实现%29/WORKSPACE_PANEL_PLAN.md)：图标活动栏与 8 个视图（文件 / 搜索 / 编辑器 / 审计 / 源代码管理 / 扩展 / 调试 / 远程），P0–P6 实施记录与交接
-  - [UI_IMPLEMENTATION](docs/realized%28已实现%29/UI_IMPLEMENTATION.md)：三栏布局、项目化会话、时间线、主题与测试
-  - [UI_OPTIMIZATION_PLAN](docs/realized%28已实现%29/UI_OPTIMIZATION_PLAN.md)：DeepSeek Harness 风格 UI 重构计划与验收
-  - [PLAN](docs/realized%28已实现%29/PLAN.md)：范围、阶段、风险
-  - [ARCHITECTURE](docs/realized%28已实现%29/ARCHITECTURE.md)：进程分层、IPC、事件协议、数据模型
-  - [ACCEPTANCE](docs/realized%28已实现%29/ACCEPTANCE.md)：阶段与总验收清单
-  - [SECURITY](docs/realized%28已实现%29/SECURITY.md)：威胁模型与安全边界
-  - [RELEASE_CHECKLIST](docs/realized%28已实现%29/RELEASE_CHECKLIST.md)：发布检查清单
-
-## 已知限制
-
-- MVP 为单窗口单工作区；
-- 工具步骤时间线为会话内存态，重启后恢复消息文本，工具调用记录可在审计面板查询；
-- 默认为 Mock Provider，真实模型需要自备兼容端点；
-- Monaco 全量语言包使 renderer 体积较大（后续可按需裁剪）；
-- `node:sqlite` 仍标注为实验性 API，但随 Electron 45 / Node 24 内置可用；
-- 调试只支持 Node.js（launch，不含 attach），协议是自研 CDP 适配器而非 DAP；运行输出为只读面板，不提供终端与 stdin 交互；
-- 扩展仅第一层：不执行扩展代码，语法/主题贡献只展示不生效，命令/菜单/快捷键未接入命令面板；
-- 远程工作区：WSL 成功路径依赖本机 WSL（发行版不存在/被策略拦截时给出可读提示）；SSH 已实现 SFTP 文件与远端 Git/搜索/任务，但不支持远程调试、批量替换、「仅在打开的文件中搜索」，Agent 工具仍只作用于本地工作区；
-- 未配置签名与公证，暂不适合直接面向最终用户分发。
+- Windows artifacts: `release/0.1.0/YOCIM AGENT-0.1.0-x64-setup.exe` and `release/0.1.0/win-unpacked/`
+- Bundled ripgrep: `resources/ripgrep/rg.exe` (14.1.1) placed there via `extraResources`; falls back to `rg` on PATH and the built-in JS search when missing
+- Runtime dependencies: `zod` and `ssh2` (with `asn1` / `bcrypt-pbkdf` / `tweetnacl` / `safer-buffer`) are externalized and packed into the asar; `cpu-features` is an optional native accelerator that is neither compiled nor packaged; `npmRebuild: false` avoids node-gyp failures when the project path contains spaces
+- App icon: `build/icon.png` (copied from `public/image/yocim.png`). Code signing is not configured yet, so SmartScreen may warn during installation.

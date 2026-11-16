@@ -9,6 +9,7 @@ import type {
   SettingsSetActiveRequest,
   SettingsSetApprovalModeRequest,
   SettingsSetContextWindowRequest,
+  SettingsSetImageRequest,
   SettingsSetPricingRequest,
   SettingsSetReasoningEffortRequest,
   SettingsSetSearchRequest,
@@ -23,9 +24,12 @@ import {
   type PublicProvider
 } from '../../shared/providers'
 import {
+  IMAGE_SETTINGS_DEFAULTS,
+  normalizeImageSettings,
   normalizePricing,
   normalizeSearchSettings,
   normalizeStorageSettings,
+  type ImageSettings,
   type ModelPricing,
   type SearchSettings,
   type StorageSettings
@@ -49,9 +53,11 @@ const KEY_ACTIVE_PROVIDER = 'activeProviderId'
 const KEY_ACTIVE_MODEL = 'activeModel'
 const KEY_APPROVAL_MODE = 'approvalMode'
 const KEY_SEARCH = 'search'
+const KEY_IMAGE = 'image'
 const KEY_PRICING = 'pricing'
 const KEY_STORAGE = 'storage'
 const KEY_TAVILY_API_KEY = 'tavilyApiKey'
+const KEY_IMAGE_API_KEY = 'imageApiKey'
 const KEY_LEGACY_PROVIDER = 'provider'
 const KEY_LEGACY_BASE_URL = 'baseUrl'
 const KEY_LEGACY_MODEL = 'model'
@@ -131,6 +137,7 @@ export class SettingsService {
       activeModel,
       approvalMode: this.getApprovalMode(),
       search: this.getSearchSettings(),
+      image: this.getImageSettings(),
       pricing: this.getPricing(),
       storage: this.getStorageSettings()
     }
@@ -188,6 +195,56 @@ export class SettingsService {
   /** 清除 Tavily API Key（设置面板的「清除」按钮） */
   clearSearchApiKey(): PublicSettings {
     this.repo.delete(KEY_TAVILY_API_KEY)
+    return this.getPublic()
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 生图（智谱 cogview-3-flash / 自定义 API）                             */
+  /* ------------------------------------------------------------------ */
+
+  getImageSettings(): ImageSettings {
+    const stored = normalizeImageSettings(this.repo.get(KEY_IMAGE))
+    return { ...stored, hasApiKey: Boolean(this.getImageApiKey()) }
+  }
+
+  /** 供 generate_image 工具使用：未启用或没配 Key 时返回 null */
+  getImageConfig(): {
+    apiKey: string
+    baseUrl: string
+    model: string
+    size: ImageSettings['size']
+  } | null {
+    const settings = this.getImageSettings()
+    if (!settings.enabled || !settings.hasApiKey) return null
+    return {
+      apiKey: this.getImageApiKey() ?? '',
+      baseUrl: settings.baseUrl,
+      model: settings.model,
+      size: settings.size
+    }
+  }
+
+  setImage(input: SettingsSetImageRequest): PublicSettings {
+    const current = normalizeImageSettings(this.repo.get(KEY_IMAGE))
+    const next: ImageSettings = {
+      ...current,
+      enabled: input.enabled,
+      provider: input.provider,
+      baseUrl: input.baseUrl.trim() || IMAGE_SETTINGS_DEFAULTS.baseUrl,
+      model: input.model.trim() || IMAGE_SETTINGS_DEFAULTS.model,
+      size: input.size,
+      hasApiKey: current.hasApiKey
+    }
+    this.repo.set(KEY_IMAGE, next)
+    if (input.apiKey !== undefined) {
+      this.storeSecret(KEY_IMAGE_API_KEY, input.apiKey.trim())
+    }
+    return this.getPublic()
+  }
+
+  /** 清除生图 API Key（设置面板的「清除」按钮） */
+  clearImageApiKey(): PublicSettings {
+    this.repo.delete(KEY_IMAGE_API_KEY)
     return this.getPublic()
   }
 
@@ -548,6 +605,21 @@ export class SettingsService {
       }
     }
     const envValue = this.env?.['TAVILY_API_KEY']
+    if (typeof envValue === 'string' && envValue.trim()) return envValue.trim()
+    return null
+  }
+
+  private getImageApiKey(): string | null {
+    const encrypted = this.repo.get(KEY_IMAGE_API_KEY)
+    if (typeof encrypted === 'string' && this.crypto) {
+      try {
+        const value = this.crypto.decrypt(encrypted)
+        if (value.trim()) return value.trim()
+      } catch {
+        // 解密失败时继续尝试环境变量
+      }
+    }
+    const envValue = this.env?.['ZHIPU_API_KEY']
     if (typeof envValue === 'string' && envValue.trim()) return envValue.trim()
     return null
   }

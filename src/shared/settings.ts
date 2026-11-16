@@ -112,6 +112,99 @@ export function normalizeSearchSettings(value: unknown): SearchSettings {
 }
 
 /* -------------------------------------------------------------------------- */
+/* 生图（智谱 cogview-3-flash / 自定义 API）                                   */
+/* -------------------------------------------------------------------------- */
+
+/** 生图服务来源：智谱免费模型或自定义兼容端点 */
+export const IMAGE_PROVIDERS = ['zhipu', 'custom'] as const
+export type ImageProvider = (typeof IMAGE_PROVIDERS)[number]
+
+export const IMAGE_PROVIDER_LABELS: Record<ImageProvider, string> = {
+  zhipu: '智谱（cogview-3-flash，免费）',
+  custom: '自定义 API'
+}
+
+/** cogview-3-flash 支持的分辨率；自定义 API 工具侧可传其它尺寸，设置默认取其一 */
+export const IMAGE_SIZES = [
+  '1024x1024',
+  '768x1344',
+  '864x1152',
+  '1344x768',
+  '1152x864',
+  '1440x720',
+  '720x1440'
+] as const
+export type ImageSize = (typeof IMAGE_SIZES)[number]
+
+/** 智谱图像生成端点（默认） */
+export const ZHIPU_IMAGE_ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/images/generations'
+/** 智谱免费生图模型 */
+export const DEFAULT_IMAGE_MODEL = 'cogview-3-flash'
+
+export const IMAGE_GEN_LIMITS = {
+  /** 单次 prompt 最大长度（字符） */
+  maxPromptLength: 400,
+  /** 生成请求超时（毫秒，生图比搜索慢） */
+  timeoutMs: 60_000,
+  /** 工具返回文本上限（字符） */
+  maxToolOutputChars: 4 * 1024
+} as const
+
+export interface ImageSettings {
+  /** 是否允许 Agent 调用生图 */
+  enabled: boolean
+  /** 服务来源 */
+  provider: ImageProvider
+  /** 是否已保存 API Key（明文不外泄） */
+  hasApiKey: boolean
+  /** 请求端点（zhipu 时固定为智谱端点） */
+  baseUrl: string
+  /** 模型名（zhipu 时默认为 cogview-3-flash） */
+  model: string
+  /** 默认分辨率 */
+  size: ImageSize
+}
+
+export const IMAGE_SETTINGS_DEFAULTS: ImageSettings = {
+  enabled: false,
+  provider: 'zhipu',
+  hasApiKey: false,
+  baseUrl: ZHIPU_IMAGE_ENDPOINT,
+  model: DEFAULT_IMAGE_MODEL,
+  size: '1024x1024'
+}
+
+export function isImageProvider(value: unknown): value is ImageProvider {
+  return value === 'zhipu' || value === 'custom'
+}
+
+export function isImageSize(value: unknown): value is ImageSize {
+  return typeof value === 'string' && (IMAGE_SIZES as readonly string[]).includes(value)
+}
+
+/** 把任意来源的生图设置收敛成合法值 */
+export function normalizeImageSettings(value: unknown): ImageSettings {
+  const unwrapped = unwrapJson(value)
+  const raw = (typeof unwrapped === 'object' && unwrapped !== null ? unwrapped : {}) as Record<
+    string,
+    unknown
+  >
+  const provider = isImageProvider(raw['provider'])
+    ? raw['provider']
+    : IMAGE_SETTINGS_DEFAULTS.provider
+  const baseUrl = typeof raw['baseUrl'] === 'string' ? raw['baseUrl'].trim() : ''
+  const model = typeof raw['model'] === 'string' ? raw['model'].trim() : ''
+  return {
+    enabled: raw['enabled'] === true,
+    provider,
+    hasApiKey: raw['hasApiKey'] === true,
+    baseUrl: baseUrl || IMAGE_SETTINGS_DEFAULTS.baseUrl,
+    model: model || IMAGE_SETTINGS_DEFAULTS.model,
+    size: isImageSize(raw['size']) ? raw['size'] : IMAGE_SETTINGS_DEFAULTS.size
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* 模型价格（账单估算）                                                        */
 /* -------------------------------------------------------------------------- */
 

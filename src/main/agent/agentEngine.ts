@@ -303,7 +303,8 @@ export async function runAgentTurn(
         ...nextMeta(),
         callId: call.id,
         ok: outcome.ok,
-        summary: outcome.summary
+        summary: outcome.summary,
+        images: outcome.images
       })
       const toolMessage: AgentMessage = {
         role: 'tool',

@@ -8,7 +8,7 @@ import type { AgentStep } from './agentSteps'
 
 /** 工具图标分类：决定时间线里用哪个图标。 */
 export type ToolIconKey =
-  'read' | 'write' | 'edit' | 'folder' | 'search' | 'terminal' | 'plan' | 'git'
+  'read' | 'write' | 'edit' | 'folder' | 'search' | 'terminal' | 'plan' | 'git' | 'image'
 
 const TOOL_ICON_MAP: Record<string, ToolIconKey> = {
   read_file: 'read',
@@ -21,7 +21,8 @@ const TOOL_ICON_MAP: Record<string, ToolIconKey> = {
   run_typecheck: 'terminal',
   run_lint: 'terminal',
   update_plan: 'plan',
-  get_git_diff: 'git'
+  get_git_diff: 'git',
+  generate_image: 'image'
 }
 
 /** 按工具名取图标分类；未知工具回落到终端图标。 */

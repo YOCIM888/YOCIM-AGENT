@@ -19,7 +19,8 @@ describe('tool definitions', () => {
       'run_lint',
       'get_git_diff',
       'update_plan',
-      'web_search'
+      'web_search',
+      'generate_image'
     ])
   })
 
@@ -29,6 +30,7 @@ describe('tool definitions', () => {
     expect(isWriteTool('run_lint')).toBe(false)
     expect(isWriteTool('get_git_diff')).toBe(false)
     expect(isWriteTool('web_search')).toBe(false)
+    expect(isWriteTool('generate_image')).toBe(false)
   })
 
   it('treats edit_file as a write tool requiring approval', () => {
@@ -81,6 +83,15 @@ describe('summarizeToolArgs', () => {
     expect(summary).toContain('export')
     expect(summary).toContain('in src/**')
     expect(summary).toContain('正则')
+  })
+
+  it('describes the generate_image prompt and size', () => {
+    const summary = summarizeToolArgs(
+      'generate_image',
+      JSON.stringify({ prompt: '一只猫', size: '1024x1024' })
+    )
+    expect(summary).toContain('一只猫')
+    expect(summary).toContain('1024x1024')
   })
 
   it('clips long commands and falls back to raw text on bad JSON', () => {

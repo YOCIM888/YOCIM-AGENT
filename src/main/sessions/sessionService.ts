@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import { app, dialog } from 'electron'
 import { AppError } from '../../shared/errors'
 import type {
+  ProjectIdRequest,
+  ProjectRemoveResult,
   ProjectRenameRequest,
   SessionArchiveRequest,
   SessionCreateRequest,
@@ -48,6 +50,12 @@ export class SessionService {
     const updated = this.deps.projects.rename(input.projectId, name)
     if (!updated) throw new AppError('E_NOT_FOUND', '项目不存在')
     return updated
+  }
+
+  removeProject(input: ProjectIdRequest): ProjectRemoveResult {
+    const project = this.deps.projects.get(input.projectId)
+    if (!project) throw new AppError('E_NOT_FOUND', '项目不存在')
+    return this.deps.projects.delete(project.id)
   }
 
   ensureProjectForCurrentWorkspace(): ProjectSummary | null {

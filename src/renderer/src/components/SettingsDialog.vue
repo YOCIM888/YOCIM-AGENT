@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import AppearancePanel from './settings/AppearancePanel.vue'
 import BillingPanel from './settings/BillingPanel.vue'
 import BrowserPanel from './settings/BrowserPanel.vue'
+import ImagePanel from './settings/ImagePanel.vue'
 import ModelsPanel from './settings/ModelsPanel.vue'
 import SearchPanel from './settings/SearchPanel.vue'
 import StoragePanel from './settings/StoragePanel.vue'
@@ -11,7 +12,7 @@ const emit = defineEmits<{
   close: []
 }>()
 
-type TabId = 'billing' | 'models' | 'search' | 'appearance' | 'storage' | 'browser'
+type TabId = 'billing' | 'models' | 'search' | 'image' | 'appearance' | 'storage' | 'browser'
 
 const active = ref<TabId>('models')
 
@@ -23,6 +24,11 @@ const ICONS: Record<TabId, string[]> = {
     '<path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>'
   ],
   search: ['<circle cx="11" cy="11" r="6"/>', '<path d="M20 20l-3.7-3.7"/>'],
+  image: [
+    '<rect x="3" y="4" width="18" height="16" rx="2"/>',
+    '<circle cx="8.5" cy="9" r="1.6"/>',
+    '<path d="m4 17 5-5 3.2 3.2L15 12l5 5"/>'
+  ],
   appearance: [
     '<path d="M12 3.5l1.85 4.5 4.5 1.85-4.5 1.85L12 16.2l-1.85-4.5L5.65 9.85l4.5-1.85z"/>',
     '<path d="M18 15.5l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7z"/>'
@@ -43,6 +49,7 @@ const tabs: Array<{ id: TabId; label: string }> = [
   { id: 'billing', label: '账单' },
   { id: 'models', label: '模型' },
   { id: 'search', label: '搜索' },
+  { id: 'image', label: '生图' },
   { id: 'appearance', label: '外观' },
   { id: 'storage', label: '存储' },
   { id: 'browser', label: '浏览器' }
@@ -90,6 +97,7 @@ const tabs: Array<{ id: TabId; label: string }> = [
           <ModelsPanel v-if="active === 'models'" @close="emit('close')" />
           <BillingPanel v-else-if="active === 'billing'" @close="emit('close')" />
           <SearchPanel v-else-if="active === 'search'" @close="emit('close')" />
+          <ImagePanel v-else-if="active === 'image'" @close="emit('close')" />
           <AppearancePanel v-else-if="active === 'appearance'" @close="emit('close')" />
           <StoragePanel v-else-if="active === 'storage'" @close="emit('close')" />
           <BrowserPanel v-else-if="active === 'browser'" @close="emit('close')" />

@@ -55,7 +55,9 @@ import type {
   FsWriteFileInput,
   FsWriteFileResult,
   GitCheckoutInput,
+  GitCommitDetailInput,
   GitCommitInput,
+  GitGraphInput,
   GitDiffInput,
   GitPathsInput,
   IpcResult,
@@ -67,6 +69,8 @@ import type {
   SearchReplaceResult,
   SearchStartInput,
   SearchStartResult,
+  ProjectIdInput,
+  ProjectRemoveResult,
   ProjectRenameInput,
   ProviderDeleteInput,
   ProviderSaveInput,
@@ -85,6 +89,7 @@ import type {
   SettingsSetActiveInput,
   SettingsSetApprovalModeInput,
   SettingsSetContextWindowInput,
+  SettingsSetImageInput,
   SettingsSetPricingInput,
   SettingsSetReasoningEffortInput,
   SettingsSetSearchInput,
@@ -123,8 +128,10 @@ import type { TaskEvent } from '../shared/tasks'
 import type { ProjectSummary, SessionSummary } from '../shared/session'
 import type {
   GitBranches,
+  GitCommitDetail,
   GitCommitResult,
   GitDiffResult,
+  GitGraph,
   GitLogEntry,
   GitOperationResult,
   GitStatus
@@ -239,7 +246,10 @@ const api: YocimApi = {
     checkout: (input: GitCheckoutInput) =>
       invoke<IpcResult<GitStatus>>(IPC_CHANNELS.gitCheckout, input),
     init: () => invoke<IpcResult<GitStatus>>(IPC_CHANNELS.gitInit),
-    output: () => invoke<IpcResult<GitLogEntry[]>>(IPC_CHANNELS.gitOutput)
+    output: () => invoke<IpcResult<GitLogEntry[]>>(IPC_CHANNELS.gitOutput),
+    graph: (input: GitGraphInput) => invoke<IpcResult<GitGraph>>(IPC_CHANNELS.gitGraph, input),
+    commitDetail: (input: GitCommitDetailInput) =>
+      invoke<IpcResult<GitCommitDetail>>(IPC_CHANNELS.gitCommitDetail, input)
   },
   tasks: {
     list: () => invoke<IpcResult<TaskListResult>>(IPC_CHANNELS.tasksList),
@@ -336,7 +346,11 @@ const api: YocimApi = {
   projects: {
     list: () => invoke<IpcResult<ProjectListResult>>(IPC_CHANNELS.projectList),
     rename: (input: ProjectRenameInput) =>
-      invoke<IpcResult<ProjectSummary>>(IPC_CHANNELS.projectRename, input)
+      invoke<IpcResult<ProjectSummary>>(IPC_CHANNELS.projectRename, input),
+    open: (input: ProjectIdInput) =>
+      invoke<IpcResult<WorkspaceInfo>>(IPC_CHANNELS.projectOpen, input),
+    remove: (input: ProjectIdInput) =>
+      invoke<IpcResult<ProjectRemoveResult>>(IPC_CHANNELS.projectRemove, input)
   },
   settings: {
     get: () => invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsGet),
@@ -355,6 +369,9 @@ const api: YocimApi = {
     setSearch: (input: SettingsSetSearchInput) =>
       invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetSearch, input),
     clearSearchKey: () => invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsClearSearchKey),
+    setImage: (input: SettingsSetImageInput) =>
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetImage, input),
+    clearImageKey: () => invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsClearImageKey),
     setPricing: (input: SettingsSetPricingInput) =>
       invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetPricing, input),
     setStorage: (input: SettingsSetStorageInput) =>
