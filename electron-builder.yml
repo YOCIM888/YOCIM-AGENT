@@ -51,8 +51,10 @@ mac:
   target:
     - dmg
   category: public.app-category.developer-tools
+  artifactName: ${productName}-${version}-${arch}.${ext}
 linux:
   icon: build/icon.png
   target:
     - AppImage
   category: Development
+  artifactName: ${productName}-${version}-${arch}.${ext}
