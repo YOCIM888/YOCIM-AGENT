@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { join, resolve, sep } from 'node:path'
+import { join } from 'node:path'
 import { AppError } from '../../shared/errors'
 import { TASK_LIMITS } from '../../shared/ipcChannels'
 import type {
@@ -12,6 +12,8 @@ import type {
   TaskRun
 } from '../../shared/tasks'
 import { createAnsiStripper } from '../util/ansi'
+import { getRemoteExec, type RemoteExec } from '../remote/execRegistry'
+import { joinRemotePath } from '../remote/command'
 import { redactSecrets } from '../util/redact'
 
 interface CustomTaskFileEntry {
@@ -24,7 +26,9 @@ interface CustomTaskFileEntry {
 
 interface RunningTask {
   run: TaskRun
-  child: ChildProcess
+  child: ChildProcess | null
+  /** 远程任务没有本地子进程，用远端句柄结束 */
+  remoteKill?: () => void
   bytes: number
   truncated: boolean
   timer?: NodeJS.Timeout
@@ -35,6 +39,11 @@ export interface TaskServiceOptions {
   emit: (event: TaskEvent) => void
   /** 便于测试注入进程启动逻辑 */
   spawnImpl?: typeof spawn
+  /**
+   * 读取工作区内的文本文件（相对路径）。
+   * 本地/WSL 直接读 UNC 路径；SSH 远程工作区由调用方接 SFTP。
+   */
+  readText?: (relativePath: string) => Promise<string | null>
 }
 
 const NPM_SCRIPTS_DETAIL = 'package.json scripts'
@@ -90,9 +99,13 @@ async function readTextIfExists(path: string): Promise<string | null> {
 }
 
 /** 依次探测 pnpm / yarn 锁文件，都没有则用 npm */
-export async function detectPackageManager(root: string): Promise<PackageManager> {
-  if ((await readTextIfExists(join(root, 'pnpm-lock.yaml'))) !== null) return 'pnpm'
-  if ((await readTextIfExists(join(root, 'yarn.lock'))) !== null) return 'yarn'
+export async function detectPackageManager(
+  root: string,
+  readText: (relativePath: string) => Promise<string | null> = (relativePath) =>
+    readTextIfExists(join(root, relativePath))
+): Promise<PackageManager> {
+  if ((await readText('pnpm-lock.yaml')) !== null) return 'pnpm'
+  if ((await readText('yarn.lock')) !== null) return 'yarn'
   return 'npm'
 }
 
@@ -101,8 +114,10 @@ interface PackageJsonShape {
   main?: unknown
 }
 
-async function readPackageJson(root: string): Promise<PackageJsonShape | null> {
-  const text = await readTextIfExists(join(root, 'package.json'))
+async function readPackageJson(
+  readText: (relativePath: string) => Promise<string | null>
+): Promise<PackageJsonShape | null> {
+  const text = await readText('package.json')
   if (!text) return null
   try {
     const parsed = JSON.parse(text) as PackageJsonShape
@@ -117,7 +132,7 @@ function isSafeScriptName(name: string): boolean {
   return /^[A-Za-z0-9:_.-]{1,200}$/.test(name)
 }
 
-function normalizeCustomTasks(raw: unknown, root: string): TaskDefinition[] {
+function normalizeCustomTasks(raw: unknown): TaskDefinition[] {
   if (!raw || typeof raw !== 'object') return []
   const list = (raw as { tasks?: unknown }).tasks
   if (!Array.isArray(list)) return []
@@ -140,13 +155,14 @@ function normalizeCustomTasks(raw: unknown, root: string): TaskDefinition[] {
       : []
     let cwd: string | undefined
     if (typeof entry.cwd === 'string' && entry.cwd.trim()) {
-      const resolved = resolve(root, entry.cwd.trim())
-      if (resolved !== root && !resolved.startsWith(root + sep)) continue
-      cwd = resolved
-        .slice(root.length)
-        .replace(/^[\\/]+/, '')
-        .split(sep)
-        .join('/')
+      // 只用相对路径：远程工作区根是 ssh:// 标识，做不了 path.resolve
+      const relative = entry.cwd
+        .trim()
+        .replace(/\\/g, '/')
+        .replace(/^(\.\/)+/, '')
+      if (relative.startsWith('/') || /^[a-zA-Z]:/.test(relative)) continue
+      if (relative.split('/').includes('..')) continue
+      cwd = relative.replace(/\/+$/, '')
     }
     let id = `custom:${label}`
     let suffix = 2
@@ -177,6 +193,11 @@ export class TaskService {
     this.spawnImpl = options.spawnImpl ?? spawn
   }
 
+  private readText(root: string): (relativePath: string) => Promise<string | null> {
+    if (this.options.readText) return this.options.readText
+    return (relativePath) => readTextIfExists(join(root, relativePath))
+  }
+
   async list(): Promise<TaskDiscovery> {
     const root = this.options.getRoot()
     if (!root) {
@@ -189,8 +210,9 @@ export class TaskService {
       }
     }
 
-    const packageJson = await readPackageJson(root)
-    const packageManager = await detectPackageManager(root)
+    const readText = this.readText(root)
+    const packageJson = await readPackageJson(readText)
+    const packageManager = await detectPackageManager(root, readText)
     const tasks: TaskDefinition[] = []
 
     if (packageJson?.scripts && typeof packageJson.scripts === 'object') {
@@ -209,13 +231,13 @@ export class TaskService {
       }
     }
 
-    const customText = await readTextIfExists(join(root, CUSTOM_TASKS_FILE))
+    const customText = await readText(CUSTOM_TASKS_FILE)
     let tasksFile: string | null = null
     let error: string | undefined
     if (customText !== null) {
       tasksFile = CUSTOM_TASKS_FILE
       try {
-        tasks.push(...normalizeCustomTasks(JSON.parse(customText), root))
+        tasks.push(...normalizeCustomTasks(JSON.parse(customText)))
       } catch {
         error = `${CUSTOM_TASKS_FILE} 不是合法 JSON，已忽略自定义任务`
       }
@@ -248,6 +270,9 @@ export class TaskService {
     const discovery = await this.list()
     const task = discovery.tasks.find((item) => item.id === input.taskId)
     if (!task) throw new AppError('E_NOT_FOUND', '任务已不存在，请刷新任务列表')
+
+    const remote = getRemoteExec()
+    if (remote) return this.startRemote(remote, task)
 
     const cwd = task.cwd ? join(root, task.cwd) : root
     const runId = randomUUID()
@@ -324,11 +349,73 @@ export class TaskService {
     return run
   }
 
+  /** 远程任务：命令在 WSL/远端主机上跑，输出经 exec 通道回来 */
+  private async startRemote(remote: RemoteExec, task: TaskDefinition): Promise<TaskRun> {
+    const runId = randomUUID()
+    const run: TaskRun = {
+      runId,
+      taskId: task.id,
+      label: task.label,
+      commandLine: `${remote.label} · ${task.commandLine}`,
+      status: 'running',
+      startedAt: Date.now()
+    }
+    const cwd = task.cwd ? joinRemotePath(remote.rootPath, task.cwd) : remote.rootPath
+    const stripStdout = createAnsiStripper()
+    const stripStderr = createAnsiStripper()
+    const entry: RunningTask = { run, child: null, bytes: 0, truncated: false }
+
+    const append = (stream: 'stdout' | 'stderr', chunk: string): void => {
+      if (entry.bytes >= TASK_LIMITS.maxOutputBytes) {
+        if (!entry.truncated) {
+          entry.truncated = true
+          run.truncated = true
+          this.options.emit({
+            type: 'output',
+            runId,
+            stream: 'stderr',
+            text: `\n[输出超过 ${Math.round(TASK_LIMITS.maxOutputBytes / 1024)} KB，已停止追加]\n`
+          })
+        }
+        return
+      }
+      const text = stream === 'stdout' ? stripStdout(chunk) : stripStderr(chunk)
+      const remaining = TASK_LIMITS.maxOutputBytes - entry.bytes
+      const slice = text.length > remaining ? text.slice(0, remaining) : text
+      entry.bytes += slice.length
+      if (slice) this.options.emit({ type: 'output', runId, stream, text: redactSecrets(slice) })
+    }
+
+    const handle = remote.spawn(task.command, task.args, {
+      cwd,
+      onStdout: (chunk) => append('stdout', chunk),
+      onStderr: (chunk) => append('stderr', chunk),
+      onExit: (code, message) => {
+        if (entry.timer) clearTimeout(entry.timer)
+        const stopped = run.status === 'stopped'
+        if (message) {
+          this.finish(runId, 'failed', null, message)
+          return
+        }
+        this.finish(runId, stopped ? 'stopped' : code === 0 ? 'exited' : 'failed', code)
+      }
+    })
+
+    entry.remoteKill = handle.kill
+    this.running.set(runId, entry)
+    this.options.emit({ type: 'started', run })
+    return run
+  }
+
   async stop(runId: string): Promise<boolean> {
     const entry = this.running.get(runId)
     if (!entry) return false
     entry.run.status = 'stopped'
-    this.killTree(entry.child)
+    if (entry.remoteKill) {
+      entry.remoteKill()
+    } else if (entry.child) {
+      this.killTree(entry.child)
+    }
     entry.timer = setTimeout(() => {
       if (this.running.has(runId)) this.finish(runId, 'stopped', null, '进程未在超时内退出')
     }, TASK_LIMITS.stopTimeoutMs)
@@ -342,7 +429,8 @@ export class TaskService {
   dispose(): void {
     for (const entry of this.running.values()) {
       if (entry.timer) clearTimeout(entry.timer)
-      this.killTree(entry.child)
+      if (entry.remoteKill) entry.remoteKill()
+      else if (entry.child) this.killTree(entry.child)
     }
     this.running.clear()
   }

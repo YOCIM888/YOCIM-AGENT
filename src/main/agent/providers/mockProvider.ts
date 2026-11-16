@@ -22,9 +22,10 @@ function splitByLength(text: string, size: number): string[] {
  *   /tool read <path>       -> read_file
  *   /tool write <path>      -> write_file（触发审批）
  *   /tool command <command> -> run_command（触发审批）
+ *   /tool plan a,b,c        -> update_plan（第一步 doing）
  */
 function parseToolDemo(text: string): ToolCall | null {
-  const match = /^\/tool\s+(read|write|command)\s+(.+)$/i.exec(text.trim())
+  const match = /^\/tool\s+(read|write|command|plan)\s+(.+)$/i.exec(text.trim())
   if (!match) return null
 
   const action = match[1].toLowerCase()
@@ -32,6 +33,20 @@ function parseToolDemo(text: string): ToolCall | null {
   if (!value) return null
 
   const id = `call_${Date.now().toString(36)}`
+  if (action === 'plan') {
+    const steps = value
+      .split(/[,，]/)
+      .map((step) => step.trim())
+      .filter(Boolean)
+      .slice(0, 20)
+    return {
+      id,
+      name: 'update_plan',
+      argumentsJson: JSON.stringify({
+        plan: steps.map((step, index) => ({ step, status: index === 0 ? 'doing' : 'pending' }))
+      })
+    }
+  }
   if (action === 'read') {
     return { id, name: 'read_file', argumentsJson: JSON.stringify({ relativePath: value }) }
   }

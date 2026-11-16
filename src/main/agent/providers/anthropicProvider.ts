@@ -5,6 +5,7 @@ import type {
   ProviderFinishReason,
   ProviderRequest
 } from '../../../shared/agent'
+import type { ReasoningEffort } from '../../../shared/providers'
 
 type FetchFn = (input: string, init: RequestInit) => Promise<Response>
 
@@ -13,6 +14,8 @@ export interface AnthropicProviderOptions {
   apiKey: string
   model: string
   maxTokens?: number
+  /** 思考强度：default 时不启用 extended thinking */
+  reasoningEffort?: ReasoningEffort
   fetchImpl?: FetchFn
 }
 
@@ -55,6 +58,9 @@ interface AnthropicStreamEvent {
     partial_json?: string
     stop_reason?: string | null
   }
+  /** message_start 带 input_tokens，message_delta 带累计 output_tokens */
+  message?: { usage?: { input_tokens?: number; output_tokens?: number } }
+  usage?: { input_tokens?: number; output_tokens?: number }
   error?: { message?: string }
 }
 
@@ -62,6 +68,14 @@ interface PendingToolUse {
   id: string
   name: string
   json: string
+}
+
+/** 思考强度 → extended thinking 预算（token）；default 不启用 */
+const ANTHROPIC_THINKING_BUDGETS: Record<string, number | undefined> = {
+  default: undefined,
+  low: 2048,
+  medium: 8192,
+  high: 16384
 }
 
 function parseArguments(json: string): unknown {
@@ -174,6 +188,15 @@ export class AnthropicProvider implements ChatProvider {
       messages: converted.messages
     }
     if (converted.system) body.system = converted.system
+    const thinkingBudget = ANTHROPIC_THINKING_BUDGETS[this.options.reasoningEffort ?? 'default']
+    if (thinkingBudget) {
+      body.thinking = { type: 'enabled', budget_tokens: thinkingBudget }
+      // Anthropic 要求 max_tokens 大于思考预算
+      body.max_tokens = Math.max(
+        typeof body.max_tokens === 'number' ? body.max_tokens : 4096,
+        thinkingBudget + 2048
+      )
+    }
     if (request.tools?.length) {
       body.tools = request.tools.map((tool) => ({
         name: tool.name,
@@ -202,6 +225,8 @@ export class AnthropicProvider implements ChatProvider {
     let buffer = ''
     let finishReason: ProviderFinishReason = 'stop'
     let streamEnded = false
+    let inputTokens = 0
+    let outputTokens = 0
 
     while (!streamEnded) {
       const { done, value } = await reader.read()
@@ -246,6 +271,14 @@ export class AnthropicProvider implements ChatProvider {
             if (pending) pending.json += delta.partial_json ?? ''
           }
         }
+        if (event.type === 'message_start') {
+          const usage = event.message?.usage
+          if (usage?.input_tokens) inputTokens = usage.input_tokens
+        }
+        if (event.type === 'message_delta') {
+          const usage = event.usage
+          if (typeof usage?.output_tokens === 'number') outputTokens = usage.output_tokens
+        }
         if (event.type === 'message_delta' && event.delta?.stop_reason) {
           const reason = event.delta.stop_reason
           finishReason =
@@ -268,6 +301,10 @@ export class AnthropicProvider implements ChatProvider {
           argumentsJson: pending.json || '{}'
         }
       }
+    }
+
+    if (inputTokens > 0 || outputTokens > 0) {
+      yield { type: 'usage', usage: { inputTokens, outputTokens } }
     }
 
     yield {

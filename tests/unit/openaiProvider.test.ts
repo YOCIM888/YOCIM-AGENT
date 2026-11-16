@@ -95,4 +95,52 @@ describe('OpenAICompatibleProvider', () => {
 
     await expect(collect(provider)).rejects.toThrow('Provider 返回 HTTP 401')
   })
+
+  it('requests usage and emits it as a usage event', async () => {
+    let requestBody = ''
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'test-key',
+      model: 'test-model',
+      fetchImpl: async (_url, init) => {
+        requestBody = String(init.body)
+        return sseResponse([
+          'data: {"choices":[{"delta":{"content":"hi"},"finish_reason":"stop"}]}\n\n',
+          'data: {"choices":[],"usage":{"prompt_tokens":120,"completion_tokens":34}}\n\n',
+          'data: [DONE]\n\n'
+        ])
+      }
+    })
+
+    const events = await collect(provider)
+
+    expect(JSON.parse(requestBody).stream_options).toEqual({ include_usage: true })
+    expect(events).toContainEqual({
+      type: 'usage',
+      usage: { inputTokens: 120, outputTokens: 34 }
+    })
+  })
+
+  it('retries without stream_options when the server rejects it', async () => {
+    const bodies: string[] = []
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'test-key',
+      model: 'test-model',
+      fetchImpl: async (_url, init) => {
+        bodies.push(String(init.body))
+        if (bodies.length === 1) return new Response('bad request', { status: 400 })
+        return sseResponse([
+          'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\n'
+        ])
+      }
+    })
+
+    const events = await collect(provider)
+
+    expect(bodies).toHaveLength(2)
+    expect(JSON.parse(bodies[0]).stream_options).toEqual({ include_usage: true })
+    expect(JSON.parse(bodies[1]).stream_options).toBeUndefined()
+    expect(events.filter((event) => event.type === 'text')).toEqual([{ type: 'text', text: 'ok' }])
+  })
 })

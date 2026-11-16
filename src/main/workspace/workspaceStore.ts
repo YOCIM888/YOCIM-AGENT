@@ -4,10 +4,17 @@ import { app } from 'electron'
 
 const FILE_NAME = 'workspace.json'
 
+/** 数据目录可自定义（设置 → 存储），这里允许主进程改写工作区记录的位置 */
+let overriddenPath: string | null = null
+
+export function setWorkspaceStorePath(filePath: string): void {
+  overriddenPath = filePath
+}
+
 export class WorkspaceStore {
   private readonly filePath: string
 
-  constructor(filePath: string = path.join(app.getPath('userData'), FILE_NAME)) {
+  constructor(filePath: string = overriddenPath ?? path.join(app.getPath('userData'), FILE_NAME)) {
     this.filePath = filePath
   }
 

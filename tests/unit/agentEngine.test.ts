@@ -266,3 +266,42 @@ describe('runAgentTurn', () => {
     ).toBe(true)
   })
 })
+
+describe('runAgentTurn usage reporting', () => {
+  it('reports the token usage of each round', async () => {
+    const onUsage = vi.fn()
+    const provider: ChatProvider = {
+      async *stream(): AsyncGenerator<ProviderEvent> {
+        yield { type: 'text', text: 'hi' }
+        yield { type: 'usage', usage: { inputTokens: 120, outputTokens: 30 } }
+        yield { type: 'done', finishReason: 'stop' }
+      }
+    }
+
+    await runAgentTurn(
+      { provider, emit: () => {}, onUsage },
+      baseInput,
+      new AbortController().signal
+    )
+
+    expect(onUsage).toHaveBeenCalledWith({ inputTokens: 120, outputTokens: 30 })
+  })
+
+  it('still reports usage when the provider throws mid-stream', async () => {
+    const onUsage = vi.fn()
+    const provider: ChatProvider = {
+      async *stream(): AsyncGenerator<ProviderEvent> {
+        yield { type: 'usage', usage: { inputTokens: 50, outputTokens: 10 } }
+        throw new Error('boom')
+      }
+    }
+
+    await runAgentTurn(
+      { provider, emit: () => {}, onUsage },
+      baseInput,
+      new AbortController().signal
+    )
+
+    expect(onUsage).toHaveBeenCalledWith({ inputTokens: 50, outputTokens: 10 })
+  })
+})

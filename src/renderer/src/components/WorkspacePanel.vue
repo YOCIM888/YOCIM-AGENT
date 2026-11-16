@@ -10,6 +10,7 @@ import AuditPanel from './AuditPanel.vue'
 import EditorPane from './EditorPane.vue'
 import ExtensionsPanel from './ExtensionsPanel.vue'
 import FileTreePanel from './FileTreePanel.vue'
+import RemotePanel from './RemotePanel.vue'
 import RunPanel from './RunPanel.vue'
 import ScmPanel from './ScmPanel.vue'
 import SearchPanel from './SearchPanel.vue'
@@ -112,6 +113,11 @@ watch(
         v-show="settings.workspaceView === 'debug'"
         :active="settings.workspaceView === 'debug'"
       />
+      <RemotePanel
+        v-if="mountedViews.has('remote')"
+        v-show="settings.workspaceView === 'remote'"
+        :active="settings.workspaceView === 'remote'"
+      />
       <ViewPlaceholder
         v-for="view in placeholderViews"
         v-show="settings.workspaceView === view.key"
@@ -127,7 +133,7 @@ watch(
   display: flex;
   flex: none;
   flex-direction: column;
-  max-width: 45vw;
+  max-width: 60vw;
   min-height: 0;
   border-left: 1px solid var(--border);
   background: var(--bg-subtle);

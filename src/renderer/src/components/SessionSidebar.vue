@@ -103,7 +103,15 @@ function isExpanded(group: SessionGroup): boolean {
 }
 
 function toggleGroup(group: SessionGroup): void {
+  if (editingProjectId.value === group.id) return
   if (group.project) projects.toggleExpanded(group.project.id)
+}
+
+function handleGroupKeydown(group: SessionGroup, event: KeyboardEvent): void {
+  if (event.target !== event.currentTarget) return
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  toggleGroup(group)
 }
 
 function startProjectRename(project: ProjectSummary): void {
@@ -210,23 +218,54 @@ function selectProjectMenu(id: string): void {
       >
         <div
           class="project-header"
+          :class="{ clickable: !!group.project }"
           data-testid="project-header"
+          :role="group.project ? 'button' : undefined"
+          :tabindex="group.project ? 0 : undefined"
+          :aria-expanded="group.project ? isExpanded(group) : undefined"
+          :title="group.project ? (isExpanded(group) ? '折叠项目' : '展开项目') : undefined"
+          @click="toggleGroup(group)"
+          @keydown="handleGroupKeydown(group, $event)"
           @contextmenu.prevent.stop="group.project && openProjectMenu($event, group.project)"
         >
-          <button
-            type="button"
-            class="chevron"
-            :disabled="!group.project"
-            :title="isExpanded(group) ? '折叠项目' : '展开项目'"
-            @click="toggleGroup(group)"
-          >
-            {{ isExpanded(group) ? '▾' : '▸' }}
-          </button>
+          <span class="folder-icon" aria-hidden="true">
+            <svg
+              v-if="isExpanded(group)"
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"
+              />
+            </svg>
+            <svg
+              v-else
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+              />
+            </svg>
+          </span>
           <input
             v-if="editingProjectId === group.id"
             v-model="editingProjectName"
             class="project-rename-input"
             data-testid="project-rename-input"
+            @click.stop
             @keydown.enter="commitProjectRename"
             @keydown.esc="editingProjectId = null"
             @blur="commitProjectRename"
@@ -416,21 +455,28 @@ function selectProjectMenu(id: string): void {
   gap: 5px;
   padding: 4px 4px 4px 2px;
   color: var(--text-muted);
-  cursor: default;
 }
 
-.chevron {
-  width: 18px;
-  height: 18px;
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 10px;
+.project-header.clickable {
   cursor: pointer;
 }
 
-.chevron:disabled {
-  cursor: default;
+.project-header.clickable:hover {
+  color: var(--text);
+}
+
+.folder-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+}
+
+.project-header.clickable:hover .folder-icon {
+  color: var(--accent);
 }
 
 .project-name {

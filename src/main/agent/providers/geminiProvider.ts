@@ -5,6 +5,7 @@ import type {
   ProviderFinishReason,
   ProviderRequest
 } from '../../../shared/agent'
+import type { ReasoningEffort } from '../../../shared/providers'
 
 type FetchFn = (input: string, init: RequestInit) => Promise<Response>
 
@@ -12,6 +13,8 @@ export interface GeminiProviderOptions {
   baseUrl: string
   apiKey: string
   model: string
+  /** 思考强度：default 时不发送 thinkingConfig */
+  reasoningEffort?: ReasoningEffort
   fetchImpl?: FetchFn
 }
 
@@ -37,6 +40,11 @@ interface GeminiStreamPayload {
     content?: { parts?: GeminiPart[] }
     finishReason?: string
   }>
+  usageMetadata?: {
+    promptTokenCount?: number
+    candidatesTokenCount?: number
+    totalTokenCount?: number
+  }
   error?: { message?: string }
 }
 
@@ -124,6 +132,14 @@ async function describeHttpError(response: Response): Promise<string> {
  * Google Gemini GenerateContent 流式 Provider（alt=sse）。
  * 支持文本与 functionCall / functionResponse 转换；API Key 仅保存在实例内。
  */
+/** 思考强度 → thinkingBudget；default 不发送该字段 */
+const GEMINI_THINKING_BUDGETS: Record<string, number | undefined> = {
+  default: undefined,
+  low: 1024,
+  medium: 4096,
+  high: 8192
+}
+
 export class GeminiProvider implements ChatProvider {
   private readonly options: GeminiProviderOptions
   private readonly fetchImpl: FetchFn
@@ -147,6 +163,10 @@ export class GeminiProvider implements ChatProvider {
     }
     if (converted.system) {
       body.systemInstruction = { parts: [{ text: converted.system }] }
+    }
+    const thinkingBudget = GEMINI_THINKING_BUDGETS[this.options.reasoningEffort ?? 'default']
+    if (thinkingBudget !== undefined) {
+      body.generationConfig = { thinkingConfig: { thinkingBudget } }
     }
     if (request.tools?.length) {
       body.tools = [
@@ -178,6 +198,8 @@ export class GeminiProvider implements ChatProvider {
     let buffer = ''
     let finishReason: ProviderFinishReason = 'stop'
     let toolCallCount = 0
+    let inputTokens = 0
+    let outputTokens = 0
 
     for (;;) {
       const { done, value } = await reader.read()
@@ -202,6 +224,14 @@ export class GeminiProvider implements ChatProvider {
         }
         if (chunk.error?.message) {
           throw new Error(chunk.error.message)
+        }
+
+        const usage = chunk.usageMetadata
+        if (usage) {
+          if (typeof usage.promptTokenCount === 'number') inputTokens = usage.promptTokenCount
+          if (typeof usage.candidatesTokenCount === 'number') {
+            outputTokens = usage.candidatesTokenCount
+          }
         }
 
         for (const candidate of chunk.candidates ?? []) {
@@ -231,6 +261,10 @@ export class GeminiProvider implements ChatProvider {
           }
         }
       }
+    }
+
+    if (inputTokens > 0 || outputTokens > 0) {
+      yield { type: 'usage', usage: { inputTokens, outputTokens } }
     }
 
     yield {

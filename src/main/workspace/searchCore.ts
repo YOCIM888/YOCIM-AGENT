@@ -173,7 +173,7 @@ export function parsePatterns(input: string): string[] {
     .filter((pattern) => pattern.length > 0)
 }
 
-function matchesGlob(relativePath: string, pattern: string): boolean {
+export function matchesGlob(relativePath: string, pattern: string): boolean {
   const cleaned = pattern.startsWith('!') ? pattern.slice(1) : pattern
   if (!cleaned) return false
   const regex = globToRegExp(cleaned)
@@ -255,6 +255,11 @@ export function isNoiseDirectory(name: string): boolean {
   return IGNORED_DIRECTORIES.has(name) || name === '.git'
 }
 
+/** 与内置搜索的 IGNORED_DIRECTORIES 对齐，保证两种引擎结果一致 */
+const RIPGREP_EXCLUDED_DIRS = [...IGNORED_DIRECTORIES, '.hg', '.svn'].filter(
+  (name) => name !== '.DS_Store'
+)
+
 /** ripgrep 参数构造：纯函数，便于单测覆盖固定串/正则/大小写/glob。 */
 export function buildRipgrepArgs(query: SearchQuery): string[] {
   const args = [
@@ -266,7 +271,11 @@ export function buildRipgrepArgs(query: SearchQuery): string[] {
     'never',
     '--max-filesize',
     `${SEARCH_LIMITS.maxFileBytes}`,
-    '--hidden'
+    // --hidden 让 .yocim 等点文件也能被搜到，必须显式排掉版本库内部目录
+    '--hidden',
+    // 非 git 目录也按 .gitignore 过滤，与内置搜索保持一致
+    '--no-require-git',
+    ...RIPGREP_EXCLUDED_DIRS.flatMap((name) => ['-g', `!${name}`, '-g', `!${name}/**`])
   ]
   if (!query.caseSensitive) args.push('-i')
   if (query.wholeWord) args.push('-w')

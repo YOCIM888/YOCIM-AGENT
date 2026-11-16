@@ -1,4 +1,5 @@
 import type { ContextAttachment } from './attachment'
+import type { ContextUsage } from './context'
 
 export type AgentRole = 'system' | 'user' | 'assistant' | 'tool'
 
@@ -29,9 +30,16 @@ export interface ToolDefinition {
 
 export type ProviderFinishReason = 'stop' | 'tool_calls' | 'length'
 
+/** 单次模型调用的 token 用量 */
+export interface ProviderUsage {
+  inputTokens: number
+  outputTokens: number
+}
+
 export type ProviderEvent =
   | { type: 'text'; text: string }
   | { type: 'tool_call'; toolCall: ToolCall }
+  | { type: 'usage'; usage: ProviderUsage }
   | { type: 'done'; finishReason: ProviderFinishReason }
 
 export interface ProviderRequest {
@@ -48,7 +56,15 @@ export interface AgentToolRuntime {
   execute(call: ToolCall, signal: AbortSignal): Promise<ToolExecutionOutcome>
 }
 
-export type AgentRunDoneReason = 'completed' | 'cancelled' | 'error'
+export type AgentRunDoneReason = 'completed' | 'cancelled' | 'error' | 'paused'
+
+/** 计划条目状态：pending 未开始 / doing 进行中 / done 已完成 */
+export type PlanItemStatus = 'pending' | 'doing' | 'done'
+
+export interface PlanItem {
+  step: string
+  status: PlanItemStatus
+}
 
 interface AgentEventBase {
   runId: string
@@ -61,9 +77,42 @@ export type AgentEvent =
   | (AgentEventBase & { type: 'message:delta'; messageId: string; text: string })
   | (AgentEventBase & { type: 'message:done'; messageId: string; content: string })
   | (AgentEventBase & { type: 'tool:call'; callId: string; name: string; argsSummary: string })
+  | (AgentEventBase & {
+      type: 'tool:output'
+      callId: string
+      /** 节流合并后的增量输出文本（命令执行等长任务） */
+      text: string
+    })
   | (AgentEventBase & { type: 'tool:result'; callId: string; ok: boolean; summary: string })
   | (AgentEventBase & { type: 'run:error'; code: string; message: string })
+  | (AgentEventBase & {
+      type: 'run:paused'
+      sessionId: string
+      /** 暂停原因：round_limit 轮次用尽（可继续） */
+      reason: 'round_limit'
+      rounds: number
+    })
   | (AgentEventBase & { type: 'run:done'; reason: AgentRunDoneReason })
+  | (AgentEventBase & { type: 'context:usage'; sessionId: string; usage: ContextUsage })
+  | (AgentEventBase & {
+      type: 'context:compacted'
+      sessionId: string
+      reason: 'auto' | 'manual'
+      /** 压缩前估算 token */
+      before: number
+      /** 压缩后估算 token */
+      after: number
+      /** 被压缩掉的条目数 */
+      dropped: number
+      /** 摘要预览（用于在会话里提示） */
+      summary: string
+      usage: ContextUsage
+    })
+  | (AgentEventBase & {
+      type: 'plan:updated'
+      sessionId: string
+      plan: PlanItem[]
+    })
 
 export interface AgentRunInput {
   runId: string
@@ -71,6 +120,11 @@ export interface AgentRunInput {
   history: AgentMessage[]
   userText: string
   attachments?: ContextAttachment[]
+  /**
+   * 预组装好的完整请求消息（含 system）：提供时忽略 history/userText/attachments。
+   * 用于上下文管理器直出请求，保证压缩与用量估算用的是同一份数据。
+   */
+  prebuiltMessages?: AgentMessage[]
 }
 
 export interface AgentRunResult {

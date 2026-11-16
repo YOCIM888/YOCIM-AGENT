@@ -19,7 +19,7 @@ const VIEWS = [
   { testid: 'workspace-tab-scm', label: '源代码管理', panel: 'scm-panel' },
   { testid: 'workspace-tab-extensions', label: '扩展安装', panel: 'extensions-panel' },
   { testid: 'workspace-tab-debug', label: '运行和调试', panel: 'run-panel' },
-  { testid: 'workspace-tab-remote', label: '远程管理器', panel: 'remote-panel', phase: 'P5' }
+  { testid: 'workspace-tab-remote', label: '远程管理器', panel: 'remote-panel' }
 ] as const
 
 test('switches all 8 activity bar views and persists the active view', async () => {

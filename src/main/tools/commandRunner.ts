@@ -1,65 +1,19 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import type { ToolExecutionOutcome } from '../../shared/agent'
-import { AppError } from '../../shared/errors'
 
 const COMMAND_OUTPUT_LIMIT = 64 * 1024
 
-const SAFE_COMMANDS = new Set(['node', 'npm', 'npx', 'pnpm', 'yarn', 'tsc', 'vitest', 'git'])
+/** 输出事件的节流间隔：合并碎片，避免渲染层被高频小 chunk 打爆 */
+export const COMMAND_OUTPUT_FLUSH_MS = 300
 
-const GIT_SAFE_SUBCOMMANDS = new Set([
-  'status',
-  'diff',
-  'log',
-  'show',
-  'branch',
-  'rev-parse',
-  'ls-files'
-])
-
-const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /\brm\s+-[a-z]*r[a-z]*f\b/i, reason: '递归强制删除' },
-  { pattern: /\brm\s+-rf\b/i, reason: '递归强制删除' },
-  {
-    pattern: /\b(?:format|mkfs(?:\.\w+)?|diskpart|shutdown|reboot|halt)\b/i,
-    reason: '系统级危险命令'
-  },
-  { pattern: /\breg\s+delete\b/i, reason: '删除注册表' },
-  { pattern: /\bdel\s+\/f\s+\/s\b/i, reason: '递归强制删除' },
-  { pattern: /\bremove-item\b[^\n]*-recurse/i, reason: '递归删除（PowerShell）' },
-  { pattern: /\b(?:curl|wget)\b[^\n|]*\|\s*(?:ba|z|k)?sh\b/i, reason: '下载并执行远程脚本' },
-  { pattern: /\b(?:iwr|invoke-webrequest)\b[^\n|]*\|\s*iex\b/i, reason: '下载并执行远程脚本' },
-  { pattern: /\bgit\s+push\b/i, reason: '禁止自动推送远端' }
-]
-
-export function assertCommandAllowed(command: string): void {
-  const trimmed = command.trim()
-  if (!trimmed) {
-    throw new AppError('E_TOOL_DENIED', '命令为空')
-  }
-  if (trimmed.length > 2000) {
-    throw new AppError('E_TOOL_DENIED', '命令过长')
-  }
-  if (trimmed.includes('\0')) {
-    throw new AppError('E_TOOL_DENIED', '命令包含非法字符')
-  }
-
-  for (const { pattern, reason } of DANGEROUS_PATTERNS) {
-    if (pattern.test(trimmed)) {
-      throw new AppError('E_TOOL_DENIED', `危险命令已拒绝：${reason}`)
-    }
-  }
-
-  const tokens = trimmed.split(/\s+/)
-  const executable = tokens[0].toLowerCase()
-  if (!SAFE_COMMANDS.has(executable)) {
-    throw new AppError('E_TOOL_DENIED', `命令不在白名单：${tokens[0]}`)
-  }
-  if (executable === 'git') {
-    const subcommand = tokens[1]
-    if (!subcommand || !GIT_SAFE_SUBCOMMANDS.has(subcommand)) {
-      throw new AppError('E_TOOL_DENIED', `git 子命令不允许：${subcommand ?? '(空)'}`)
-    }
-  }
+export interface RunCommandOptions {
+  cwd: string
+  timeoutMs: number
+  signal: AbortSignal
+  /** 增量输出回调（节流合并）；仅 stdout/stderr 合并后的新文本 */
+  onOutput?: (text: string) => void
+  /** 节流间隔，测试时可调小 */
+  flushIntervalMs?: number
 }
 
 function buildSafeEnv(): NodeJS.ProcessEnv {
@@ -94,12 +48,6 @@ function killProcessTree(child: ChildProcess): void {
   child.kill()
 }
 
-export interface RunCommandOptions {
-  cwd: string
-  timeoutMs: number
-  signal: AbortSignal
-}
-
 export function runWorkspaceCommand(
   command: string,
   options: RunCommandOptions
@@ -118,6 +66,45 @@ export function runWorkspaceCommand(
       const text = chunk.toString('utf8')
       output += text.slice(0, remaining)
       if (text.length > remaining) truncated = true
+      pendingStream += text
+    }
+
+    /** 节流：新输出先进 pendingStream，定时统一推送 */
+    let pendingStream = ''
+    let pendingSince: number | null = null
+    let flushTimer: ReturnType<typeof setTimeout> | null = null
+    const flushInterval = options.flushIntervalMs ?? COMMAND_OUTPUT_FLUSH_MS
+
+    const flushPending = (): void => {
+      if (flushTimer) {
+        clearTimeout(flushTimer)
+        flushTimer = null
+      }
+      if (pendingStream && options.onOutput) {
+        const text = pendingStream
+        pendingStream = ''
+        pendingSince = null
+        try {
+          options.onOutput(text)
+        } catch {
+          // 输出回调失败不影响命令执行
+        }
+      } else {
+        pendingStream = ''
+        pendingSince = null
+      }
+    }
+
+    const scheduleFlush = (): void => {
+      if (!options.onOutput) return
+      if (pendingSince === null) pendingSince = Date.now()
+      if (flushTimer) return
+      const elapsed = Date.now() - pendingSince
+      const delay = Math.max(0, flushInterval - elapsed)
+      flushTimer = setTimeout(() => {
+        flushTimer = null
+        flushPending()
+      }, delay)
     }
 
     let child: ChildProcess
@@ -151,11 +138,18 @@ export function runWorkspaceCommand(
 
     const cleanup = (): void => {
       clearTimeout(timer)
+      if (flushTimer) clearTimeout(flushTimer)
       options.signal.removeEventListener('abort', onAbort)
     }
 
-    child.stdout?.on('data', appendOutput)
-    child.stderr?.on('data', appendOutput)
+    child.stdout?.on('data', (chunk: Buffer) => {
+      appendOutput(chunk)
+      scheduleFlush()
+    })
+    child.stderr?.on('data', (chunk: Buffer) => {
+      appendOutput(chunk)
+      scheduleFlush()
+    })
 
     child.on('error', (error) => {
       if (settled) return
@@ -167,6 +161,7 @@ export function runWorkspaceCommand(
     child.on('close', (code) => {
       if (settled) return
       settled = true
+      flushPending()
       cleanup()
       const aborted = options.signal.aborted
       const ok = code === 0 && !timedOut && !aborted

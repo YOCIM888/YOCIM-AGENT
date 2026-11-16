@@ -122,20 +122,52 @@ export const useSearchStore = defineStore('search', () => {
     }
   }
 
+  /**
+   * 主进程按文件逐个推送命中；若每条都立即 push，上千个结果会触发上千次重渲染，
+   * 面板会卡住几十秒。这里按 ~30ms 一批合并成一次数组替换。
+   */
+  const pendingResults: SearchFileResult[] = []
+  let flushTimer: ReturnType<typeof setTimeout> | null = null
+  /** 结果文件数不超过这个值时自动展开命中行，超过则折叠（避免一次渲染上千行） */
+  const AUTO_EXPAND_FILES = 20
+
+  function flushResults(): void {
+    if (flushTimer !== null) {
+      clearTimeout(flushTimer)
+      flushTimer = null
+    }
+    if (!pendingResults.length) return
+    const batch = pendingResults.splice(0, pendingResults.length)
+    // 一次性合并，只触发一次依赖更新
+    results.value = results.value.concat(batch)
+    totalFiles.value += batch.length
+    for (const file of batch) totalMatches.value += file.matches.length
+    if (results.value.length <= AUTO_EXPAND_FILES) {
+      for (const file of batch) expanded.value.add(file.relativePath)
+    } else if (expanded.value.size) {
+      expanded.value.clear()
+    }
+  }
+
+  function scheduleFlush(): void {
+    if (flushTimer !== null) return
+    flushTimer = setTimeout(flushResults, 30)
+  }
+
   function handleEvent(event: SearchEvent): void {
     if (!searchId.value || event.searchId !== searchId.value) return
     if (event.kind === 'file' && event.file) {
       const file = event.file
-      results.value.push({
+      pendingResults.push({
         relativePath: file.relativePath,
         contentHash: file.contentHash,
         matches: file.matches.map((match) => ({ ...match }))
       })
-      expanded.value.add(file.relativePath)
-      totalMatches.value += file.matches.length
-      totalFiles.value += 1
+      scheduleFlush()
       return
     }
+    // 结束类事件先落盘已到达的结果，避免最后一批丢失
+    flushResults()
     if (event.kind === 'error') {
       error.value = event.message ?? '搜索失败'
       loading.value = false
@@ -162,6 +194,11 @@ export const useSearchStore = defineStore('search', () => {
     const id = searchId.value
     searchId.value = null
     loading.value = false
+    pendingResults.length = 0
+    if (flushTimer !== null) {
+      clearTimeout(flushTimer)
+      flushTimer = null
+    }
     if (id) await window.yocim.search.cancel({ searchId: id })
   }
 

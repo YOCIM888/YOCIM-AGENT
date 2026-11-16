@@ -4,6 +4,7 @@ import type {
   ProviderFinishReason,
   ProviderRequest
 } from '../../../shared/agent'
+import type { ReasoningEffort } from '../../../shared/providers'
 
 type FetchFn = (input: string, init: RequestInit) => Promise<Response>
 
@@ -11,6 +12,8 @@ export interface OpenAICompatibleProviderOptions {
   baseUrl: string
   apiKey: string
   model: string
+  /** 思考强度：default 时不发送 reasoning_effort，兼容不支持该参数的模型 */
+  reasoningEffort?: ReasoningEffort
   fetchImpl?: FetchFn
 }
 
@@ -35,6 +38,12 @@ interface OpenAIStreamChoice {
 
 interface OpenAIStreamChunk {
   choices?: OpenAIStreamChoice[]
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    input_tokens?: number
+    output_tokens?: number
+  }
 }
 
 interface PendingToolCall {
@@ -91,6 +100,9 @@ export class OpenAICompatibleProvider implements ChatProvider {
         return { role: message.role, content: message.content }
       })
     }
+    if (this.options.reasoningEffort && this.options.reasoningEffort !== 'default') {
+      body.reasoning_effort = this.options.reasoningEffort
+    }
     if (request.tools?.length) {
       body.tools = request.tools.map((tool) => ({
         type: 'function',
@@ -107,12 +119,21 @@ export class OpenAICompatibleProvider implements ChatProvider {
       headers.Authorization = `Bearer ${this.options.apiKey}`
     }
 
-    const response = await this.fetchImpl(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal
-    })
+    const send = async (withUsage: boolean): Promise<Response> => {
+      const payload = withUsage ? { ...body, stream_options: { include_usage: true } } : body
+      return this.fetchImpl(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal
+      })
+    }
+
+    let response = await send(true)
+    if (!response.ok && response.status === 400) {
+      // 个别 OpenAI 兼容服务不认 stream_options，去掉后重试一次（用量统计缺失不影响对话）
+      response = await send(false)
+    }
 
     if (!response.ok) {
       throw new Error(`Provider 返回 HTTP ${response.status}`)
@@ -157,6 +178,15 @@ export class OpenAICompatibleProvider implements ChatProvider {
         const content = choice?.delta?.content
         if (typeof content === 'string' && content.length > 0) {
           yield { type: 'text', text: content }
+        }
+
+        // stream_options.include_usage 打开后，最后一个 chunk 只带 usage
+        if (chunk.usage) {
+          const inputTokens = chunk.usage.prompt_tokens ?? chunk.usage.input_tokens ?? 0
+          const outputTokens = chunk.usage.completion_tokens ?? chunk.usage.output_tokens ?? 0
+          if (inputTokens > 0 || outputTokens > 0) {
+            yield { type: 'usage', usage: { inputTokens, outputTokens } }
+          }
         }
 
         for (const delta of choice?.delta?.tool_calls ?? []) {

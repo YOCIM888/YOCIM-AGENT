@@ -1,20 +1,35 @@
 import { randomUUID } from 'node:crypto'
 import type { ChatProvider } from '../../shared/agent'
 import type { ApprovalMode } from '../../shared/approval'
+import { CONTEXT_WINDOW_DEFAULT, clampContextWindow } from '../../shared/context'
 import { AppError } from '../../shared/errors'
 import type {
   ProviderDeleteRequest,
   ProviderSaveRequest,
   SettingsSetActiveRequest,
-  SettingsSetApprovalModeRequest
+  SettingsSetApprovalModeRequest,
+  SettingsSetContextWindowRequest,
+  SettingsSetPricingRequest,
+  SettingsSetReasoningEffortRequest,
+  SettingsSetSearchRequest,
+  SettingsSetStorageRequest
 } from '../../shared/ipc'
 import {
   getProviderPreset,
   MOCK_PROVIDER_ID,
+  resolveReasoningEffort,
   type ProviderConfig,
   type ProviderProtocol,
   type PublicProvider
 } from '../../shared/providers'
+import {
+  normalizePricing,
+  normalizeSearchSettings,
+  normalizeStorageSettings,
+  type ModelPricing,
+  type SearchSettings,
+  type StorageSettings
+} from '../../shared/settings'
 import type { PublicSettings } from '../../shared/session'
 import { AnthropicProvider } from '../agent/providers/anthropicProvider'
 import { GeminiProvider } from '../agent/providers/geminiProvider'
@@ -33,6 +48,10 @@ const KEY_PROVIDERS = 'providers'
 const KEY_ACTIVE_PROVIDER = 'activeProviderId'
 const KEY_ACTIVE_MODEL = 'activeModel'
 const KEY_APPROVAL_MODE = 'approvalMode'
+const KEY_SEARCH = 'search'
+const KEY_PRICING = 'pricing'
+const KEY_STORAGE = 'storage'
+const KEY_TAVILY_API_KEY = 'tavilyApiKey'
 const KEY_LEGACY_PROVIDER = 'provider'
 const KEY_LEGACY_BASE_URL = 'baseUrl'
 const KEY_LEGACY_MODEL = 'model'
@@ -110,8 +129,94 @@ export class SettingsService {
       providers: providers.map((provider) => this.toPublicProvider(provider)),
       activeProviderId: activeProvider.id,
       activeModel,
-      approvalMode: this.getApprovalMode()
+      approvalMode: this.getApprovalMode(),
+      search: this.getSearchSettings(),
+      pricing: this.getPricing(),
+      storage: this.getStorageSettings()
     }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 联网搜索（Tavily）                                                   */
+  /* ------------------------------------------------------------------ */
+
+  getSearchSettings(): SearchSettings {
+    const stored = normalizeSearchSettings(this.repo.get(KEY_SEARCH))
+    return { ...stored, hasApiKey: Boolean(this.getTavilyApiKey()) }
+  }
+
+  /** 供 web_search 工具使用：未启用或没配 Key 时返回 null */
+  getWebSearchConfig(): {
+    apiKey: string
+    maxResults: number
+    searchDepth: SearchSettings['searchDepth']
+    topic: SearchSettings['topic']
+    includeAnswer: boolean
+    includeRawContent: boolean
+  } | null {
+    const settings = this.getSearchSettings()
+    if (!settings.enabled || !settings.hasApiKey) return null
+    return {
+      apiKey: this.getTavilyApiKey() ?? '',
+      maxResults: settings.maxResults,
+      searchDepth: settings.searchDepth,
+      topic: settings.topic,
+      includeAnswer: settings.includeAnswer,
+      includeRawContent: settings.includeRawContent
+    }
+  }
+
+  setSearch(input: SettingsSetSearchRequest): PublicSettings {
+    const current = normalizeSearchSettings(this.repo.get(KEY_SEARCH))
+    const next: SearchSettings = {
+      ...current,
+      enabled: input.enabled,
+      maxResults: input.maxResults,
+      searchDepth: input.searchDepth,
+      topic: input.topic,
+      includeAnswer: input.includeAnswer,
+      includeRawContent: input.includeRawContent,
+      hasApiKey: current.hasApiKey
+    }
+    this.repo.set(KEY_SEARCH, next)
+    if (input.apiKey !== undefined) {
+      this.storeSecret(KEY_TAVILY_API_KEY, input.apiKey.trim())
+    }
+    return this.getPublic()
+  }
+
+  /** 清除 Tavily API Key（设置面板的「清除」按钮） */
+  clearSearchApiKey(): PublicSettings {
+    this.repo.delete(KEY_TAVILY_API_KEY)
+    return this.getPublic()
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 模型价格（账单估算）                                                 */
+  /* ------------------------------------------------------------------ */
+
+  getPricing(): ModelPricing[] {
+    return normalizePricing(this.repo.get(KEY_PRICING))
+  }
+
+  setPricing(input: SettingsSetPricingRequest): PublicSettings {
+    const next = normalizePricing(input.entries)
+    this.repo.set(KEY_PRICING, next)
+    return this.getPublic()
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 存储                                                                */
+  /* ------------------------------------------------------------------ */
+
+  getStorageSettings(): StorageSettings {
+    return normalizeStorageSettings(this.repo.get(KEY_STORAGE))
+  }
+
+  setStorage(input: SettingsSetStorageRequest): PublicSettings {
+    const next = normalizeStorageSettings({ dataDir: input.dataDir })
+    this.repo.set(KEY_STORAGE, next)
+    return this.getPublic()
   }
 
   getApprovalMode(): ApprovalMode {
@@ -226,6 +331,50 @@ export class SettingsService {
     return this.getPublic()
   }
 
+  /** 每模型上下文窗口（200K–1M），供用量圆环与自动压缩使用 */
+  setContextWindow(input: SettingsSetContextWindowRequest): PublicSettings {
+    const providers = this.ensureProviders()
+    const provider = providers.find((item) => item.id === input.providerId)
+    if (!provider) throw new AppError('E_NOT_FOUND', 'Provider 不存在')
+    const model = input.model.trim()
+    if (!model) throw new AppError('E_INVALID_INPUT', '请选择模型')
+    provider.contextWindows = {
+      ...(provider.contextWindows ?? {}),
+      [model]: clampContextWindow(input.contextWindow)
+    }
+    this.repo.set(KEY_PROVIDERS, JSON.stringify(providers))
+    return this.getPublic()
+  }
+
+  /** 每模型思考强度（default/low/medium/high），供 Provider 构造时使用 */
+  setReasoningEffort(input: SettingsSetReasoningEffortRequest): PublicSettings {
+    const providers = this.ensureProviders()
+    const provider = providers.find((item) => item.id === input.providerId)
+    if (!provider) throw new AppError('E_NOT_FOUND', 'Provider 不存在')
+    const model = input.model.trim()
+    if (!model) throw new AppError('E_INVALID_INPUT', '请选择模型')
+    provider.reasoningEfforts = {
+      ...(provider.reasoningEfforts ?? {}),
+      [model]: input.effort
+    }
+    this.repo.set(KEY_PROVIDERS, JSON.stringify(providers))
+    return this.getPublic()
+  }
+
+  /** 当前激活 Provider+模型 的上下文窗口 */
+  getContextWindow(): number {
+    const providers = this.ensureProviders()
+    const activeId = this.resolveActiveProviderId(providers)
+    const provider = providers.find((item) => item.id === activeId) ?? providers[0]
+    const model = this.resolveActiveModel(provider)
+    if (provider.id === MOCK_PROVIDER_ID) {
+      // Mock 上下文没有真实 token 计量，用默认窗口即可
+      return provider.contextWindows?.[model] ?? CONTEXT_WINDOW_DEFAULT
+    }
+    const raw = provider.contextWindows?.[model]
+    return typeof raw === 'number' ? clampContextWindow(raw) : CONTEXT_WINDOW_DEFAULT
+  }
+
   createProvider(): ChatProvider {
     const settings = this.getPublic()
     const provider =
@@ -253,20 +402,23 @@ export class SettingsService {
       return new AnthropicProvider({
         baseUrl: provider.baseUrl,
         apiKey: apiKey ?? '',
-        model: settings.activeModel
+        model: settings.activeModel,
+        reasoningEffort: resolveReasoningEffort(provider, settings.activeModel)
       })
     }
     if (provider.protocol === 'gemini') {
       return new GeminiProvider({
         baseUrl: provider.baseUrl,
         apiKey: apiKey ?? '',
-        model: settings.activeModel
+        model: settings.activeModel,
+        reasoningEffort: resolveReasoningEffort(provider, settings.activeModel)
       })
     }
     return new OpenAICompatibleProvider({
       baseUrl: provider.baseUrl,
       apiKey: apiKey ?? '',
-      model: settings.activeModel
+      model: settings.activeModel,
+      reasoningEffort: resolveReasoningEffort(provider, settings.activeModel)
     })
   }
 
@@ -353,6 +505,14 @@ export class SettingsService {
     }
   }
 
+  /** 读取某个 Provider 的 API Key（账单余额查询等场景需要） */
+  getProviderApiKey(providerId: string): string | null {
+    const providers = this.ensureProviders()
+    const provider = providers.find((item) => item.id === providerId)
+    if (!provider) return null
+    return this.getApiKeyFor(provider)
+  }
+
   private storeApiKey(providerId: string, apiKey: string): void {
     const key = `${PROVIDER_KEY_PREFIX}${providerId}`
     if (!apiKey) {
@@ -363,6 +523,33 @@ export class SettingsService {
       throw new AppError('E_UNSUPPORTED', '当前环境不支持安全存储，无法保存 API Key')
     }
     this.repo.set(key, this.crypto.encrypt(apiKey))
+  }
+
+  /** 通用密文存储（搜索 Key 等非 Provider 的密钥） */
+  private storeSecret(key: string, value: string): void {
+    if (!value) {
+      this.repo.delete(key)
+      return
+    }
+    if (!this.crypto) {
+      throw new AppError('E_UNSUPPORTED', '当前环境不支持安全存储，无法保存 API Key')
+    }
+    this.repo.set(key, this.crypto.encrypt(value))
+  }
+
+  private getTavilyApiKey(): string | null {
+    const encrypted = this.repo.get(KEY_TAVILY_API_KEY)
+    if (typeof encrypted === 'string' && this.crypto) {
+      try {
+        const value = this.crypto.decrypt(encrypted)
+        if (value.trim()) return value.trim()
+      } catch {
+        // 解密失败时继续尝试环境变量
+      }
+    }
+    const envValue = this.env?.['TAVILY_API_KEY']
+    if (typeof envValue === 'string' && envValue.trim()) return envValue.trim()
+    return null
   }
 
   private getApiKeyFor(provider: ProviderConfig): string | null {

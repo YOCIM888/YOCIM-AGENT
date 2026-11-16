@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 9
 
 export const MIGRATION_V1 = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -111,6 +111,72 @@ CREATE TABLE IF NOT EXISTS extensions (
 );
 `
 
+const MIGRATION_V6 = `
+CREATE TABLE IF NOT EXISTS remote_targets (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  distro TEXT,
+  host TEXT,
+  port INTEGER,
+  username TEXT,
+  auth_type TEXT,
+  key_path TEXT,
+  root_path TEXT NOT NULL,
+  host_fingerprint TEXT,
+  secret_encrypted TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_remote_targets_kind ON remote_targets(kind, updated_at);
+`
+
+/**
+ * Agent 上下文存储：模型实际看到的对话流（含工具调用与结果、压缩摘要）。
+ * 与 messages 表分开：messages 只服务 UI 渲染，压缩不会改动用户看到的聊天记录。
+ */
+const MIGRATION_V7 = `
+CREATE TABLE IF NOT EXISTS agent_context (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  seq INTEGER NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  tool_calls_json TEXT,
+  tool_call_id TEXT,
+  tokens INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_context_session ON agent_context(session_id, seq);
+`
+
+/** Agent 计划存储：每个会话一份当前计划（update_plan 工具全量覆写）。 */
+const MIGRATION_V8 = `
+CREATE TABLE IF NOT EXISTS agent_plan (
+  session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+  plan_json TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+`
+
+/** Token 用量：账单面板按 provider/model 汇总，配合用户填写的单价估算费用。 */
+const MIGRATION_V9 = `
+CREATE TABLE IF NOT EXISTS agent_usage (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  provider_id TEXT NOT NULL,
+  model TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_usage_created ON agent_usage(created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_usage_provider ON agent_usage(provider_id, model, created_at);
+`
+
 function getUserVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as { user_version?: number } | undefined
   return Number(row?.user_version ?? 0)
@@ -198,6 +264,54 @@ export function migrate(db: DatabaseSync): void {
     try {
       db.exec(MIGRATION_V5)
       db.exec('PRAGMA user_version = 5')
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  if (version < 6) {
+    db.exec('BEGIN')
+    try {
+      db.exec(MIGRATION_V6)
+      db.exec('PRAGMA user_version = 6')
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  if (version < 7) {
+    db.exec('BEGIN')
+    try {
+      db.exec(MIGRATION_V7)
+      db.exec('PRAGMA user_version = 7')
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  if (version < 8) {
+    db.exec('BEGIN')
+    try {
+      db.exec(MIGRATION_V8)
+      db.exec('PRAGMA user_version = 8')
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  if (version < 9) {
+    db.exec('BEGIN')
+    try {
+      db.exec(MIGRATION_V9)
+      db.exec('PRAGMA user_version = 9')
       db.exec('COMMIT')
     } catch (error) {
       db.exec('ROLLBACK')

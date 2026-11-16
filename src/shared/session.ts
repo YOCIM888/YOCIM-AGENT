@@ -1,5 +1,6 @@
 import type { ApprovalMode } from './approval'
 import type { PublicProvider } from './providers'
+import type { ModelPricing, SearchSettings, StorageSettings } from './settings'
 
 export interface SessionSummary {
   id: string
@@ -36,4 +37,10 @@ export interface PublicSettings {
   activeProviderId: string
   activeModel: string
   approvalMode: ApprovalMode
+  /** 联网搜索设置（Tavily） */
+  search: SearchSettings
+  /** 模型价格表：用于账单里的费用估算 */
+  pricing: ModelPricing[]
+  /** 存储设置（数据目录） */
+  storage: StorageSettings
 }

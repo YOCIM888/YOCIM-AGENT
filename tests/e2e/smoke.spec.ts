@@ -287,7 +287,8 @@ test('selects a workspace, runs tools with approvals and persists across restart
     await page.getByTestId('timeline-toggle').last().click()
     await expect(page.getByTestId('timeline-step').last()).toContainText('read_file')
     await expect(page.getByTestId('timeline-step').last()).toContainText('hello.txt')
-    await expect(page.getByTestId('chat-panel')).toContainText('工具执行完成：hello from e2e')
+    // read_file 现在返回带行号的内容：首行是「文件（共 N 行，显示 a-b）」
+    await expect(page.getByTestId('chat-panel')).toContainText('工具执行完成：hello.txt（共 1 行')
     await expect(page.getByTestId('chat-send')).toBeVisible()
 
     await page.getByTestId('chat-input').fill('/tool write notes/demo.txt')
@@ -295,6 +296,11 @@ test('selects a workspace, runs tools with approvals and persists across restart
     const approveTimeline = page.getByTestId('timeline').last()
     await expect(approveTimeline.getByTestId('approval-card')).toBeVisible()
     await expect(approveTimeline.getByTestId('approval-card')).toContainText('write_file')
+    // T4.1：审批卡带 diff 预览（新建文件 → 全部为新增行）
+    await expect(approveTimeline.getByTestId('approval-diff')).toBeVisible()
+    await expect(approveTimeline.getByTestId('approval-diff')).toContainText('mock tool demo')
+    // T4.2：允许按钮可见，点「会话内允许」= 批准并记住规则
+    await expect(approveTimeline.getByTestId('approval-allow-session')).toBeVisible()
     await page.getByTestId('approval-approve').last().click()
     await expect(approveTimeline.getByTestId('approval-card')).toContainText('已批准')
     await expect(page.getByTestId('chat-panel')).toContainText(
@@ -359,7 +365,7 @@ test('selects a workspace, runs tools with approvals and persists across restart
     await expect(page.getByTestId('status-bar')).toContainText(basename(expectedRoot))
     await expect(page.getByTestId('session-sidebar')).toContainText('E2E 会话')
     await expect(page.getByTestId('chat-panel')).toContainText('/tool read hello.txt')
-    await expect(page.getByTestId('chat-panel')).toContainText('工具执行完成：hello from e2e')
+    await expect(page.getByTestId('chat-panel')).toContainText('工具执行完成：hello.txt（共 1 行')
     await page.getByTestId('audit-toggle').click()
     await expect(page.getByTestId('audit-panel')).toContainText('write_file')
     await expect(page.getByTestId('audit-panel')).toContainText('已批准')
@@ -546,9 +552,9 @@ test('adds a provider, switches models and recovers from misconfiguration', asyn
     await page.getByTestId('settings-save').click()
     await expect(page.getByTestId('settings-dialog')).not.toBeVisible()
 
-    await expect(page.getByTestId('model-picker')).toContainText('deepseek-chat')
+    await expect(page.getByTestId('model-picker')).toContainText('deepseek-v4-pro')
     await page.getByTestId('model-picker').click()
-    await expect(page.getByTestId('model-option-deepseek-deepseek-chat')).toBeVisible()
+    await expect(page.getByTestId('model-option-deepseek-deepseek-v4-pro')).toBeVisible()
     await expect(page.getByTestId('model-option-mock-mock')).toBeVisible()
     await page.keyboard.press('Escape')
 
@@ -601,6 +607,25 @@ test('switches approval modes for agent tools', async () => {
     await page.getByTestId('approval-deny').click()
     await expect(page.getByTestId('chat-send')).toBeVisible()
     await expect(readFile(join(workspaceDir, 'notes', 'manual.txt'), 'utf8')).rejects.toThrow()
+
+    // T4.2：点「会话内允许」→ 本会话内写同一文件不再询问
+    await page.getByTestId('chat-input').fill('/tool write notes/allow-session.txt')
+    await page.getByTestId('chat-send').click()
+    const allowTimeline = page.getByTestId('timeline').last()
+    await expect(allowTimeline.getByTestId('approval-card')).toBeVisible()
+    await allowTimeline.getByTestId('approval-allow-session').click()
+    await expect(page.getByTestId('chat-send')).toBeVisible()
+    expect(await readFile(join(workspaceDir, 'notes', 'allow-session.txt'), 'utf8')).toBe(
+      'mock tool demo\n'
+    )
+
+    await page.getByTestId('chat-input').fill('/tool write notes/allow-session.txt')
+    await page.getByTestId('chat-send').click()
+    await expect(page.getByTestId('chat-send')).toBeVisible()
+    await expect(page.getByTestId('timeline').last().getByTestId('approval-card')).toHaveCount(0)
+    expect(await readFile(join(workspaceDir, 'notes', 'allow-session.txt'), 'utf8')).toBe(
+      'mock tool demo\n'
+    )
 
     await page.getByTestId('approval-mode').click()
     await page.getByTestId('approval-mode-auto').click()
@@ -715,7 +740,7 @@ test('covers the project workflow end to end', async () => {
     await expect(page.getByTestId('status-bar')).toContainText(basename(expectedRoot))
     await expect(page.getByTestId('project-group').filter({ hasText: projectName })).toBeVisible()
     await expect(page.getByTestId('pinned-section')).toContainText('流程会话')
-    await expect(page.getByTestId('chat-panel')).toContainText('工具执行完成：hello e2e flow')
+    await expect(page.getByTestId('chat-panel')).toContainText('工具执行完成：hello.txt（共 1 行')
   } finally {
     await restarted.close()
     await rm(userDataDir, { recursive: true, force: true })

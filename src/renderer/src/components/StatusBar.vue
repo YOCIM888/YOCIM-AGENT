@@ -17,6 +17,15 @@ const runState = computed(() => (chat.sending ? '生成中' : '空闲'))
   <footer class="statusbar" :class="{ expanded: settings.statusExpanded }" data-testid="status-bar">
     <span>v{{ APP_VERSION }}</span>
     <span class="workspace-name">{{ workspace.info ? workspace.info.name : '无工作区' }}</span>
+    <span
+      v-if="workspace.info?.remote"
+      class="remote-badge"
+      data-testid="status-remote-badge"
+      :title="workspace.info.remote.displayRoot"
+    >
+      {{ workspace.info.remote.kind === 'wsl' ? 'WSL' : 'SSH' }} ·
+      {{ workspace.info.remote.rootPath }}
+    </span>
     <span class="run-state" :class="{ active: chat.sending }">{{ runState }}</span>
 
     <template v-if="settings.statusExpanded">
@@ -40,6 +49,18 @@ const runState = computed(() => (chat.sending ? '生成中' : '空闲'))
 </template>
 
 <style scoped>
+.remote-badge {
+  max-width: 240px;
+  padding: 0 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .statusbar {
   display: flex;
   align-items: center;

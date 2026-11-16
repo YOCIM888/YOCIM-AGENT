@@ -17,6 +17,8 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "lint": "eslint .",
     "format": "prettier --write .",
+    "bench": "vitest run tests/bench --pool=vmThreads",
+    "bench:baseline": "npm run bench && node -e \"require('node:fs').copyFileSync('tests/bench/results/last.json', 'tests/bench/results/baseline.json'); console.log('baseline updated')\"",
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -26,12 +28,14 @@
     "package:dir": "npm run build && electron-builder --dir"
   },
   "dependencies": {
+    "ssh2": "^1.17.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.65.1",
     "@types/node": "^24.19.2",
+    "@types/ssh2": "^1.15.6",
     "@vitejs/plugin-vue": "^6.0.11",
     "dompurify": "^3.4.18",
     "electron": "^45.3.2",

@@ -2,12 +2,19 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { ApprovalMode } from '@shared/approval'
 import type { ContextAttachment } from '@shared/attachment'
+import { CONTEXT_WINDOW_OPTIONS, formatWindowSize } from '@shared/context'
+import {
+  REASONING_EFFORT_LABELS,
+  REASONING_EFFORT_LEVELS,
+  type ReasoningEffort
+} from '@shared/providers'
 import type { ContextMenuItem } from '../lib/menu'
 import { useChatStore } from '../stores/chat'
 import { usePreferencesStore } from '../stores/preferences'
 import { useProvidersStore } from '../stores/providers'
 import { useWorkspaceStore } from '../stores/workspace'
 import ContextMenu from './ContextMenu.vue'
+import ContextRing from './ContextRing.vue'
 
 const chat = useChatStore()
 const workspace = useWorkspaceStore()
@@ -100,8 +107,42 @@ function attachCurrent(): void {
 
 function openModelMenu(event: MouseEvent): void {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  const height = Math.min(modelItems.value.length * 30 + 16, window.innerHeight * 0.6)
+  const height = Math.min(
+    modelItems.value.length * 30 + 16 + MODEL_MENU_FOOTER_HEIGHT,
+    window.innerHeight * 0.6
+  )
   modelMenu.value = { x: rect.left, y: rect.top - height - 6 }
+}
+
+const MODEL_MENU_FOOTER_HEIGHT = 96
+
+const windowOptions = CONTEXT_WINDOW_OPTIONS
+const activeWindowLabel = computed(() => formatWindowSize(providers.contextWindow))
+
+const effortOptions = REASONING_EFFORT_LEVELS
+
+async function changeContextWindow(value: string): Promise<void> {
+  const provider = providers.activeProvider
+  if (!provider) return
+  const next = Number(value)
+  if (!Number.isFinite(next)) return
+  const ok = await providers.setContextWindow({
+    providerId: provider.id,
+    model: providers.activeModel,
+    contextWindow: next
+  })
+  // 圆环显示的是最近一次用量（含 limit），窗口变了要立刻按新窗口重算
+  if (ok) void chat.refreshActiveUsage()
+}
+
+async function changeReasoningEffort(value: string): Promise<void> {
+  const provider = providers.activeProvider
+  if (!provider) return
+  await providers.setReasoningEffort({
+    providerId: provider.id,
+    model: providers.activeModel,
+    effort: value as ReasoningEffort
+  })
 }
 
 async function selectModel(id: string): Promise<void> {
@@ -209,6 +250,12 @@ onMounted(() => {
       </button>
       <span class="chip">▤ {{ workspaceName }}</span>
       <span class="spacer"></span>
+      <ContextRing
+        :usage="chat.contextUsage"
+        :compressing="chat.compressing"
+        :disabled="chat.sending"
+        @compress="chat.compress()"
+      />
       <button
         type="button"
         class="model"
@@ -239,9 +286,41 @@ onMounted(() => {
       :x="modelMenu.x"
       :y="modelMenu.y"
       :items="modelItems"
+      :footer-height="MODEL_MENU_FOOTER_HEIGHT"
       @select="selectModel"
       @close="modelMenu = null"
-    />
+    >
+      <template #footer>
+        <label class="window-row" data-testid="context-window-row">
+          <span class="window-label">上下文窗口（当前 {{ activeWindowLabel }}）</span>
+          <select
+            class="window-select"
+            :value="providers.contextWindow"
+            data-testid="context-window-select"
+            @change="changeContextWindow(($event.target as HTMLSelectElement).value)"
+            @click.stop
+          >
+            <option v-for="option in windowOptions" :key="option" :value="option">
+              {{ formatWindowSize(option) }}
+            </option>
+          </select>
+        </label>
+        <label class="window-row" data-testid="reasoning-effort-row">
+          <span class="window-label">思考强度</span>
+          <select
+            class="window-select"
+            :value="providers.reasoningEffort"
+            data-testid="reasoning-effort-select"
+            @change="changeReasoningEffort(($event.target as HTMLSelectElement).value)"
+            @click.stop
+          >
+            <option v-for="option in effortOptions" :key="option" :value="option">
+              {{ REASONING_EFFORT_LABELS[option] }}
+            </option>
+          </select>
+        </label>
+      </template>
+    </ContextMenu>
 
     <ContextMenu
       v-if="approvalMenu"
@@ -475,6 +554,38 @@ textarea::placeholder {
 .caret {
   flex: none;
   font-size: 9px;
+}
+
+.window-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: default;
+}
+
+.window-row + .window-row {
+  margin-top: 8px;
+}
+
+.window-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.window-select {
+  flex: none;
+  max-width: 90px;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
 }
 
 .send,
