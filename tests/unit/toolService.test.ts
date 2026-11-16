@@ -186,7 +186,7 @@ describe('write_file approval', () => {
 })
 
 describe('approval modes', () => {
-  it('auto mode approves writes but still asks for commands', async () => {
+  it('auto mode approves local writes and commands without requests', async () => {
     const autoService = new ToolService({
       approvals,
       audit,
@@ -207,15 +207,40 @@ describe('approval modes', () => {
       ok: true
     })
 
-    const commandRun = autoService.execute(
+    const commandOutcome = await autoService.execute(
       toolCall('run_command', { command: 'node -e "console.log(1)"' }),
       context()
     )
-    // 白名单加载是异步的（读 .yocim/commands.json），等审批请求落地
+    expect(commandOutcome.ok).toBe(true)
+    expect(requests).toHaveLength(0)
+    // AuditStore.list() 按时间倒序，最新一条就是刚执行的命令
+    expect(audit.list()[0]).toMatchObject({
+      tool: 'run_command',
+      approval: 'not_required',
+      ok: true
+    })
+  })
+
+  it('auto mode still asks for external commands', async () => {
+    const autoService = new ToolService({
+      approvals,
+      audit,
+      requireGuard: () => guard,
+      getApprovalMode: () => 'auto'
+    })
+
+    const run = autoService.execute(
+      toolCall('run_command', { command: 'git push origin main' }),
+      context()
+    )
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ tool: 'run_command', risk: 'high' })
+    expect(requests[0].reason).toContain('推送')
     approvals.respond(requests[0].approvalId, 'approve')
-    expect((await commandRun).ok).toBe(true)
+    // 测试工作区不是 git 仓库，命令本身会失败；这里只验证审批流程
+    await run
+    expect(audit.list()[0]).toMatchObject({ tool: 'run_command', approval: 'approved' })
   })
 
   it('open mode approves writes and commands without requests', async () => {
@@ -243,6 +268,99 @@ describe('approval modes', () => {
       approval: 'not_required',
       ok: true
     })
+  })
+})
+
+describe('command risk tiers by approval mode', () => {
+  function makeService(mode: 'manual' | 'auto' | 'open', dirty = true): ToolService {
+    return new ToolService({
+      approvals,
+      audit,
+      requireGuard: () => guard,
+      getApprovalMode: () => mode,
+      isWorktreeDirty: async () => dirty
+    })
+  }
+
+  const settleApproval = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 50))
+
+  it('readonly commands skip approval in every mode', async () => {
+    for (const mode of ['manual', 'auto', 'open'] as const) {
+      requests.length = 0
+      const outcome = await makeService(mode).execute(
+        toolCall('run_command', { command: 'git --version' }),
+        context()
+      )
+      expect(outcome.ok).toBe(true)
+      expect(outcome.content).toContain('git version')
+      expect(requests).toHaveLength(0)
+    }
+  })
+
+  it('local commands ask only in manual mode', async () => {
+    const manualRun = makeService('manual').execute(
+      toolCall('run_command', { command: 'node -p 1' }),
+      context()
+    )
+    await settleApproval()
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ tool: 'run_command', risk: 'medium' })
+    expect(requests[0].reason).toContain('本地')
+    approvals.respond(requests[0].approvalId, 'approve')
+    expect((await manualRun).ok).toBe(true)
+
+    requests.length = 0
+    const autoOutcome = await makeService('auto').execute(
+      toolCall('run_command', { command: 'node -p 1' }),
+      context()
+    )
+    expect(autoOutcome.ok).toBe(true)
+    expect(requests).toHaveLength(0)
+  })
+
+  it('external git commands ask in manual and auto modes', async () => {
+    for (const mode of ['manual', 'auto'] as const) {
+      requests.length = 0
+      const run = makeService(mode).execute(
+        toolCall('run_command', { command: 'git push origin main' }),
+        context()
+      )
+      await settleApproval()
+      expect(requests).toHaveLength(1)
+      expect(requests[0]).toMatchObject({ tool: 'run_command', risk: 'high' })
+      expect(requests[0].reason).toContain('推送')
+      approvals.respond(requests[0].approvalId, 'approve')
+      await run
+      expect(audit.list().at(-1)).toMatchObject({ tool: 'run_command', approval: 'approved' })
+    }
+  })
+
+  it('git pull asks only when the worktree is dirty', async () => {
+    await makeService('auto', false).execute(
+      toolCall('run_command', { command: 'git pull --ff-only' }),
+      context()
+    )
+    expect(requests).toHaveLength(0)
+
+    const run = makeService('auto', true).execute(
+      toolCall('run_command', { command: 'git pull --ff-only' }),
+      context()
+    )
+    await settleApproval()
+    expect(requests).toHaveLength(1)
+    expect(requests[0].reason).toContain('未提交改动')
+    approvals.respond(requests[0].approvalId, 'approve')
+    await run
+  })
+
+  it('open mode still blocks non-git dangerous commands', async () => {
+    const outcome = await makeService('open').execute(
+      toolCall('run_command', { command: 'rm -rf /' }),
+      context()
+    )
+    expect(outcome.ok).toBe(false)
+    expect(outcome.summary).toContain('危险命令')
+    expect(requests).toHaveLength(0)
   })
 })
 
@@ -275,7 +393,8 @@ describe('run_command protection', () => {
     // 白名单加载是异步的（读 .yocim/commands.json），等审批请求落地
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(requests).toHaveLength(1)
-    expect(requests[0]).toMatchObject({ tool: 'run_command', risk: 'high' })
+    expect(requests[0]).toMatchObject({ tool: 'run_command', risk: 'medium' })
+    expect(requests[0].reason).toContain('本地')
     approvals.respond(requests[0].approvalId, 'approve')
 
     const outcome = await run

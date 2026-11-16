@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useAppCommands } from '../composables/useAppCommands'
 import type { ContextMenuItem } from '../lib/menu'
 import { useSettingsStore } from '../stores/settings'
+import { useUpdateStore } from '../stores/update'
 import ContextMenu from './ContextMenu.vue'
 import SettingsDialog from './SettingsDialog.vue'
 
@@ -10,6 +11,7 @@ type MenuKind = 'app' | 'edit'
 type WindowAction = 'minimize' | 'maximize' | 'close'
 
 const settings = useSettingsStore()
+const update = useUpdateStore()
 const commands = useAppCommands()
 const menu = ref<{ kind: MenuKind; x: number; y: number } | null>(null)
 const showSettings = ref(false)
@@ -20,7 +22,13 @@ const appItems = computed<ContextMenuItem[]>(() => [
     label: settings.theme === 'dark' ? '切换到浅色主题' : '切换到深色主题',
     testid: 'theme-toggle'
   },
-  { id: 'settings', label: '设置…', testid: 'settings-open', separatorBefore: true }
+  {
+    id: 'check-update',
+    label: '检查更新',
+    testid: 'menu-check-update',
+    separatorBefore: true
+  },
+  { id: 'settings', label: '设置…', testid: 'settings-open' }
 ])
 
 const editItems = computed<ContextMenuItem[]>(() => [
@@ -60,6 +68,8 @@ function selectMenu(id: string): void {
     settings.toggleTheme()
   } else if (id === 'settings') {
     showSettings.value = true
+  } else if (id === 'check-update') {
+    void update.check()
   } else if (id === 'new-session') {
     void commands.createSession()
   } else if (id === 'search-session') {

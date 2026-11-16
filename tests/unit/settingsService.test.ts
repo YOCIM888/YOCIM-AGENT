@@ -46,7 +46,7 @@ describe('SettingsService providers', () => {
     const settings = service.getPublic()
     expect(settings.activeProviderId).toBe('mock')
     expect(settings.activeModel).toBe('mock')
-    expect(settings.approvalMode).toBe('manual')
+    expect(settings.approvalMode).toBe('auto')
     expect(settings.providers).toHaveLength(1)
     expect(settings.providers[0]).toMatchObject({
       id: 'mock',
@@ -58,6 +58,8 @@ describe('SettingsService providers', () => {
   })
 
   it('persists the approval mode', () => {
+    expect(service.getApprovalMode()).toBe('auto')
+    expect(service.setApprovalMode({ mode: 'manual' }).approvalMode).toBe('manual')
     expect(service.getApprovalMode()).toBe('manual')
     expect(service.setApprovalMode({ mode: 'auto' }).approvalMode).toBe('auto')
     expect(service.getApprovalMode()).toBe('auto')

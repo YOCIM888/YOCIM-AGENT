@@ -6,7 +6,8 @@ import { AppError } from '../../shared/errors'
  * 命令策略：内置默认白名单 + 项目级 `.yocim/commands.json` 扩展。
  *
  * 设计原则：
- * - 白名单只决定「允许哪个可执行程序」，git 等自带子命令约束；
+ * - 白名单只决定「允许哪个可执行程序」；git 子命令不受策略层限制，
+ *   开放模式直接放行，自动/手动模式交给人工审批（见 ToolService）；
  * - 危险正则始终生效，项目配置无法放开；
  * - `.yocim/commands.json` 是项目内约定文件，格式 `{ "allow": ["uv", "mix"] }`
  *   或直接字符串数组；最多 50 条，仅接受安全的可执行名。
@@ -31,16 +32,6 @@ export const DEFAULT_ALLOWED_COMMANDS = new Set([
   'gradle'
 ])
 
-const GIT_SAFE_SUBCOMMANDS = new Set([
-  'status',
-  'diff',
-  'log',
-  'show',
-  'branch',
-  'rev-parse',
-  'ls-files'
-])
-
 const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\brm\s+-[a-z]*r[a-z]*f\b/i, reason: '递归强制删除' },
   { pattern: /\brm\s+-rf\b/i, reason: '递归强制删除' },
@@ -52,8 +43,7 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\bdel\s+\/f\s+\/s\b/i, reason: '递归强制删除' },
   { pattern: /\bremove-item\b[^\n]*-recurse/i, reason: '递归删除（PowerShell）' },
   { pattern: /\b(?:curl|wget)\b[^\n|]*\|\s*(?:ba|z|k)?sh\b/i, reason: '下载并执行远程脚本' },
-  { pattern: /\b(?:iwr|invoke-webrequest)\b[^\n|]*\|\s*iex\b/i, reason: '下载并执行远程脚本' },
-  { pattern: /\bgit\s+push\b/i, reason: '禁止自动推送远端' }
+  { pattern: /\b(?:iwr|invoke-webrequest)\b[^\n|]*\|\s*iex\b/i, reason: '下载并执行远程脚本' }
 ]
 
 /** 项目自定义命令名：字母开头，仅字母数字与 . - _，长度 ≤ 64 */
@@ -130,11 +120,5 @@ export function assertCommandAllowed(command: string, allowed: ReadonlySet<strin
       'E_TOOL_DENIED',
       `命令不在白名单：${tokens[0]}。可在 .yocim/commands.json 中扩展（{"allow": ["${tokens[0]}"]}）`
     )
-  }
-  if (executable === 'git') {
-    const subcommand = tokens[1]
-    if (!subcommand || !GIT_SAFE_SUBCOMMANDS.has(subcommand)) {
-      throw new AppError('E_TOOL_DENIED', `git 子命令不允许：${subcommand ?? '(空)'}`)
-    }
   }
 }

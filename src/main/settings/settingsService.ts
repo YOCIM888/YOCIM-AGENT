@@ -278,7 +278,7 @@ export class SettingsService {
 
   getApprovalMode(): ApprovalMode {
     const value = this.repo.get(KEY_APPROVAL_MODE)
-    return value === 'auto' || value === 'open' ? value : 'manual'
+    return value === 'manual' || value === 'open' ? value : 'auto'
   }
 
   setApprovalMode(input: SettingsSetApprovalModeRequest): PublicSettings {

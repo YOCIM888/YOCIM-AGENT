@@ -108,6 +108,9 @@ export const IPC_CHANNELS = {
   storageInfo: 'storage:info',
   storagePick: 'storage:pick',
   storageOpen: 'storage:open',
+  updateCheck: 'update:check',
+  updateOpen: 'update:open',
+  updateAvailable: 'update:available',
   windowControl: 'window:control'
 } as const
 

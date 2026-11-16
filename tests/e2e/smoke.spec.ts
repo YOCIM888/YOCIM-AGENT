@@ -9,7 +9,7 @@ const mainEntry = join(__dirname, '../../out/main/index.js')
 
 function launch(userDataDir: string): ReturnType<typeof electron.launch> {
   return electron.launch({
-    args: [mainEntry, `--user-data-dir=${userDataDir}`]
+    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check']
   })
 }
 
@@ -34,6 +34,14 @@ async function openSettings(page: Page): Promise<void> {
 
 async function openSessionMenu(page: Page): Promise<void> {
   await page.getByTestId('session-row-active').click({ button: 'right' })
+}
+
+async function setApprovalMode(page: Page, mode: 'manual' | 'auto' | 'open'): Promise<void> {
+  await page.getByTestId('approval-mode').click()
+  await page.getByTestId(`approval-mode-${mode}`).click()
+  await expect(page.getByTestId('approval-mode')).toContainText(
+    mode === 'manual' ? '手动模式' : mode === 'auto' ? '自动模式' : '开放模式'
+  )
 }
 
 async function patchOpenDialog(
@@ -290,6 +298,9 @@ test('selects a workspace, runs tools with approvals and persists across restart
     // read_file 现在返回带行号的内容：首行是「文件（共 N 行，显示 a-b）」
     await expect(page.getByTestId('chat-panel')).toContainText('工具执行完成：hello.txt（共 1 行')
     await expect(page.getByTestId('chat-send')).toBeVisible()
+
+    // 默认档位为自动：这里显式切到手动档，验证审批流程
+    await setApprovalMode(page, 'manual')
 
     await page.getByTestId('chat-input').fill('/tool write notes/demo.txt')
     await page.getByTestId('chat-send').click()
@@ -660,7 +671,8 @@ test('switches approval modes for agent tools', async () => {
     await openFolder(page)
     await page.getByTestId('new-session').click()
 
-    await expect(page.getByTestId('approval-mode')).toContainText('手动模式')
+    // 默认档位为自动；本用例从手动档开始逐档验证
+    await setApprovalMode(page, 'manual')
 
     await page.getByTestId('chat-input').fill('/tool write notes/manual.txt')
     await page.getByTestId('chat-send').click()
@@ -699,20 +711,16 @@ test('switches approval modes for agent tools', async () => {
     await expect(page.getByTestId('timeline').last().getByTestId('approval-card')).toHaveCount(0)
     expect(await readFile(join(workspaceDir, 'notes', 'auto.txt'), 'utf8')).toBe('mock tool demo\n')
 
-    await page.getByTestId('approval-mode').click()
-    await page.getByTestId('approval-mode-open').click()
-    await expect(page.getByTestId('approval-mode')).toContainText('开放模式')
+    await setApprovalMode(page, 'open')
 
-    await page.getByTestId('chat-input').fill('/tool command node -v')
+    await page.getByTestId('chat-input').fill('/tool command node -p 1')
     await page.getByTestId('chat-send').click()
     await expect(page.getByTestId('chat-send')).toBeVisible()
     await expect(page.getByTestId('timeline').last().getByTestId('approval-card')).toHaveCount(0)
 
-    await page.getByTestId('approval-mode').click()
-    await page.getByTestId('approval-mode-manual').click()
-    await expect(page.getByTestId('approval-mode')).toContainText('手动模式')
+    await setApprovalMode(page, 'manual')
 
-    await page.getByTestId('chat-input').fill('/tool command node -v')
+    await page.getByTestId('chat-input').fill('/tool command node -p 1')
     await page.getByTestId('chat-send').click()
     await expect(page.getByTestId('timeline').last().getByTestId('approval-card')).toBeVisible()
     await page.getByTestId('approval-approve').last().click()
@@ -748,6 +756,7 @@ test('covers the project workflow end to end', async () => {
     await expect(page.getByTestId('project-group').filter({ hasText: projectName })).toBeVisible()
 
     await page.getByTestId('new-session').click()
+    await setApprovalMode(page, 'manual')
     await page.getByTestId('chat-input').fill('/tool read hello.txt')
     await page.getByTestId('chat-send').click()
     await expect(page.getByTestId('timeline').last()).toContainText('已执行 1 个步骤')

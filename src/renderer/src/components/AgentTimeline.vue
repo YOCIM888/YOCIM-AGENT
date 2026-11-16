@@ -237,6 +237,9 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
               <span class="risk">{{ riskLabel(step.approval.risk) }}</span>
             </div>
             <p class="approval-args">{{ step.argsSummary }}</p>
+            <p v-if="requestOf(step)?.reason" class="approval-reason" data-testid="approval-reason">
+              {{ requestOf(step)!.reason }}
+            </p>
 
             <div v-if="requestOf(step)?.diff" class="diff-preview" data-testid="approval-diff">
               <div
@@ -774,6 +777,13 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
   line-height: 1.55;
   user-select: text;
   word-break: break-all;
+}
+
+.approval-reason {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .diff-preview {

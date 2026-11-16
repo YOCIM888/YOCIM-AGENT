@@ -7,7 +7,9 @@ import { _electron as electron, expect, test, type Page } from '@playwright/test
 const mainEntry = join(__dirname, '../../out/main/index.js')
 
 function launch(userDataDir: string): ReturnType<typeof electron.launch> {
-  return electron.launch({ args: [mainEntry, `--user-data-dir=${userDataDir}`] })
+  return electron.launch({
+    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check']
+  })
 }
 
 function git(cwd: string, ...args: string[]): string {
@@ -149,6 +151,9 @@ test('audit filters, shows details, streams live entries and exports JSON/CSV', 
     const page = await app.firstWindow()
     await selectWorkspace(page, app, workspaceDir)
     await page.getByTestId('new-session').click()
+    // 默认档位为自动：显式切到手动档以验证审批与审计记录
+    await page.getByTestId('approval-mode').click()
+    await page.getByTestId('approval-mode-manual').click()
 
     // 一次只读工具 + 一次需审批的写入
     await page.getByTestId('chat-input').fill('/tool read hello.txt')

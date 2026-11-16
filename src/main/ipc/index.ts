@@ -105,6 +105,7 @@ import {
   storagePickInputSchema,
   chatCompressInputSchema,
   timelineReadInputSchema,
+  updateDownloadInputSchema,
   windowControlInputSchema,
   workspaceOpenProjectInputSchema,
   type ApprovalRespondRequest,
@@ -207,11 +208,13 @@ import {
   type TimelineReadRequest,
   type TimelineReadResult,
   type TimelineRestoreResult,
+  type UpdateDownloadRequest,
   type WindowControlRequest,
   type WorkspaceInfo,
   type WorkspaceOpenProjectRequest
 } from '../../shared/ipc'
 import type { ProjectSummary } from '../../shared/session'
+import type { UpdateCheckResult } from '../../shared/update'
 import { AgentService } from '../agent/agentService'
 import { AllowRuleStore } from '../approval/allowRules'
 import { ApprovalManager } from '../approval/approvalManager'
@@ -241,6 +244,8 @@ import { PlanStore } from '../agent/planStore'
 import { SettingsService, type SettingsCrypto } from '../settings/settingsService'
 import { BillingService } from '../billing/billingService'
 import { StorageService } from '../storage/storageService'
+import { currentAppVersion } from '../update/appVersion'
+import { checkForUpdate } from '../update/updateService'
 import { createSearchServiceRunner } from '../tools/searchTools'
 import { createTavilySearchRunner } from '../tools/webSearchTools'
 import { createImageGenRunner } from '../tools/imageGenTools'
@@ -437,6 +442,14 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     accessGuard: () => workspaceService.accessGuard(),
     search: createSearchServiceRunner(searchService),
     getApprovalMode: () => settingsService.getApprovalMode(),
+    // git pull 的条件确认：工作区不干净（或无法查询）时仍需人工确认
+    isWorktreeDirty: async () => {
+      const result = await runGit(['status', '--porcelain'], {
+        cwd: workspaceService.accessGuard().root,
+        timeoutMs: 10_000
+      })
+      return result.code !== 0 || result.stdout.trim().length > 0
+    },
     projectCommands: async () => {
       try {
         return await loadProjectCommands(workspaceService.accessGuard().root)
@@ -1326,6 +1339,23 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     if (error) throw new AppError('E_IO', `打开目录失败：${error}`)
     return null
   })
+
+  handleIpc<undefined, UpdateCheckResult>(IPC_CHANNELS.updateCheck, null, async () =>
+    checkForUpdate({
+      currentVersion: currentAppVersion(),
+      platform: process.platform,
+      arch: process.arch
+    })
+  )
+
+  handleIpc<UpdateDownloadRequest, null>(
+    IPC_CHANNELS.updateOpen,
+    updateDownloadInputSchema,
+    async (input) => {
+      await shell.openExternal(input.url)
+      return null
+    }
+  )
 
   handleIpc<WindowControlRequest, null>(
     IPC_CHANNELS.windowControl,

@@ -108,6 +108,7 @@ import type {
   TimelineReadInput,
   TimelineReadResult,
   TimelineRestoreResult,
+  UpdateDownloadInput,
   WindowControlInput,
   WorkspaceInfo,
   WorkspaceOpenProjectInput,
@@ -125,6 +126,7 @@ import type {
 } from '../shared/ipc'
 import type { RemoteConnectionState } from '../shared/remote'
 import type { TaskEvent } from '../shared/tasks'
+import type { UpdateCheckResult, UpdateInfo } from '../shared/update'
 import type { ProjectSummary, SessionSummary } from '../shared/session'
 import type {
   GitBranches,
@@ -391,6 +393,20 @@ const api: YocimApi = {
   window: {
     control: (input: WindowControlInput) =>
       invoke<IpcResult<null>>(IPC_CHANNELS.windowControl, input)
+  },
+  update: {
+    check: () => invoke<IpcResult<UpdateCheckResult>>(IPC_CHANNELS.updateCheck),
+    openDownload: (input: UpdateDownloadInput) =>
+      invoke<IpcResult<null>>(IPC_CHANNELS.updateOpen, input),
+    onAvailable: (listener: (info: UpdateInfo) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, payload: UpdateInfo): void => {
+        listener(payload)
+      }
+      ipcRenderer.on(IPC_CHANNELS.updateAvailable, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.updateAvailable, handler)
+      }
+    }
   },
   clipboard: {
     writeText: (input: ClipboardWriteTextInput) =>
