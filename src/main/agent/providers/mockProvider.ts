@@ -23,6 +23,7 @@ function splitByLength(text: string, size: number): string[] {
  *   /tool write <path>      -> write_file（触发审批）
  *   /tool command <command> -> run_command（触发审批）
  *   /tool plan a,b,c        -> update_plan（第一步 doing）
+ *   /think <内容>           -> 先流式输出思考链，再给正文（思考块 UI 演示）
  */
 function parseToolDemo(text: string): ToolCall | null {
   const match = /^\/tool\s+(read|write|command|plan)\s+(.+)$/i.exec(text.trim())
@@ -83,6 +84,17 @@ export class MockProvider implements ChatProvider {
     yield { type: 'done', finishReason: 'stop' }
   }
 
+  private async *streamThinking(text: string, signal: AbortSignal): AsyncGenerator<ProviderEvent> {
+    const reasoning = '先拆解问题，确认关键约束；再逐步验证，最后汇总结论。'
+    for (const chunk of splitByLength(reasoning, Math.max(2, Math.floor(this.chunkSize / 2)))) {
+      if (signal.aborted) return
+      await delay(this.delayMs)
+      if (signal.aborted) return
+      yield { type: 'reasoning', text: chunk }
+    }
+    yield* this.streamText(`思考完成：${text}`, signal)
+  }
+
   async *stream(request: ProviderRequest, signal: AbortSignal): AsyncGenerator<ProviderEvent> {
     const lastMessage = request.messages[request.messages.length - 1]
     if (lastMessage?.role === 'tool') {
@@ -95,6 +107,11 @@ export class MockProvider implements ChatProvider {
     }
 
     const lastUser = [...request.messages].reverse().find((message) => message.role === 'user')
+    const thinking = /^\/think(?:\s+(.*))?$/is.exec(lastUser?.content ?? '')
+    if (thinking) {
+      yield* this.streamThinking(thinking[1]?.trim() || '演示', signal)
+      return
+    }
     const toolCall = parseToolDemo(lastUser?.content ?? '')
     if (toolCall) {
       yield { type: 'tool_call', toolCall }

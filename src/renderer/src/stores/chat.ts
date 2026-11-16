@@ -35,6 +35,10 @@ export interface ChatMessage {
   role: ChatRole
   content: string
   createdAt: number
+  /** 思考链内容：与正文同属一条助手消息，以折叠块展示 */
+  reasoningContent?: string
+  /** 思考链是否仍在产出（正文开始或本轮结束即视为思考完毕） */
+  reasoningStreaming?: boolean
   streaming?: boolean
   runId?: string
   runStartedAt?: number
@@ -201,12 +205,23 @@ export const useChatStore = defineStore('chat', () => {
     switch (event.type) {
       case 'message:delta': {
         const message = findOrCreateAssistant(activeSessionId, event.messageId)
+        // 思考阶段先于正文：第一个正文分片即表示思考链已产出完毕
+        if (message.reasoningStreaming) message.reasoningStreaming = false
         message.content += event.text
+        break
+      }
+      case 'reasoning:delta': {
+        const message = findOrCreateAssistant(activeSessionId, event.messageId)
+        message.reasoningContent = (message.reasoningContent ?? '') + event.text
+        message.reasoningStreaming = true
         break
       }
       case 'message:done': {
         const message = findOrCreateAssistant(activeSessionId, event.messageId)
         message.content = event.content
+        // 以引擎给出的完整文本覆盖累积值，避免分片重复或丢失
+        if (event.reasoning !== undefined) message.reasoningContent = event.reasoning
+        message.reasoningStreaming = false
         message.streaming = false
         break
       }
@@ -254,6 +269,7 @@ export const useChatStore = defineStore('chat', () => {
         for (const message of messagesBySession.value[activeSessionId] ?? []) {
           if (message.runId !== activeRunId.value) continue
           if (message.streaming) message.streaming = false
+          if (message.reasoningStreaming) message.reasoningStreaming = false
           if (message.runStartedAt && !message.runEndedAt) {
             message.runEndedAt = event.ts
           }
@@ -337,7 +353,8 @@ export const useChatStore = defineStore('chat', () => {
       id: message.id,
       role: message.role,
       content: message.content,
-      createdAt: message.createdAt
+      createdAt: message.createdAt,
+      ...(message.reasoningContent ? { reasoningContent: message.reasoningContent } : {})
     }))
     void refreshUsage(sessionId)
     // 计划卡跨重启恢复

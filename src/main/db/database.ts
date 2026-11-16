@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const SCHEMA_VERSION = 9
+export const SCHEMA_VERSION = 11
 
 export const MIGRATION_V1 = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -177,6 +177,19 @@ CREATE INDEX IF NOT EXISTS idx_agent_usage_created ON agent_usage(created_at);
 CREATE INDEX IF NOT EXISTS idx_agent_usage_provider ON agent_usage(provider_id, model, created_at);
 `
 
+/**
+ * 推理模型的隐藏思考内容：带工具调用的助手消息必须原样回传 reasoning_content，
+ * 否则 DeepSeek 等 Provider 在下一轮返回 HTTP 400。
+ */
+const MIGRATION_V10 = `
+ALTER TABLE agent_context ADD COLUMN reasoning_content TEXT;
+`
+
+/** 会话消息里的思考内容：刷新/切换会话后思考块仍能展开查看。 */
+const MIGRATION_V11 = `
+ALTER TABLE messages ADD COLUMN reasoning_content TEXT;
+`
+
 function getUserVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as { user_version?: number } | undefined
   return Number(row?.user_version ?? 0)
@@ -312,6 +325,30 @@ export function migrate(db: DatabaseSync): void {
     try {
       db.exec(MIGRATION_V9)
       db.exec('PRAGMA user_version = 9')
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  if (version < 10) {
+    db.exec('BEGIN')
+    try {
+      db.exec(MIGRATION_V10)
+      db.exec('PRAGMA user_version = 10')
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  if (version < 11) {
+    db.exec('BEGIN')
+    try {
+      db.exec(MIGRATION_V11)
+      db.exec('PRAGMA user_version = 11')
       db.exec('COMMIT')
     } catch (error) {
       db.exec('ROLLBACK')

@@ -54,6 +54,20 @@ describe('AgentService persistence', () => {
     db.close()
   })
 
+  it('persists the reasoning chain with the assistant message', async () => {
+    const { db, sessions, messages, events, service } = createService()
+    const session = sessions.create({ title: '推理会话', workspaceRoot: null, projectId: null })
+
+    service.start({ sessionId: session.id, text: '/think 演示', history: [] })
+    await waitFor(() => events.some((event) => event.type === 'run:done'))
+
+    const stored = messages.listBySession(session.id)
+    expect(stored[1].role).toBe('assistant')
+    expect(stored[1].reasoningContent).toContain('先拆解问题')
+    expect(stored[1].content).toContain('思考完成：演示')
+    db.close()
+  })
+
   it('rejects sending into a missing session', () => {
     const { db, events, service } = createService()
     expect(() => service.start({ sessionId: 'missing', text: 'hi', history: [] })).toThrow(

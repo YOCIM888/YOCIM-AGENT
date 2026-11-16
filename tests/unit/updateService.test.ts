@@ -55,7 +55,7 @@ describe('version helpers', () => {
     expect(compareVersions('0.1.9', '0.2.0')).toBe(-1)
     expect(compareVersions('0.2.0-beta.1', '0.2.0')).toBe(-1)
     expect(compareVersions('bogus', '0.1.0')).toBeNull()
-    expect(isNewerVersion('v0.1.1', '0.1.0')).toBe(true)
+    expect(isNewerVersion('v0.1.2', '0.1.0')).toBe(true)
     expect(isNewerVersion('0.1.0', '0.1.0')).toBe(false)
   })
 

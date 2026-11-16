@@ -28,6 +28,9 @@ interface OpenAIStreamToolCallDelta {
 
 interface OpenAIStreamDelta {
   content?: string | null
+  /** DeepSeek 等推理模型在思考模式下返回的隐藏思考内容 */
+  reasoning_content?: string | null
+  reasoning?: string | null
   tool_calls?: OpenAIStreamToolCallDelta[]
 }
 
@@ -50,6 +53,23 @@ interface PendingToolCall {
   id: string
   name: string
   argumentsJson: string
+}
+
+/** 400 的原始响应体往往写着真正的拒绝原因，别只给用户一个状态码。 */
+async function describeHttpError(response: Response): Promise<string> {
+  let detail = ''
+  try {
+    const text = await response.clone().text()
+    if (text) {
+      const parsed = JSON.parse(text) as { error?: { message?: string } | string; message?: string }
+      const error = parsed.error
+      detail = (typeof error === 'string' ? error : error?.message) ?? parsed.message ?? text
+      detail = detail.replace(/\s+/g, ' ').trim().slice(0, 800)
+    }
+  } catch {
+    // 错误体不是 JSON 或流已关闭：保留状态码即可
+  }
+  return `Provider 返回 HTTP ${response.status}${detail ? `：${detail}` : ''}`
 }
 
 /**
@@ -79,6 +99,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
           return {
             role: 'assistant',
             content: message.content || null,
+            ...(message.reasoningContent ? { reasoning_content: message.reasoningContent } : {}),
             ...(message.toolCalls?.length
               ? {
                   tool_calls: message.toolCalls.map((call) => ({
@@ -136,7 +157,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
     }
 
     if (!response.ok) {
-      throw new Error(`Provider 返回 HTTP ${response.status}`)
+      throw new Error(await describeHttpError(response))
     }
     if (!response.body) {
       throw new Error('Provider 未返回响应体')
@@ -175,6 +196,11 @@ export class OpenAICompatibleProvider implements ChatProvider {
         }
 
         const choice = chunk.choices?.[0]
+        // 思考内容先于正文/工具调用到达；引擎会原样回传，供下一轮请求使用。
+        const reasoning = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning
+        if (typeof reasoning === 'string' && reasoning.length > 0) {
+          yield { type: 'reasoning', text: reasoning }
+        }
         const content = choice?.delta?.content
         if (typeof content === 'string' && content.length > 0) {
           yield { type: 'text', text: content }

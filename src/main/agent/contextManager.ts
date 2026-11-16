@@ -160,10 +160,11 @@ export class ContextManager {
       }
       if (entry.role === 'assistant') {
         const toolCalls = parseToolCalls(entry.toolCallsJson)
+        const reasoning = entry.reasoningContent ? { reasoningContent: entry.reasoningContent } : {}
         if (toolCalls.length) {
-          messages.push({ role: 'assistant', content: entry.content, toolCalls })
+          messages.push({ role: 'assistant', content: entry.content, toolCalls, ...reasoning })
         } else {
-          messages.push({ role: 'assistant', content: entry.content })
+          messages.push({ role: 'assistant', content: entry.content, ...reasoning })
         }
         continue
       }
@@ -182,6 +183,7 @@ export class ContextManager {
       content: message.content,
       toolCallsJson: message.toolCalls?.length ? JSON.stringify(message.toolCalls) : null,
       toolCallId: message.toolCallId ?? null,
+      reasoningContent: message.reasoningContent ?? null,
       tokens: estimateTextTokens(message.content),
       createdAt: Date.now()
     })
