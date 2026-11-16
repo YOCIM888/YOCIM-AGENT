@@ -28,10 +28,11 @@ export interface ApprovalDiff {
 }
 
 /**
- * 审批模式：
- * - manual：写文件与命令都需要审批；
- * - auto：自动批准写文件，命令仍需要审批；
- * - open：自动批准所有工具操作（仍受路径守卫与命令白名单限制）。
+ * 审批模式（按风险分层，见 main/tools/commandRisk.ts）：
+ * - manual：只读以外的一切改动都需要审批；
+ * - auto：本地可逆改动自动批准，外部可见或有损操作仍需审批（默认）；
+ * - open：自动批准除危险正则命中的所有工具操作，git 子命令全部放行。
+ * 三档都受路径守卫、命令白名单与危险正则限制。
  */
 export type ApprovalMode = 'manual' | 'auto' | 'open'
 
@@ -41,6 +42,8 @@ export interface ApprovalRequest {
   tool: string
   risk: 'medium' | 'high'
   argsSummary: string
+  /** 「为什么需要确认」的简短说明，审批卡展示 */
+  reason?: string
   /** 写工具（write_file/edit_file）审批时携带的 diff 预览 */
   diff?: ApprovalDiff
   /** 是否展示「会话内允许 / 项目内允许」按钮（写文件与命令） */

@@ -7,7 +7,9 @@ import { _electron as electron, expect, test } from '@playwright/test'
 const mainEntry = join(__dirname, '../../out/main/index.js')
 
 function launch(userDataDir: string): ReturnType<typeof electron.launch> {
-  return electron.launch({ args: [mainEntry, `--user-data-dir=${userDataDir}`] })
+  return electron.launch({
+    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check']
+  })
 }
 
 function git(cwd: string, ...args: string[]): string {

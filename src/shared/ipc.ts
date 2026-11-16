@@ -37,6 +37,7 @@ import {
   WEB_SEARCH_LIMITS
 } from './settings'
 import type { BillingSummary, ProviderBalance, StorageInfo } from './billing'
+import { UPDATE_RELEASES_URL } from './update'
 
 export type { IpcErrorCode } from './errors'
 export {
@@ -576,6 +577,17 @@ export const windowControlInputSchema = z.object({
 
 export type WindowControlInput = z.input<typeof windowControlInputSchema>
 export type WindowControlRequest = z.output<typeof windowControlInputSchema>
+
+/** 只允许打开本项目的 GitHub Release 链接，避免渲染层借机打开任意网址 */
+export const updateDownloadInputSchema = z.object({
+  url: z
+    .string()
+    .url()
+    .refine((url) => url.startsWith(`${UPDATE_RELEASES_URL}/`), '不是本项目的发布链接')
+})
+
+export type UpdateDownloadInput = z.input<typeof updateDownloadInputSchema>
+export type UpdateDownloadRequest = z.output<typeof updateDownloadInputSchema>
 
 /* -------------------------------------------------------------------------- */
 /* P2：编辑器保存与搜索替换                                                    */

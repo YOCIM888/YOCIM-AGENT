@@ -110,6 +110,27 @@ describe('允许规则（T4.2）', () => {
     expect(entry?.argsSummary).toContain('规则')
   })
 
+  it('a git allow rule remembers the subcommand family, not the whole command', async () => {
+    const first = service.execute(
+      toolCall('run_command', { command: 'git push origin main' }),
+      context()
+    )
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(requests).toHaveLength(1)
+    approvals.respond(requests[0].approvalId, 'approve_session')
+    await first
+
+    expect(allowRules.matchesCommand(workspaceRoot, 'session-1', 'git push origin dev')).toContain(
+      'git push'
+    )
+    const second = service.execute(
+      toolCall('run_command', { command: 'git push origin dev' }),
+      context()
+    )
+    expect((await second).ok).toBe(false) // 非 git 仓库，命令本身失败
+    expect(requests).toHaveLength(1) // 但不再弹审批
+  })
+
   it('rules cannot bypass the dangerous-pattern guard', async () => {
     allowRules.add(
       { kind: 'command', value: 'rm', scope: 'session', sessionId: 'session-1' },

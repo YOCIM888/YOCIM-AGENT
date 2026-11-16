@@ -105,10 +105,12 @@ import type {
   TaskStopInput,
   TaskStopResult,
   VscodeScanResponse,
+  UpdateDownloadInput,
   WindowControlInput,
   WorkspaceInfo,
   WorkspaceOpenProjectInput
 } from './ipc'
+import type { UpdateCheckResult, UpdateInfo } from './update'
 import type { ContextUsage } from './context'
 import type { DebugConfigFile, DebugEvent } from './debug'
 import type {
@@ -306,6 +308,15 @@ export interface YocimWindowApi {
   control(input: WindowControlInput): Promise<IpcResult<null>>
 }
 
+export interface YocimUpdateApi {
+  /** 手动/自动检查 GitHub Release；异常收敛在 data.status 里 */
+  check(): Promise<IpcResult<UpdateCheckResult>>
+  /** 在系统浏览器打开匹配当前平台的安装包页面 */
+  openDownload(input: UpdateDownloadInput): Promise<IpcResult<null>>
+  /** 启动时发现新版本的推送通知 */
+  onAvailable(listener: (info: UpdateInfo) => void): () => void
+}
+
 export interface YocimApi {
   platform: string
   versions: YocimVersions
@@ -325,6 +336,7 @@ export interface YocimApi {
   billing: YocimBillingApi
   storage: YocimStorageApi
   window: YocimWindowApi
+  update: YocimUpdateApi
   clipboard: YocimClipboardApi
   timeline: YocimTimelineApi
 }

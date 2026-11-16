@@ -6,7 +6,9 @@ import { _electron as electron, expect, test, type Page } from '@playwright/test
 const mainEntry = join(__dirname, '../../out/main/index.js')
 
 function launch(userDataDir: string): ReturnType<typeof electron.launch> {
-  return electron.launch({ args: [mainEntry, `--user-data-dir=${userDataDir}`] })
+  return electron.launch({
+    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check']
+  })
 }
 
 async function patchOpenDialog(
@@ -162,6 +164,9 @@ test('outline jumps to the editor, timeline diffs/restores, and attachments feed
 
     // 时间线：Agent 写入生成快照，外部修改后可 Diff 与恢复
     await page.getByTestId('new-session').click()
+    // 默认档位为自动：显式切到手动档以验证写入审批与时间线快照
+    await page.getByTestId('approval-mode').click()
+    await page.getByTestId('approval-mode-manual').click()
     await page.getByTestId('chat-input').fill('/tool write notes/t.txt')
     await page.getByTestId('chat-send').click()
     await page.getByTestId('approval-approve').last().click()

@@ -5,7 +5,7 @@ import type { ToolCall, ToolExecutionOutcome } from '../../shared/agent'
 import type { ApprovalMode, ApprovalRequest } from '../../shared/approval'
 import type { AuditApproval } from '../../shared/audit'
 import { AppError } from '../../shared/errors'
-import { isWriteTool, summarizeToolArgs, TOOL_DEFINITIONS, type ToolName } from '../../shared/tools'
+import { isWriteTool, summarizeToolArgs, TOOL_DEFINITIONS } from '../../shared/tools'
 import type { AllowRuleStore } from '../approval/allowRules'
 import type { ApprovalManager } from '../approval/approvalManager'
 import type { AuditStore } from '../audit/auditStore'
@@ -40,22 +40,7 @@ import {
 } from './verifyTools'
 import { runWebSearch, type WebSearchRunner } from './webSearchTools'
 import { runGenerateImage, type ImageGenRunner } from './imageGenTools'
-
-const TOOL_RISK: Record<ToolName, 'medium' | 'high'> = {
-  list_dir: 'medium',
-  read_file: 'medium',
-  search_files: 'medium',
-  write_file: 'medium',
-  edit_file: 'medium',
-  run_command: 'high',
-  run_tests: 'medium',
-  run_typecheck: 'medium',
-  run_lint: 'medium',
-  get_git_diff: 'medium',
-  update_plan: 'medium',
-  web_search: 'medium',
-  generate_image: 'medium'
-}
+import { allowRuleValue, classifyCommand, needsApproval } from './commandRisk'
 
 function describeError(error: unknown): string {
   if (error instanceof AppError) return error.message
@@ -103,6 +88,11 @@ export interface ToolServiceDeps {
   imageGen?: ImageGenRunner
   /** 生图是否可用：用于决定是否把 generate_image 放进工具列表 */
   imageGenEnabled?: () => boolean
+  /**
+   * 工作区是否有未提交改动：git pull 在工作区干净时降为本地风险；
+   * 缺省或查询失败时按「有改动」保守处理。
+   */
+  isWorktreeDirty?: () => Promise<boolean>
 }
 
 export class ToolService {
@@ -169,8 +159,29 @@ export class ToolService {
 
     if (isWriteTool(parsed.tool)) {
       const mode = this.deps.getApprovalMode?.() ?? 'manual'
-      let requiresApproval =
-        mode === 'manual' || (mode === 'auto' && TOOL_RISK[parsed.tool] === 'high')
+      /** 审批卡解释「为什么这一步需要确认」 */
+      let approvalReason: string | undefined
+      /** 外部操作才标高风险；本地操作在 manual 档询问时标中风险 */
+      let approvalRisk: ApprovalRequest['risk']
+      let requiresApproval: boolean
+
+      if (parsed.tool === 'run_command') {
+        const info = await classifyCommand(parsed.args.command, async () => {
+          if (!this.deps.isWorktreeDirty) return true
+          try {
+            return await this.deps.isWorktreeDirty()
+          } catch {
+            return true
+          }
+        })
+        approvalReason = info.reason
+        approvalRisk = info.risk === 'external' ? 'high' : 'medium'
+        requiresApproval = needsApproval(info.risk, mode)
+      } else {
+        approvalReason = '将修改工作区文件，可通过时间线恢复历史版本'
+        approvalRisk = 'medium'
+        requiresApproval = needsApproval('local', mode)
+      }
       /** 命中允许规则时的规则名（审计记录用） */
       let ruleName: string | null = null
       if (requiresApproval && this.deps.allowRules) {
@@ -225,7 +236,8 @@ export class ToolService {
           {
             callId: call.id,
             tool: parsed.tool,
-            risk: TOOL_RISK[parsed.tool],
+            risk: approvalRisk,
+            reason: approvalReason,
             argsSummary,
             diff: previewDiff,
             canAllowAlways: true
@@ -256,7 +268,9 @@ export class ToolService {
               {
                 kind: parsed.tool === 'run_command' ? 'command' : 'path',
                 value:
-                  parsed.tool === 'run_command' ? parsed.args.command : parsed.args.relativePath,
+                  parsed.tool === 'run_command'
+                    ? allowRuleValue(parsed.args.command)
+                    : parsed.args.relativePath,
                 scope: decision === 'approve_session' ? 'session' : 'project',
                 sessionId: context.sessionId
               },

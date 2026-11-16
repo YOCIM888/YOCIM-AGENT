@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import type { ApprovalMode } from '@shared/approval'
 
 export const usePreferencesStore = defineStore('preferences', () => {
-  const approvalMode = ref<ApprovalMode>('manual')
+  const approvalMode = ref<ApprovalMode>('auto')
   const error = ref('')
 
   async function refresh(): Promise<void> {

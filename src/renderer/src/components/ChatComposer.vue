@@ -31,9 +31,9 @@ const APPROVAL_LABELS: Record<ApprovalMode, string> = {
 }
 
 const APPROVAL_TITLES: Record<ApprovalMode, string> = {
-  manual: '审批模式：手动 · 写文件与命令都需要审批',
-  auto: '审批模式：自动 · 自动批准写文件，命令仍需审批',
-  open: '审批模式：开放 · 自动批准所有工具操作'
+  manual: '审批模式：手动 · 只读命令直接执行，文件改动与有损命令需要审批',
+  auto: '审批模式：自动 · 本地改动直接执行，推送与有损命令需要审批（默认）',
+  open: '审批模式：开放 · 除危险命令外全部直接执行（含所有 git 命令）'
 }
 
 const workspaceName = computed(() => workspace.info?.name ?? '未选择工作区')

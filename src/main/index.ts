@@ -7,6 +7,7 @@ import { openDatabase } from './db/database'
 import { registerIpcHandlers } from './ipc'
 import { initLogger, logError, logInfo } from './logger'
 import { resolveDataDir } from './storage/storageService'
+import { scheduleStartupUpdateCheck } from './update/startup'
 import { workspaceService } from './workspace/workspaceService'
 import { setWorkspaceStorePath } from './workspace/workspaceStore'
 
@@ -110,6 +111,8 @@ function createMainWindow(): BrowserWindow {
   window.webContents.on('responsive', () => {
     logInfo('main window responsive again')
   })
+
+  window.webContents.once('did-finish-load', () => scheduleStartupUpdateCheck(window))
 
   if (rendererDevUrl) {
     void window.loadURL(rendererDevUrl)

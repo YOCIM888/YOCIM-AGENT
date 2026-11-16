@@ -7,7 +7,7 @@ const mainEntry = join(__dirname, '../../out/main/index.js')
 
 function launch(userDataDir: string): ReturnType<typeof electron.launch> {
   return electron.launch({
-    args: [mainEntry, `--user-data-dir=${userDataDir}`]
+    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check']
   })
 }
 

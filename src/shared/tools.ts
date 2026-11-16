@@ -131,7 +131,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: 'run_command',
     description:
-      '在工作区内执行受控命令（需要用户审批，仅限白名单：node/npm/npx/pnpm/yarn/tsc/vitest/git 只读/python/pytest/cargo/go/make/dotnet/gradle，项目可在 .yocim/commands.json 扩展）。输出会增量展示给用户。',
+      '在工作区内执行受控命令（仅限白名单：node/npm/npx/pnpm/yarn/tsc/vitest/git/python/pytest/cargo/go/make/dotnet/gradle，项目可在 .yocim/commands.json 扩展）。git 子命令不限。按风险分层审批：只读命令各档位免审批；本地可逆操作仅手动档审批；推送、拉取（工作区有改动时）、重置等有损或外部操作在手动/自动档需要审批。输出会增量展示给用户。',
     parameters: {
       type: 'object',
       properties: {

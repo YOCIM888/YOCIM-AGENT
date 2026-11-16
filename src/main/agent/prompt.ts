@@ -63,7 +63,7 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
         '- 定位代码优先用 search_files（支持正则与 glob），不要用 list_dir 逐层翻找',
         '- 修改文件前必须先 read_file 确认原文；局部修改用 edit_file（一次可提交多处），仅新建或整体重写时用 write_file',
         '- edit_file 的 oldText 要包含整行和足够上下文以保证唯一匹配',
-        '- 命令仅限白名单（node/npm/npx/pnpm/yarn/tsc/vitest/git 只读/python/pytest/cargo/go/make/dotnet/gradle）；项目可用 .yocim/commands.json 扩展',
+        '- 命令仅限白名单（node/npm/npx/pnpm/yarn/tsc/vitest/git/python/pytest/cargo/go/make/dotnet/gradle）；项目可用 .yocim/commands.json 扩展；git 子命令不限。只读与本地可逆操作通常直接执行，推送/拉取/重置等外部或有损操作按当前审批模式可能需要用户确认',
         '- 跑测试用 run_tests（只回结构化摘要）、类型检查用 run_typecheck、风格检查用 run_lint；不要用 run_command 跑全量测试日志',
         '- 多步骤任务先建计划：用 update_plan 提交完整计划（首个进行中步骤标 doing），每完成一步立即更新（done + 下一步 doing）；计划会展示给用户并每轮自动回传，单步问答不需要',
         '- 完成修改后必须自验：改代码后运行相关测试与类型检查，失败就修复后复跑；收尾前可用 get_git_diff 自审改动'
