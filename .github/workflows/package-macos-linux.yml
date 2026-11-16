@@ -1,0 +1,92 @@
+name: Package macOS / Linux
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 目标 Release 标签
+        required: true
+        default: v0.1.0
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15-intel
+            platform: mac
+            arch: x64
+            rg_target: x86_64-apple-darwin
+            artifact_glob: 'release/*/*.dmg'
+          - os: macos-14
+            platform: mac
+            arch: arm64
+            rg_target: aarch64-apple-darwin
+            artifact_glob: 'release/*/*.dmg'
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            rg_target: x86_64-unknown-linux-musl
+            artifact_glob: 'release/*/*.AppImage'
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.platform }}-${{ matrix.arch }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bundle ripgrep 14.1.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=14.1.1
+          target="${{ matrix.rg_target }}"
+          url="https://github.com/BurntSushi/ripgrep/releases/download/${version}/ripgrep-${version}-${target}.tar.gz"
+          curl -fsSL "$url" | tar -xz -C "$RUNNER_TEMP"
+          cp "$RUNNER_TEMP/ripgrep-${version}-${target}/rg" resources/ripgrep/rg
+          chmod +x resources/ripgrep/rg
+
+      - name: Build app
+        run: npm run build
+
+      - name: Package
+        run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
+
+      - name: Upload to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(${{ matrix.artifact_glob }})
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "未找到打包产物" >&2
+            exit 1
+          fi
+          gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
