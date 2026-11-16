@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { AppError } from '../../src/shared/errors'
-import { chatSendInputSchema, fsTreeInputSchema } from '../../src/shared/ipc'
+import {
+  chatSendInputSchema,
+  fsTreeInputSchema,
+  storagePickInputSchema
+} from '../../src/shared/ipc'
 import { runIpcHandler } from '../../src/main/ipc/runIpcHandler'
 
 describe('runIpcHandler', () => {
@@ -111,5 +115,19 @@ describe('chatSendInputSchema', () => {
       history: [{ role: 'system', content: 'x' }]
     })
     expect(result.ok).toBe(false)
+  })
+})
+
+describe('storagePickInputSchema', () => {
+  it('accepts the empty payload sent by the renderer', async () => {
+    const result = await runIpcHandler(storagePickInputSchema, async (input) => input, undefined)
+    expect(result).toEqual({ ok: true, data: {} })
+  })
+
+  it('keeps an explicit directory flag', async () => {
+    const result = await runIpcHandler(storagePickInputSchema, async (input) => input, {
+      directory: false
+    })
+    expect(result).toEqual({ ok: true, data: { directory: false } })
   })
 })

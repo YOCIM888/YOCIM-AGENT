@@ -207,6 +207,20 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
 
           <p v-if="step.summary" class="step-result">{{ step.summary }}</p>
 
+          <div v-if="step.images?.length" class="step-images">
+            <a
+              v-for="(src, index) in step.images"
+              :key="index"
+              :href="src"
+              target="_blank"
+              rel="noreferrer"
+              class="step-image-link"
+              :title="src"
+            >
+              <img :src="src" alt="生成的图片" class="step-image" />
+            </a>
+          </div>
+
           <div v-if="step.output" class="output-wrap">
             <pre class="step-output">{{ step.output }}</pre>
           </div>
@@ -613,6 +627,29 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
 .step.failed .step-result {
   border-left-color: var(--danger);
   color: var(--danger);
+}
+
+.step-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.step-image-link {
+  display: block;
+  line-height: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.step-image {
+  display: block;
+  width: 200px;
+  height: 200px;
+  object-fit: cover;
+  background: var(--bg-subtle);
 }
 
 .output-wrap {

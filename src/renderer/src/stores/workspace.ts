@@ -302,11 +302,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     await resetWorkspace()
   }
 
-  async function openProject(projectId: string): Promise<boolean> {
+  async function openProject(
+    projectId: string,
+    options: { revealFolder?: boolean } = {}
+  ): Promise<boolean> {
     busy.value = true
     clearError()
     try {
-      const result = await window.yocim.workspace.openProject({ projectId })
+      const result = options.revealFolder
+        ? await window.yocim.projects.open({ projectId })
+        : await window.yocim.workspace.openProject({ projectId })
       if (!result.ok) {
         setError(result.error.message)
         return false

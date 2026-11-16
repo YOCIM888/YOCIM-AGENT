@@ -63,6 +63,12 @@ const key = computed<ToolIconKey>(() => toolIconKey(props.name))
       <path d="m2.5 10.4 1.5 1.5 2.6-2.6" />
       <path d="M8.4 4.8h5M8.4 10.6h5" />
     </g>
+    <!-- 生图：相框 + 山景 -->
+    <g v-else-if="key === 'image'">
+      <rect x="1.9" y="2.9" width="12.2" height="10.2" rx="1.5" />
+      <circle cx="5.7" cy="6.1" r="1.2" />
+      <path d="m2.2 11.4 3.4-3.1 2.3 2.1 2.2-2.4 3.7 3.6" />
+    </g>
     <!-- Git：分支 -->
     <g v-else>
       <circle cx="4.8" cy="3.9" r="1.9" />

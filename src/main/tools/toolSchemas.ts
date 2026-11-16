@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { AppError } from '../../shared/errors'
-import { WEB_SEARCH_LIMITS } from '../../shared/settings'
+import { IMAGE_GEN_LIMITS, IMAGE_SIZES, WEB_SEARCH_LIMITS } from '../../shared/settings'
 
 export const READ_FILE_DEFAULT_LIMIT = 400
 export const READ_FILE_MAX_LIMIT = 2000
@@ -99,6 +99,12 @@ export const webSearchArgsSchema = z.object({
   maxResults: z.number().int().min(1).max(WEB_SEARCH_LIMITS.maxResults).optional()
 })
 
+export const generateImageArgsSchema = z.object({
+  prompt: z.string().min(1).max(IMAGE_GEN_LIMITS.maxPromptLength),
+  size: z.enum(IMAGE_SIZES).optional(),
+  model: z.string().min(1).max(200).optional()
+})
+
 export type ListDirArgs = z.output<typeof listDirArgsSchema>
 export type ReadFileArgs = z.output<typeof readFileArgsSchema>
 export type SearchFilesArgs = z.output<typeof searchFilesArgsSchema>
@@ -111,6 +117,7 @@ export type RunLintArgs = z.output<typeof runLintArgsSchema>
 export type GetGitDiffArgs = z.output<typeof getGitDiffArgsSchema>
 export type UpdatePlanArgs = z.output<typeof updatePlanArgsSchema>
 export type WebSearchArgs = z.output<typeof webSearchArgsSchema>
+export type GenerateImageArgs = z.output<typeof generateImageArgsSchema>
 
 export type ParsedToolArguments =
   | { tool: 'list_dir'; args: ListDirArgs }
@@ -125,6 +132,7 @@ export type ParsedToolArguments =
   | { tool: 'get_git_diff'; args: GetGitDiffArgs }
   | { tool: 'update_plan'; args: UpdatePlanArgs }
   | { tool: 'web_search'; args: WebSearchArgs }
+  | { tool: 'generate_image'; args: GenerateImageArgs }
 
 export function parseToolArguments(name: string, raw: string): ParsedToolArguments {
   let json: unknown
@@ -159,6 +167,8 @@ export function parseToolArguments(name: string, raw: string): ParsedToolArgumen
       return { tool: 'update_plan', args: updatePlanArgsSchema.parse(json) }
     case 'web_search':
       return { tool: 'web_search', args: webSearchArgsSchema.parse(json) }
+    case 'generate_image':
+      return { tool: 'generate_image', args: generateImageArgsSchema.parse(json) }
     default:
       throw new AppError('E_TOOL_DENIED', `未知工具：${name}`)
   }

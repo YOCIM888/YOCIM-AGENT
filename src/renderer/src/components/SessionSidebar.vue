@@ -7,6 +7,7 @@ import { useProjectsStore } from '../stores/projects'
 import { useSessionStore } from '../stores/session'
 import { useSettingsStore } from '../stores/settings'
 import { useWorkspaceStore } from '../stores/workspace'
+import ConfirmDialog from './ConfirmDialog.vue'
 import ContextMenu from './ContextMenu.vue'
 import MoveSessionDialog from './MoveSessionDialog.vue'
 import SessionListItem from './SessionListItem.vue'
@@ -23,10 +24,19 @@ const moveTarget = ref<SessionSummary | null>(null)
 const editingProjectId = ref<string | null>(null)
 const editingProjectName = ref('')
 const projectMenu = ref<{ x: number; y: number; project: ProjectSummary } | null>(null)
+const removeTarget = ref<ProjectSummary | null>(null)
 
 const projectMenuItems: ContextMenuItem[] = [
   { id: 'new-session', label: '在项目中新建会话', testid: 'project-new-session' },
-  { id: 'rename', label: '重命名项目', testid: 'project-rename', separatorBefore: true }
+  { id: 'open', label: '打开该项目', testid: 'project-open' },
+  { id: 'rename', label: '重命名项目', testid: 'project-rename', separatorBefore: true },
+  {
+    id: 'remove',
+    label: '移除该项目',
+    testid: 'project-remove',
+    separatorBefore: true,
+    danger: true
+  }
 ]
 
 interface SessionGroup {
@@ -136,14 +146,55 @@ function openProjectMenu(event: MouseEvent, project: ProjectSummary): void {
   projectMenu.value = { x: event.clientX, y: event.clientY, project }
 }
 
+async function openProjectFolder(project: ProjectSummary): Promise<void> {
+  const ok = await workspace.openProject(project.id, { revealFolder: true })
+  if (ok) await projects.refresh()
+}
+
+const removeMessage = computed(() => {
+  const project = removeTarget.value
+  if (!project) return ''
+  const count = sessions.sessions.filter((session) => session.projectId === project.id).length
+  const running =
+    chat.sending && sessions.activeSession?.projectId === project.id
+      ? '正在进行的对话会被取消。'
+      : ''
+  return `将从应用列表中移除“${project.name}”及其 ${count} 个会话（含已归档）。${running}磁盘上的文件夹与文件不会被删除或修改。`
+})
+
+async function confirmRemoveProject(): Promise<void> {
+  const project = removeTarget.value
+  removeTarget.value = null
+  if (!project) return
+
+  const removedIds = sessions.sessions
+    .filter((session) => session.projectId === project.id)
+    .map((session) => session.id)
+  if (chat.sending && sessions.activeSession?.projectId === project.id) {
+    await chat.cancel()
+  }
+  const ok = await projects.removeProject(project.id)
+  if (!ok) {
+    workspace.setError(projects.error || '移除项目失败')
+    return
+  }
+  chat.forgetSessions(removedIds)
+  await sessions.refresh()
+  if (sessions.activeSessionId) await chat.loadSession(sessions.activeSessionId)
+}
+
 function selectProjectMenu(id: string): void {
   const project = projectMenu.value?.project
   projectMenu.value = null
   if (!project) return
   if (id === 'new-session') {
     void createSession(project.id)
+  } else if (id === 'open') {
+    void openProjectFolder(project)
   } else if (id === 'rename') {
     startProjectRename(project)
+  } else if (id === 'remove') {
+    removeTarget.value = project
   }
 }
 </script>
@@ -312,6 +363,17 @@ function selectProjectMenu(id: string): void {
       :projects="projects.projects"
       @close="moveTarget = null"
       @moved="moveTarget = null"
+    />
+
+    <ConfirmDialog
+      v-if="removeTarget"
+      title="移除项目"
+      :message="removeMessage"
+      confirm-label="移除项目"
+      danger
+      testid="remove-project-dialog"
+      @close="removeTarget = null"
+      @confirm="confirmRemoveProject"
     />
   </aside>
 </template>

@@ -272,6 +272,58 @@ describe('SettingsService app settings', () => {
     db.close()
   })
 
+  it('round-trips the image settings with zhipu defaults and hides the key', () => {
+    const settings = service.setImage({
+      enabled: true,
+      provider: 'zhipu',
+      baseUrl: 'https://open.bigmodel.cn/api/paas/v4/images/generations',
+      model: 'cogview-3-flash',
+      size: '1024x1024',
+      apiKey: 'zhipu-secret'
+    })
+
+    expect(settings.image).toMatchObject({
+      enabled: true,
+      provider: 'zhipu',
+      model: 'cogview-3-flash',
+      size: '1024x1024',
+      hasApiKey: true
+    })
+    expect(JSON.stringify(settings.image)).not.toContain('zhipu-secret')
+
+    const config = service.getImageConfig()
+    expect(config).toMatchObject({ apiKey: 'zhipu-secret', model: 'cogview-3-flash' })
+    db.close()
+  })
+
+  it('clears the image key and stops exposing the config', () => {
+    service.setImage({
+      enabled: true,
+      provider: 'zhipu',
+      baseUrl: 'https://open.bigmodel.cn/api/paas/v4/images/generations',
+      model: 'cogview-3-flash',
+      size: '1024x1024',
+      apiKey: 'zhipu-secret'
+    })
+    const settings = service.clearImageApiKey()
+    expect(settings.image.hasApiKey).toBe(false)
+    expect(service.getImageConfig()).toBeNull()
+    db.close()
+  })
+
+  it('does not expose image generation until it is enabled', () => {
+    service.setImage({
+      enabled: false,
+      provider: 'zhipu',
+      baseUrl: 'https://open.bigmodel.cn/api/paas/v4/images/generations',
+      model: 'cogview-3-flash',
+      size: '1024x1024',
+      apiKey: 'zhipu-secret'
+    })
+    expect(service.getImageConfig()).toBeNull()
+    db.close()
+  })
+
   it('round-trips the pricing table', () => {
     const settings = service.setPricing({
       entries: [

@@ -28,6 +28,8 @@ import {
 import { PROVIDER_PRESET_IDS, REASONING_EFFORT_LEVELS } from './providers'
 import type { PublicSettings, ProjectSummary, SessionSummary, StoredMessage } from './session'
 import {
+  IMAGE_PROVIDERS,
+  IMAGE_SIZES,
   PRICING_CURRENCIES,
   PRICING_LIMITS,
   SEARCH_DEPTHS,
@@ -383,8 +385,14 @@ export const sessionMoveInputSchema = z.object({
 export type SessionMoveInput = z.input<typeof sessionMoveInputSchema>
 export type SessionMoveRequest = z.output<typeof sessionMoveInputSchema>
 
-export const projectRenameInputSchema = z.object({
-  projectId: z.string().min(1).max(64),
+export const projectIdInputSchema = z.object({
+  projectId: z.string().min(1).max(64)
+})
+
+export type ProjectIdInput = z.input<typeof projectIdInputSchema>
+export type ProjectIdRequest = z.output<typeof projectIdInputSchema>
+
+export const projectRenameInputSchema = projectIdInputSchema.extend({
   name: z.string().min(1).max(100)
 })
 
@@ -412,6 +420,11 @@ export type ProjectListResult = ProjectSummary[]
 
 export interface SessionDeleteResult {
   deleted: boolean
+}
+
+export interface ProjectRemoveResult {
+  removed: boolean
+  removedSessions: number
 }
 
 export interface SessionExportResult {
@@ -490,6 +503,19 @@ export const settingsSetSearchInputSchema = z.object({
 export type SettingsSetSearchInput = z.input<typeof settingsSetSearchInputSchema>
 export type SettingsSetSearchRequest = z.output<typeof settingsSetSearchInputSchema>
 
+export const settingsSetImageInputSchema = z.object({
+  enabled: z.boolean(),
+  provider: z.enum(IMAGE_PROVIDERS),
+  baseUrl: z.string().max(1024),
+  model: z.string().min(1).max(200),
+  size: z.enum(IMAGE_SIZES),
+  /** 留空表示不修改；传空字符串配合 clearImageKey 清除 */
+  apiKey: z.string().max(500).optional()
+})
+
+export type SettingsSetImageInput = z.input<typeof settingsSetImageInputSchema>
+export type SettingsSetImageRequest = z.output<typeof settingsSetImageInputSchema>
+
 export const modelPricingEntrySchema = z.object({
   providerId: z.string().min(1).max(64),
   model: z.string().min(1).max(200),
@@ -527,10 +553,13 @@ export const billingSummaryInputSchema = z.object({
 export type BillingSummaryInput = z.input<typeof billingSummaryInputSchema>
 export type BillingSummaryRequest = z.output<typeof billingSummaryInputSchema>
 
-export const storagePickInputSchema = z.object({
-  /** true 表示选目录，false 表示选文件 */
-  directory: z.boolean().optional()
-})
+export const storagePickInputSchema = z
+  .object({
+    /** true 表示选目录，false 表示选文件 */
+    directory: z.boolean().optional()
+  })
+  // 渲染层调用 storage.pick() 时不传参数，缺省为空对象
+  .default({})
 
 export type StoragePickInput = z.input<typeof storagePickInputSchema>
 export type StoragePickRequest = z.output<typeof storagePickInputSchema>
@@ -770,6 +799,23 @@ export const gitCheckoutInputSchema = z.object({
 
 export type GitCheckoutInput = z.input<typeof gitCheckoutInputSchema>
 export type GitCheckoutRequest = z.output<typeof gitCheckoutInputSchema>
+
+export const gitGraphInputSchema = z.object({
+  /** 最多返回多少个提交 */
+  limit: z.number().int().min(1).max(1000).optional().default(200),
+  /** 分支过滤；'all' 或留空表示所有分支 */
+  branch: z.string().max(GIT_LIMITS.maxBranchLength).optional().default('all')
+})
+
+export type GitGraphInput = z.input<typeof gitGraphInputSchema>
+export type GitGraphRequest = z.output<typeof gitGraphInputSchema>
+
+export const gitCommitDetailInputSchema = z.object({
+  sha: z.string().regex(/^[0-9a-fA-F]{4,40}$/, '提交 ID 不是合法的 sha')
+})
+
+export type GitCommitDetailInput = z.input<typeof gitCommitDetailInputSchema>
+export type GitCommitDetailRequest = z.output<typeof gitCommitDetailInputSchema>
 
 /* -------------------------------------------------------------------------- */
 /* P4：运行任务、Node 调试、扩展管理器                                         */

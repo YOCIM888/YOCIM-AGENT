@@ -5,12 +5,16 @@ import { useScmStore, type ScmGroup } from '../stores/scm'
 import { useWorkspaceStore } from '../stores/workspace'
 import ConfirmDialog from './ConfirmDialog.vue'
 import FileTypeIcon from './FileTypeIcon.vue'
+import GitGraphView from './GitGraphView.vue'
 
 const props = defineProps<{ active: boolean }>()
 
 const scm = useScmStore()
 const workspace = useWorkspaceStore()
 
+type ScmView = 'changes' | 'graph'
+
+const view = ref<ScmView>('changes')
 const branchMenuOpen = ref(false)
 const newBranch = ref('')
 const creatingBranch = ref(false)
@@ -111,6 +115,30 @@ onMounted(() => {
       <span v-if="scm.changeCount" class="count" data-testid="scm-count">{{
         scm.changeCount
       }}</span>
+      <div class="view-switch" role="tablist">
+        <button
+          type="button"
+          class="view-tab"
+          :class="{ on: view === 'changes' }"
+          role="tab"
+          :aria-selected="view === 'changes'"
+          data-testid="scm-view-changes"
+          @click="view = 'changes'"
+        >
+          变更
+        </button>
+        <button
+          type="button"
+          class="view-tab"
+          :class="{ on: view === 'graph' }"
+          role="tab"
+          :aria-selected="view === 'graph'"
+          data-testid="scm-view-graph"
+          @click="view = 'graph'"
+        >
+          提交图
+        </button>
+      </div>
       <button
         type="button"
         class="icon"
@@ -156,204 +184,212 @@ onMounted(() => {
     </div>
 
     <template v-else-if="scm.status">
-      <div class="branch-row">
-        <button
-          type="button"
-          class="branch"
-          data-testid="scm-branch"
-          :title="scm.status.detached ? '分离头指针' : scm.status.branch"
-          @click="toggleBranchMenu"
-        >
-          <span class="branch-icon">⎇</span>
-          <span class="branch-name">{{
-            scm.status.detached ? 'detached HEAD' : scm.status.branch || '未命名分支'
-          }}</span>
-          <span class="chevron">▾</span>
-        </button>
-        <span v-if="scm.status.upstream" class="ahead-behind" data-testid="scm-ahead-behind">
-          {{ scm.aheadBehind }}
-        </span>
-      </div>
-
-      <div v-if="branchMenuOpen" class="branch-menu" data-testid="scm-branch-menu">
-        <button
-          v-for="branch in localBranches"
-          :key="branch"
-          type="button"
-          class="branch-option"
-          :class="{ current: branch === scm.status.branch }"
-          :data-testid="`scm-branch-option-${branch}`"
-          @click="selectBranch(branch)"
-        >
-          {{ branch }}
-        </button>
-        <div v-if="remoteBranches.length" class="branch-sub">远程分支</div>
-        <button
-          v-for="branch in remoteBranches"
-          :key="branch"
-          type="button"
-          class="branch-option remote"
-          :data-testid="`scm-remote-option-${branch}`"
-          @click="selectBranch(branch.replace(/^origin\//, ''))"
-        >
-          {{ branch }}
-        </button>
-        <div class="branch-new">
-          <input
-            v-if="creatingBranch"
-            v-model="newBranch"
-            type="text"
-            class="branch-input"
-            placeholder="新分支名"
-            data-testid="scm-branch-input"
-            @keydown.enter="createBranch"
-            @keydown.esc="creatingBranch = false"
-          />
+      <GitGraphView v-if="view === 'graph'" :active="props.active && view === 'graph'" />
+      <template v-else>
+        <div class="branch-row">
           <button
-            v-else
             type="button"
-            class="branch-create"
-            data-testid="scm-branch-new"
-            @click="creatingBranch = true"
+            class="branch"
+            data-testid="scm-branch"
+            :title="scm.status.detached ? '分离头指针' : scm.status.branch"
+            @click="toggleBranchMenu"
           >
-            + 新建分支
+            <span class="branch-icon">⎇</span>
+            <span class="branch-name">{{
+              scm.status.detached ? 'detached HEAD' : scm.status.branch || '未命名分支'
+            }}</span>
+            <span class="chevron">▾</span>
+          </button>
+          <span v-if="scm.status.upstream" class="ahead-behind" data-testid="scm-ahead-behind">
+            {{ scm.aheadBehind }}
+          </span>
+        </div>
+
+        <div v-if="branchMenuOpen" class="branch-menu" data-testid="scm-branch-menu">
+          <button
+            v-for="branch in localBranches"
+            :key="branch"
+            type="button"
+            class="branch-option"
+            :class="{ current: branch === scm.status.branch }"
+            :data-testid="`scm-branch-option-${branch}`"
+            @click="selectBranch(branch)"
+          >
+            {{ branch }}
+          </button>
+          <div v-if="remoteBranches.length" class="branch-sub">远程分支</div>
+          <button
+            v-for="branch in remoteBranches"
+            :key="branch"
+            type="button"
+            class="branch-option remote"
+            :data-testid="`scm-remote-option-${branch}`"
+            @click="selectBranch(branch.replace(/^origin\//, ''))"
+          >
+            {{ branch }}
+          </button>
+          <div class="branch-new">
+            <input
+              v-if="creatingBranch"
+              v-model="newBranch"
+              type="text"
+              class="branch-input"
+              placeholder="新分支名"
+              data-testid="scm-branch-input"
+              @keydown.enter="createBranch"
+              @keydown.esc="creatingBranch = false"
+            />
+            <button
+              v-else
+              type="button"
+              class="branch-create"
+              data-testid="scm-branch-new"
+              @click="creatingBranch = true"
+            >
+              + 新建分支
+            </button>
+            <button
+              v-if="creatingBranch"
+              type="button"
+              class="branch-create"
+              data-testid="scm-branch-create"
+              @click="createBranch"
+            >
+              创建
+            </button>
+          </div>
+        </div>
+
+        <textarea
+          v-model="scm.message"
+          class="message"
+          rows="2"
+          placeholder="提交信息（Ctrl+Enter 提交）"
+          data-testid="scm-message"
+          @keydown.ctrl.enter.prevent="scm.commit(false)"
+        ></textarea>
+        <div class="commit-row">
+          <button
+            type="button"
+            class="primary"
+            data-testid="scm-commit"
+            :disabled="!scm.canCommit || Boolean(scm.busy)"
+            @click="scm.commit(false)"
+          >
+            提交
           </button>
           <button
-            v-if="creatingBranch"
             type="button"
-            class="branch-create"
-            data-testid="scm-branch-create"
-            @click="createBranch"
+            class="secondary"
+            data-testid="scm-commit-all"
+            :disabled="!scm.message.trim() || Boolean(scm.busy)"
+            @click="scm.commit(true)"
           >
-            创建
+            全部暂存并提交
           </button>
         </div>
-      </div>
 
-      <textarea
-        v-model="scm.message"
-        class="message"
-        rows="2"
-        placeholder="提交信息（Ctrl+Enter 提交）"
-        data-testid="scm-message"
-        @keydown.ctrl.enter.prevent="scm.commit(false)"
-      ></textarea>
-      <div class="commit-row">
-        <button
-          type="button"
-          class="primary"
-          data-testid="scm-commit"
-          :disabled="!scm.canCommit || Boolean(scm.busy)"
-          @click="scm.commit(false)"
-        >
-          提交
-        </button>
-        <button
-          type="button"
-          class="secondary"
-          data-testid="scm-commit-all"
-          :disabled="!scm.message.trim() || Boolean(scm.busy)"
-          @click="scm.commit(true)"
-        >
-          全部暂存并提交
-        </button>
-      </div>
-
-      <div class="groups">
-        <p v-if="!hasChanges" class="empty" data-testid="scm-empty">没有变更。</p>
-        <section
-          v-for="group in GROUPS"
-          v-show="scm.groupsOf(group).length"
-          :key="group"
-          class="group"
-        >
-          <button
-            type="button"
-            class="group-head"
-            :data-testid="`scm-group-${group}`"
-            :aria-expanded="!scm.collapsed[group]"
-            @click="scm.toggleGroup(group)"
+        <div class="groups">
+          <p v-if="!hasChanges" class="empty" data-testid="scm-empty">没有变更。</p>
+          <section
+            v-for="group in GROUPS"
+            v-show="scm.groupsOf(group).length"
+            :key="group"
+            class="group"
           >
-            <span class="chevron">{{ scm.collapsed[group] ? '▸' : '▾' }}</span>
-            <span class="group-title">{{ GROUP_LABELS[group] }}</span>
-            <span class="group-count">{{ scm.groupsOf(group).length }}</span>
-          </button>
-          <ul v-show="!scm.collapsed[group]" class="file-list">
-            <li
-              v-for="change in scm.groupsOf(group)"
-              :key="`${group}-${change.path}`"
-              class="file-row"
-              :class="{ conflict: group === 'conflicted' }"
+            <button
+              type="button"
+              class="group-head"
+              :data-testid="`scm-group-${group}`"
+              :aria-expanded="!scm.collapsed[group]"
+              @click="scm.toggleGroup(group)"
             >
-              <button
-                type="button"
-                class="file-main"
-                :title="change.path"
-                :data-testid="`scm-file-${group}-${change.path}`"
-                @click="scm.openDiff(change, group === 'staged')"
+              <span class="chevron">{{ scm.collapsed[group] ? '▸' : '▾' }}</span>
+              <span class="group-title">{{ GROUP_LABELS[group] }}</span>
+              <span class="group-count">{{ scm.groupsOf(group).length }}</span>
+            </button>
+            <ul v-show="!scm.collapsed[group]" class="file-list">
+              <li
+                v-for="change in scm.groupsOf(group)"
+                :key="`${group}-${change.path}`"
+                class="file-row"
+                :class="{ conflict: group === 'conflicted' }"
               >
-                <span class="status" :class="`status-${statusLetter(change, group).toLowerCase()}`">
-                  {{ statusLetter(change, group) }}
+                <button
+                  type="button"
+                  class="file-main"
+                  :title="change.path"
+                  :data-testid="`scm-file-${group}-${change.path}`"
+                  @click="scm.openDiff(change, group === 'staged')"
+                >
+                  <span
+                    class="status"
+                    :class="`status-${statusLetter(change, group).toLowerCase()}`"
+                  >
+                    {{ statusLetter(change, group) }}
+                  </span>
+                  <FileTypeIcon :name="baseName(change.path)" type="file" />
+                  <span class="file-name">{{ baseName(change.path) }}</span>
+                  <span v-if="dirName(change.path)" class="file-dir">{{
+                    dirName(change.path)
+                  }}</span>
+                </button>
+                <span class="actions" @click.stop>
+                  <button
+                    v-if="group === 'staged'"
+                    type="button"
+                    class="action"
+                    title="取消暂存"
+                    :data-testid="`scm-unstage-${change.path}`"
+                    @click="scm.unstage([change.path])"
+                  >
+                    −
+                  </button>
+                  <button
+                    v-else-if="group !== 'conflicted'"
+                    type="button"
+                    class="action"
+                    title="暂存"
+                    :data-testid="`scm-stage-${change.path}`"
+                    @click="scm.stage([change.path])"
+                  >
+                    +
+                  </button>
+                  <button
+                    v-if="group === 'unstaged'"
+                    type="button"
+                    class="action danger"
+                    title="放弃更改"
+                    :data-testid="`scm-discard-${change.path}`"
+                    @click="pendingDiscard = change"
+                  >
+                    ↺
+                  </button>
+                  <button
+                    v-if="group === 'conflicted'"
+                    type="button"
+                    class="action"
+                    title="打开文件查看冲突"
+                    :data-testid="`scm-open-${change.path}`"
+                    @click="scm.openFile(change)"
+                  >
+                    ↗
+                  </button>
+                  <button
+                    type="button"
+                    class="action"
+                    title="在文件资源管理器中显示"
+                    :data-testid="`scm-reveal-${change.path}`"
+                    @click="scm.reveal(change)"
+                  >
+                    ⋯
+                  </button>
                 </span>
-                <FileTypeIcon :name="baseName(change.path)" type="file" />
-                <span class="file-name">{{ baseName(change.path) }}</span>
-                <span v-if="dirName(change.path)" class="file-dir">{{ dirName(change.path) }}</span>
-              </button>
-              <span class="actions" @click.stop>
-                <button
-                  v-if="group === 'staged'"
-                  type="button"
-                  class="action"
-                  title="取消暂存"
-                  :data-testid="`scm-unstage-${change.path}`"
-                  @click="scm.unstage([change.path])"
-                >
-                  −
-                </button>
-                <button
-                  v-else-if="group !== 'conflicted'"
-                  type="button"
-                  class="action"
-                  title="暂存"
-                  :data-testid="`scm-stage-${change.path}`"
-                  @click="scm.stage([change.path])"
-                >
-                  +
-                </button>
-                <button
-                  v-if="group === 'unstaged'"
-                  type="button"
-                  class="action danger"
-                  title="放弃更改"
-                  :data-testid="`scm-discard-${change.path}`"
-                  @click="pendingDiscard = change"
-                >
-                  ↺
-                </button>
-                <button
-                  v-if="group === 'conflicted'"
-                  type="button"
-                  class="action"
-                  title="打开文件查看冲突"
-                  :data-testid="`scm-open-${change.path}`"
-                  @click="scm.openFile(change)"
-                >
-                  ↗
-                </button>
-                <button
-                  type="button"
-                  class="action"
-                  title="在文件资源管理器中显示"
-                  :data-testid="`scm-reveal-${change.path}`"
-                  @click="scm.reveal(change)"
-                >
-                  ⋯
-                </button>
-              </span>
-            </li>
-          </ul>
-        </section>
-      </div>
+              </li>
+            </ul>
+          </section>
+        </div>
+      </template>
 
       <div class="footer">
         <button
@@ -469,7 +505,6 @@ onMounted(() => {
   font-size: 12px;
   cursor: pointer;
 }
-
 .icon + .icon {
   margin-left: 0;
 }
@@ -478,6 +513,38 @@ onMounted(() => {
 .icon.on {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.view-switch {
+  display: flex;
+  flex: none;
+  gap: 1px;
+  margin-left: auto;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.view-tab {
+  padding: 2px 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.view-tab:hover {
+  color: var(--text);
+}
+
+.view-tab.on {
+  background: var(--bg-elevated);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
 }
 
 .error,

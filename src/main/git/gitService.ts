@@ -3,8 +3,10 @@ import { readFile, stat } from 'node:fs/promises'
 import { AppError } from '../../shared/errors'
 import type {
   GitBranches,
+  GitCommitDetail,
   GitCommitResult,
   GitDiffResult,
+  GitGraph,
   GitLogEntry,
   GitOperationResult,
   GitStatus
@@ -19,6 +21,14 @@ import {
   type GitAvailability,
   type GitRunResult
 } from './gitRunner'
+import {
+  FIELD_SEP,
+  RECORD_SEP,
+  parseCommitLog,
+  parseNameStatus,
+  parseNumstat,
+  parseRefNames
+} from './gitGraph'
 import { parseGitStatus } from './gitStatus'
 
 export interface GitServiceDeps {
@@ -47,6 +57,15 @@ const READ_ONLY_COMMANDS = new Set([
   'for-each-ref',
   '--version'
 ])
+
+/** 校验提交 sha：只允许十六进制，避免把任意参数塞给 git */
+function assertSha(input: string): string {
+  const sha = input.trim().toLowerCase()
+  if (!/^[0-9a-f]{4,40}$/.test(sha)) {
+    throw new AppError('E_INVALID_INPUT', '提交 ID 不是合法的 sha')
+  }
+  return sha
+}
 
 function assertBranchName(input: string): string {
   const name = input.trim()
@@ -308,6 +327,143 @@ export class GitService {
       local: toList(local.stdout),
       remote: toList(remote.stdout),
       hasRemote: toList(remotes.stdout).length > 0
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 提交图                                                              */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * 读取提交历史，供渲染进程的图形化提交图使用。
+   *
+   * 用 `%x1f` 分隔字段、`%x1e` 分隔记录，避免提交信息里的特殊字符把解析搞乱。
+   */
+  async graph(options: { limit?: number; branch?: string } = {}): Promise<GitGraph> {
+    const availability = await this.detectAvailability()
+    if (!availability.available) {
+      throw new AppError('E_UNSUPPORTED', availability.message ?? '未检测到系统 Git')
+    }
+    const limit = Math.min(1000, Math.max(1, Math.round(options.limit ?? 200)))
+    const branch = (options.branch ?? '').trim()
+    const useAll = !branch || branch === 'all'
+
+    const format = ['%H', '%h', '%P', '%an', '%ae', '%at', '%s', '%D'].join(FIELD_SEP) + RECORD_SEP
+
+    const [log, head, headName] = await Promise.all([
+      this.exec(
+        [
+          '-c',
+          'core.quotePath=false',
+          'log',
+          ...(useAll ? ['--all'] : [branch]),
+          '--topo-order',
+          `--max-count=${limit + 1}`,
+          '--date=unix',
+          '--no-color',
+          `--pretty=format:${format}`
+        ],
+        { cwd: this.root(), timeoutMs: GIT_LIMITS.commandTimeoutMs }
+      ),
+      this.exec(['rev-parse', 'HEAD'], {
+        cwd: this.root(),
+        timeoutMs: GIT_LIMITS.commandTimeoutMs
+      }),
+      this.exec(['rev-parse', '--abbrev-ref', 'HEAD'], {
+        cwd: this.root(),
+        timeoutMs: GIT_LIMITS.commandTimeoutMs
+      })
+    ])
+
+    if (log.spawnError) {
+      throw new AppError('E_IO', '未检测到系统 Git，请安装 Git 后重试')
+    }
+    if (log.code !== 0) {
+      throw new AppError('E_IO', gitFailureMessage(log, '读取提交历史失败'))
+    }
+
+    const headSha = head.code === 0 ? head.stdout.trim() : ''
+    const commits = parseCommitLog(log.stdout, headSha)
+    const truncated = commits.length > limit
+    const name = headName.code === 0 ? headName.stdout.trim() : ''
+    return {
+      commits: truncated ? commits.slice(0, limit) : commits,
+      branch: name === 'HEAD' ? '' : name,
+      detached: name === 'HEAD',
+      total: commits.length,
+      truncated
+    }
+  }
+
+  /** 读取单个提交的详情：改动文件、插入/删除行数 */
+  async commitDetail(sha: string): Promise<GitCommitDetail> {
+    const availability = await this.detectAvailability()
+    if (!availability.available) {
+      throw new AppError('E_UNSUPPORTED', availability.message ?? '未检测到系统 Git')
+    }
+    const target = assertSha(sha)
+
+    const format =
+      ['%H', '%h', '%P', '%an', '%ae', '%at', '%s', '%D', '%b'].join(FIELD_SEP) + RECORD_SEP
+
+    const [meta, numstat, nameStatus] = await Promise.all([
+      this.exec(
+        [
+          '-c',
+          'core.quotePath=false',
+          'show',
+          '-s',
+          '--date=unix',
+          '--no-color',
+          `--pretty=format:${format}`,
+          target
+        ],
+        { cwd: this.root(), timeoutMs: GIT_LIMITS.commandTimeoutMs }
+      ),
+      this.exec(['show', '--numstat', '-z', '--format=', '--first-parent', target], {
+        cwd: this.root(),
+        timeoutMs: GIT_LIMITS.commandTimeoutMs
+      }),
+      this.exec(['show', '--name-status', '-z', '--format=', '--first-parent', target], {
+        cwd: this.root(),
+        timeoutMs: GIT_LIMITS.commandTimeoutMs
+      })
+    ])
+
+    if (meta.code !== 0) {
+      throw new AppError('E_NOT_FOUND', gitFailureMessage(meta, '找不到该提交'))
+    }
+
+    const record = meta.stdout.split(RECORD_SEP)[0]?.trim() ?? ''
+    const fields = record.split(FIELD_SEP)
+    const [fullSha, shortSha, parents, author, authorEmail, at, subject, refNames] = fields
+    const body = fields.slice(8).join(FIELD_SEP).trim()
+    const refs = parseRefNames(refNames ?? '')
+    const timestamp = Number(at)
+
+    const statuses = parseNameStatus(nameStatus.stdout)
+    const files = parseNumstat(numstat.stdout).map((file) => ({
+      ...file,
+      status: statuses.get(file.path) ?? file.status
+    }))
+    const totalAdded = files.reduce((sum, file) => sum + file.added, 0)
+    const totalDeleted = files.reduce((sum, file) => sum + file.deleted, 0)
+
+    return {
+      sha: fullSha ?? target,
+      shortSha: shortSha ?? target.slice(0, 7),
+      subject: subject ?? '',
+      body,
+      author: author ?? '',
+      authorEmail: authorEmail ?? '',
+      date: Number.isFinite(timestamp) ? timestamp * 1000 : 0,
+      parents: parents ? parents.trim().split(/\s+/).filter(Boolean) : [],
+      branches: refs.branches,
+      remotes: refs.remotes,
+      tags: refs.tags,
+      files,
+      totalAdded,
+      totalDeleted
     }
   }
 

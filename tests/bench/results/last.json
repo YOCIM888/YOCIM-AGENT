@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-11-16T05:08:20.343Z",
+  "generatedAt": "2026-11-16T10:44:36.544Z",
   "total": 12,
   "success": 12,
   "successRate": 1,
   "avgRounds": 4.083333333333333,
   "avgToolCalls": 3.0833333333333335,
-  "avgDurationMs": 109,
+  "avgDurationMs": 112,
   "totalApprovals": 0,
   "contextPeakTokens": 0,
   "unexpectedFileTasks": 0,
@@ -19,7 +19,7 @@
       "maxRounds": 4,
       "toolCalls": 3,
       "maxToolCalls": 3,
-      "durationMs": 205,
+      "durationMs": 223,
       "approvals": 0,
       "contextPeakTokens": 0,
       "unexpectedFiles": []
@@ -33,7 +33,7 @@
       "maxRounds": 6,
       "toolCalls": 5,
       "maxToolCalls": 5,
-      "durationMs": 337,
+      "durationMs": 353,
       "approvals": 0,
       "contextPeakTokens": 0,
       "unexpectedFiles": []
@@ -61,7 +61,7 @@
       "maxRounds": 6,
       "toolCalls": 5,
       "maxToolCalls": 5,
-      "durationMs": 191,
+      "durationMs": 217,
       "approvals": 0,
       "contextPeakTokens": 0,
       "unexpectedFiles": []
@@ -75,7 +75,7 @@
       "maxRounds": 5,
       "toolCalls": 4,
       "maxToolCalls": 4,
-      "durationMs": 34,
+      "durationMs": 35,
       "approvals": 0,
       "contextPeakTokens": 0,
       "unexpectedFiles": []
@@ -89,7 +89,7 @@
       "maxRounds": 3,
       "toolCalls": 2,
       "maxToolCalls": 2,
-      "durationMs": 22,
+      "durationMs": 10,
       "approvals": 0,
       "contextPeakTokens": 0,
       "unexpectedFiles": []
@@ -103,7 +103,7 @@
       "maxRounds": 4,
       "toolCalls": 3,
       "maxToolCalls": 3,
-      "durationMs": 186,
+      "durationMs": 180,
       "approvals": 0,
       "contextPeakTokens": 0,
       "unexpectedFiles": []
@@ -117,7 +117,7 @@
       "maxRounds": 4,
       "toolCalls": 3,
       "maxToolCalls": 3,
-      "durationMs": 82,
+      "durationMs": 69,
       "approvals": 0,
       "contextPeakTokens": 0,
       "unexpectedFiles": []
@@ -131,7 +131,7 @@
       "maxRounds": 4,
       "toolCalls": 3,
       "maxToolCalls": 3,
-      "durationMs": 220,
+      "durationMs": 228,
       "approvals": 0,
       "contextPeakTokens": 0,
       "unexpectedFiles": []
@@ -145,7 +145,7 @@
       "maxRounds": 4,
       "toolCalls": 3,
       "maxToolCalls": 3,
-      "durationMs": 10,
+      "durationMs": 9,
       "approvals": 0,
       "contextPeakTokens": 0,
       "unexpectedFiles": []

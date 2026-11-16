@@ -51,7 +51,9 @@ import type {
   FsWriteFileInput,
   FsWriteFileResult,
   GitCheckoutInput,
+  GitCommitDetailInput,
   GitCommitInput,
+  GitGraphInput,
   GitDiffInput,
   GitPathsInput,
   IpcResult,
@@ -73,6 +75,8 @@ import type {
   SessionPinInput,
   SessionArchiveInput,
   SessionMoveInput,
+  ProjectIdInput,
+  ProjectRemoveResult,
   ProjectRenameInput,
   ProjectListResult,
   ProviderDeleteInput,
@@ -81,6 +85,7 @@ import type {
   SettingsSetActiveInput,
   SettingsSetApprovalModeInput,
   SettingsSetContextWindowInput,
+  SettingsSetImageInput,
   SettingsSetPricingInput,
   SettingsSetReasoningEffortInput,
   SettingsSetSearchInput,
@@ -120,8 +125,10 @@ import type { TaskEvent } from './tasks'
 import type { ProjectSummary, SessionSummary } from './session'
 import type {
   GitBranches,
+  GitCommitDetail,
   GitCommitResult,
   GitDiffResult,
+  GitGraph,
   GitLogEntry,
   GitOperationResult,
   GitStatus
@@ -202,6 +209,8 @@ export interface YocimGitApi {
   checkout(input: GitCheckoutInput): Promise<IpcResult<GitStatus>>
   init(): Promise<IpcResult<GitStatus>>
   output(): Promise<IpcResult<GitLogEntry[]>>
+  graph(input: GitGraphInput): Promise<IpcResult<GitGraph>>
+  commitDetail(input: GitCommitDetailInput): Promise<IpcResult<GitCommitDetail>>
 }
 
 export interface YocimTasksApi {
@@ -260,6 +269,10 @@ export interface YocimSessionApi {
 export interface YocimProjectApi {
   list(): Promise<IpcResult<ProjectListResult>>
   rename(input: ProjectRenameInput): Promise<IpcResult<ProjectSummary>>
+  /** 在系统文件管理器中打开项目目录，并把工作区切换到该项目 */
+  open(input: ProjectIdInput): Promise<IpcResult<WorkspaceInfo>>
+  /** 仅从应用内移除项目与会话，不触碰磁盘文件 */
+  remove(input: ProjectIdInput): Promise<IpcResult<ProjectRemoveResult>>
 }
 
 export interface YocimSettingsApi {
@@ -272,6 +285,8 @@ export interface YocimSettingsApi {
   setReasoningEffort(input: SettingsSetReasoningEffortInput): Promise<IpcResult<SettingsResult>>
   setSearch(input: SettingsSetSearchInput): Promise<IpcResult<SettingsResult>>
   clearSearchKey(): Promise<IpcResult<SettingsResult>>
+  setImage(input: SettingsSetImageInput): Promise<IpcResult<SettingsResult>>
+  clearImageKey(): Promise<IpcResult<SettingsResult>>
   setPricing(input: SettingsSetPricingInput): Promise<IpcResult<SettingsResult>>
   setStorage(input: SettingsSetStorageInput): Promise<IpcResult<SettingsResult>>
 }

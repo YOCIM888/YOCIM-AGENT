@@ -13,6 +13,9 @@
   --accent-contrast: #ffffff;
   --success: #17845a;
   --success-soft: #e8f6ef;
+  /* 单选指示器：未选中圆环描边 / 选中时对勾前景色 */
+  --radio-ring: #c3c6cd;
+  --on-success: #ffffff;
   --warning: #a4610a;
   --warning-soft: #fdf6e7;
   --danger: #c53030;
@@ -48,6 +51,9 @@
   --accent-contrast: #0a0a0a;
   --success: #3fbf82;
   --success-soft: #0f2419;
+  /* 单选指示器：未选中圆环描边 / 选中时对勾前景色 */
+  --radio-ring: #4a4a4a;
+  --on-success: #06281b;
   --warning: #e8ab55;
   --warning-soft: #221a0c;
   --danger: #ff6b6b;

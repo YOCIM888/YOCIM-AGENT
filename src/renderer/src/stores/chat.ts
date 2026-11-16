@@ -233,7 +233,8 @@ export const useChatStore = defineStore('chat', () => {
           resolveToolStep(message.steps, event.callId, {
             ok: event.ok,
             summary: event.summary,
-            endedAt: event.ts
+            endedAt: event.ts,
+            images: event.images
           })
         }
         break
@@ -462,6 +463,24 @@ export const useChatStore = defineStore('chat', () => {
     attachmentError.value = ''
   }
 
+  /** 项目移除后丢弃这些会话的本地聊天缓存；命中当前会话时同时复位运行状态 */
+  function forgetSessions(sessionIds: string[]): void {
+    const removed = new Set(sessionIds)
+    if (!removed.size) return
+    for (const id of removed) {
+      delete messagesBySession.value[id]
+      delete usageBySession.value[id]
+      delete planBySession.value[id]
+      delete pausedBySession.value[id]
+    }
+    if (activeSessionId && removed.has(activeSessionId)) {
+      activeSessionId = null
+      activeRunId.value = null
+      sending.value = false
+      cancelRequested = false
+    }
+  }
+
   async function send(textArg?: string): Promise<void> {
     const text = (textArg ?? draft.value).trim()
     if (!text || sending.value) return
@@ -579,6 +598,7 @@ export const useChatStore = defineStore('chat', () => {
     attachFile,
     attachSelection,
     removeAttachment,
-    clearAttachments
+    clearAttachments,
+    forgetSessions
   }
 })

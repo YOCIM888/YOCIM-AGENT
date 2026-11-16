@@ -316,6 +316,30 @@ export class ProjectRepository {
   touch(id: string, at: number = Date.now()): void {
     this.db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(at, id)
   }
+
+  /**
+   * 仅清理应用内数据：项目记录及其全部会话（含已归档）。
+   * 不接触项目目录或任何磁盘文件。messages/agent_context/agent_plan 由外键级联，
+   * tool_calls 无外键需手动删除；agent_usage/audit_logs 作为历史账单与审计记录保留。
+   */
+  delete(id: string): { removed: boolean; removedSessions: number } {
+    const rows = this.db.prepare('SELECT id FROM sessions WHERE project_id = ?').all(id) as {
+      id: string
+    }[]
+    this.db.exec('BEGIN')
+    try {
+      for (const row of rows) {
+        this.db.prepare('DELETE FROM tool_calls WHERE session_id = ?').run(row.id)
+        this.db.prepare('DELETE FROM sessions WHERE id = ?').run(row.id)
+      }
+      const result = this.db.prepare('DELETE FROM projects WHERE id = ?').run(id)
+      this.db.exec('COMMIT')
+      return { removed: Number(result.changes) > 0, removedSessions: rows.length }
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
 }
 
 export class MessageRepository {

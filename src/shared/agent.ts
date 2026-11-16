@@ -20,6 +20,8 @@ export interface ToolExecutionOutcome {
   ok: boolean
   content: string
   summary: string
+  /** 工具产出的图片 URL（生图工具用），供 UI 直接渲染 */
+  images?: string[]
 }
 
 export interface ToolDefinition {
@@ -83,7 +85,14 @@ export type AgentEvent =
       /** 节流合并后的增量输出文本（命令执行等长任务） */
       text: string
     })
-  | (AgentEventBase & { type: 'tool:result'; callId: string; ok: boolean; summary: string })
+  | (AgentEventBase & {
+      type: 'tool:result'
+      callId: string
+      ok: boolean
+      summary: string
+      /** 生图等工具产出的图片 URL，UI 据此渲染缩略图 */
+      images?: string[]
+    })
   | (AgentEventBase & { type: 'run:error'; code: string; message: string })
   | (AgentEventBase & {
       type: 'run:paused'

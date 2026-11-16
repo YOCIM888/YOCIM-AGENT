@@ -466,6 +466,68 @@ test('groups sessions by project and supports pin/archive/search/move', async ()
   }
 })
 
+test('opens a project folder and removes a project without touching files on disk', async () => {
+  const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-project-actions-'))
+  const workspaceA = await mkdtemp(join(os.tmpdir(), 'yocim-open-a-'))
+  const workspaceB = await mkdtemp(join(os.tmpdir(), 'yocim-open-b-'))
+  await writeFile(join(workspaceA, 'marker-a.txt'), 'A', 'utf8')
+  await writeFile(join(workspaceB, 'marker-b.txt'), 'B', 'utf8')
+  const projectAName = basename(workspaceA)
+  const projectBName = basename(workspaceB)
+
+  const app = await launch(userDataDir)
+  try {
+    const page = await app.firstWindow()
+    await patchOpenDialog(app, workspaceA)
+    await openFolder(page)
+    await expect(page.getByTestId('tree-node-marker-a.txt')).toBeVisible()
+    await page.getByTestId('new-session').click()
+
+    const groupA = page.getByTestId('project-group').filter({ hasText: projectAName })
+    await expect(groupA.getByTestId('session-item')).toHaveCount(1)
+
+    await patchOpenDialog(app, workspaceB)
+    await openFolder(page)
+    await expect(page.getByTestId('tree-node-marker-b.txt')).toBeVisible()
+    const groupB = page.getByTestId('project-group').filter({ hasText: projectBName })
+    await expect(page.getByTestId('project-group')).toHaveCount(2)
+
+    await groupA.getByTestId('project-header').click({ button: 'right' })
+    await expect(page.getByTestId('project-open')).toContainText('打开该项目')
+    await page.getByTestId('project-open').click()
+    await expect(page.getByTestId('status-bar')).toContainText(projectAName)
+    await expect(page.getByTestId('tree-node-marker-a.txt')).toBeVisible()
+    await expect(page.getByTestId('tree-node-marker-b.txt')).toHaveCount(0)
+
+    await groupB.getByTestId('project-header').click({ button: 'right' })
+    await expect(page.getByTestId('project-remove')).toContainText('移除该项目')
+    await page.getByTestId('project-remove').click()
+    await expect(page.getByTestId('remove-project-dialog')).toContainText(
+      '磁盘上的文件夹与文件不会被删除或修改'
+    )
+    await page.getByTestId('confirm-ok').click()
+    await expect(groupB).toHaveCount(0)
+    await expect(page.getByTestId('project-group')).toHaveCount(1)
+    await expect(groupA.getByTestId('session-item')).toHaveCount(1)
+    await expect(page.getByTestId('tree-node-marker-a.txt')).toBeVisible()
+    expect(await readFile(join(workspaceB, 'marker-b.txt'), 'utf8')).toBe('B')
+  } finally {
+    await app.close()
+  }
+
+  const restarted = await launch(userDataDir)
+  try {
+    const page = await restarted.firstWindow()
+    await expect(page.getByTestId('project-group')).toHaveCount(1)
+    await expect(page.getByTestId('session-sidebar')).toContainText(projectAName)
+  } finally {
+    await restarted.close()
+    await rm(userDataDir, { recursive: true, force: true })
+    await rm(workspaceA, { recursive: true, force: true })
+    await rm(workspaceB, { recursive: true, force: true })
+  }
+})
+
 test('resizes both sidebars and persists widths', async () => {
   const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-resize-'))
   const app = await launch(userDataDir)
@@ -745,5 +807,56 @@ test('covers the project workflow end to end', async () => {
     await restarted.close()
     await rm(userDataDir, { recursive: true, force: true })
     await rm(workspaceDir, { recursive: true, force: true })
+  }
+})
+
+test('image settings panel is placed after search and persists the key state', async () => {
+  const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-image-'))
+  const app = await launch(userDataDir)
+
+  try {
+    const page = await app.firstWindow()
+    await openSettings(page)
+    await expect(page.getByTestId('settings-dialog')).toBeVisible()
+
+    // 默认分页仍是「模型」
+    const tabs = page.getByTestId('settings-dialog').locator('[role="tab"]')
+    const labels = await tabs.allTextContents()
+    expect(labels.map((label) => label.trim())).toEqual([
+      '账单',
+      '模型',
+      '搜索',
+      '生图',
+      '外观',
+      '存储',
+      '浏览器'
+    ])
+
+    // 生图分页在搜索之后
+    await page.getByTestId('settings-tab-image').click()
+    await expect(page.getByTestId('image-enabled')).toBeVisible()
+    await expect(page.getByTestId('image-provider')).toHaveValue('zhipu')
+    await expect(page.getByTestId('image-model')).toHaveCount(0)
+    await expect(page.getByTestId('image-api-key')).toBeVisible()
+
+    await page.getByTestId('image-enabled').check()
+    await page.getByTestId('image-api-key').fill('zhipu-test-key')
+    await page.getByTestId('image-save').click()
+    await expect(page.getByTestId('image-api-key')).toHaveValue('')
+    await expect(page.locator('.key-state.ok')).toContainText('已配置')
+
+    // 自定义来源开放端点与模型编辑
+    await page.getByTestId('image-provider').selectOption('custom')
+    await expect(page.getByTestId('image-base-url')).toBeVisible()
+    await expect(page.getByTestId('image-model')).toBeVisible()
+    await page.getByTestId('image-base-url').fill('https://example.com/images/generations')
+    await page.getByTestId('image-model').fill('custom-model')
+    await page.getByTestId('image-save').click()
+
+    await page.getByTestId('settings-dialog').getByText('关闭').click()
+    await expect(page.getByTestId('settings-dialog')).not.toBeVisible()
+  } finally {
+    await app.close()
+    await rm(userDataDir, { recursive: true, force: true })
   }
 })

@@ -21,6 +21,8 @@ export interface AgentStep {
   approval?: StepApproval
   /** 命令等长任务的增量输出（tool:output 事件追加，保留尾部） */
   output?: string
+  /** 生图等工具产出的图片 URL，供时间线渲染缩略图 */
+  images?: string[]
 }
 
 /** 单步输出在 UI 里保留的最大长度：只展示尾部，避免长时间运行撑爆内存 */
@@ -70,13 +72,14 @@ export function upsertToolStep(steps: AgentStep[], input: ToolStepInput): AgentS
 export function resolveToolStep(
   steps: AgentStep[],
   callId: string,
-  outcome: { ok: boolean; summary: string; endedAt: number }
+  outcome: { ok: boolean; summary: string; endedAt: number; images?: string[] }
 ): AgentStep | null {
   const step = steps.find((item) => item.callId === callId)
   if (!step) return null
   step.status = outcome.ok ? 'done' : 'failed'
   step.summary = outcome.summary
   step.endedAt = outcome.endedAt
+  if (outcome.images?.length) step.images = outcome.images
   return step
 }
 

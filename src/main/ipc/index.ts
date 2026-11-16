@@ -1,7 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { writeFile } from 'node:fs/promises'
+import { access, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type { AgentEvent } from '../../shared/agent'
@@ -28,8 +28,10 @@ import type { RemoteConnectionState } from '../../shared/remote'
 import { AppError } from '../../shared/errors'
 import type {
   GitBranches,
+  GitCommitDetail,
   GitCommitResult,
   GitDiffResult,
+  GitGraph,
   GitLogEntry,
   GitOperationResult,
   GitStatus
@@ -69,10 +71,13 @@ import {
   fsTreeInputSchema,
   fsWriteFileInputSchema,
   gitCheckoutInputSchema,
+  gitCommitDetailInputSchema,
+  gitGraphInputSchema,
   gitCommitInputSchema,
   gitDiffInputSchema,
   gitPathsInputSchema,
   IPC_CHANNELS,
+  projectIdInputSchema,
   projectRenameInputSchema,
   remoteConnectInputSchema,
   remoteIdInputSchema,
@@ -92,6 +97,7 @@ import {
   settingsSetActiveInputSchema,
   settingsSetApprovalModeInputSchema,
   settingsSetContextWindowInputSchema,
+  settingsSetImageInputSchema,
   settingsSetPricingInputSchema,
   settingsSetReasoningEffortInputSchema,
   settingsSetSearchInputSchema,
@@ -117,6 +123,7 @@ import {
   type ChatCompressResult,
   type ChatPlanResult,
   type SettingsSetContextWindowRequest,
+  type SettingsSetImageRequest,
   type SettingsSetPricingRequest,
   type SettingsSetReasoningEffortRequest,
   type SettingsSetSearchRequest,
@@ -156,6 +163,8 @@ import {
   type FsWriteFileRequest,
   type FsWriteFileResult,
   type GitCheckoutRequest,
+  type GitCommitDetailRequest,
+  type GitGraphRequest,
   type GitCommitRequest,
   type GitDiffRequest,
   type GitPathsRequest,
@@ -171,7 +180,9 @@ import {
   type SearchCancelResult,
   type SearchEvent,
   type SearchQuery,
+  type ProjectIdRequest,
   type ProjectListResult,
+  type ProjectRemoveResult,
   type ProjectRenameRequest,
   type ProviderDeleteRequest,
   type ProviderSaveRequest,
@@ -232,6 +243,7 @@ import { BillingService } from '../billing/billingService'
 import { StorageService } from '../storage/storageService'
 import { createSearchServiceRunner } from '../tools/searchTools'
 import { createTavilySearchRunner } from '../tools/webSearchTools'
+import { createImageGenRunner } from '../tools/imageGenTools'
 import { ToolService } from '../tools/toolService'
 import {
   copyWorkspaceEntry,
@@ -447,6 +459,8 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     allowRules,
     webSearch: createTavilySearchRunner(() => settingsService.getWebSearchConfig()),
     webSearchEnabled: () => settingsService.getWebSearchConfig() !== null,
+    imageGen: createImageGenRunner(() => settingsService.getImageConfig()),
+    imageGenEnabled: () => settingsService.getImageConfig() !== null,
     gitDiff: async ({ staged, relativePath }) => {
       const args = ['diff', '--unified=3', ...(staged ? ['--cached'] : [])]
       if (relativePath) args.push('--', relativePath)
@@ -897,6 +911,16 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     gitService.outputLog()
   )
 
+  handleIpc<GitGraphRequest, GitGraph>(IPC_CHANNELS.gitGraph, gitGraphInputSchema, async (input) =>
+    gitService.graph(input)
+  )
+
+  handleIpc<GitCommitDetailRequest, GitCommitDetail>(
+    IPC_CHANNELS.gitCommitDetail,
+    gitCommitDetailInputSchema,
+    async (input) => gitService.commitDetail(input.sha)
+  )
+
   handleIpc<undefined, TaskDiscovery>(IPC_CHANNELS.tasksList, null, async () => taskService.list())
 
   handleIpc<TaskStartRequest, TaskRun>(
@@ -1114,6 +1138,33 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     async (input) => sessionService.renameProject(input)
   )
 
+  handleIpc<ProjectIdRequest, WorkspaceInfo>(
+    IPC_CHANNELS.projectOpen,
+    projectIdInputSchema,
+    async (input) => {
+      const project = projectRepo.get(input.projectId)
+      if (!project) throw new AppError('E_NOT_FOUND', '项目不存在')
+      // SSH 项目没有可在系统文件管理器中打开的本地目录，只切换工作区。
+      if (!project.root.startsWith('ssh://')) {
+        try {
+          await access(project.root)
+        } catch {
+          throw new AppError('E_NOT_FOUND', '项目目录不存在或无法访问')
+        }
+        const error = await shell.openPath(project.root)
+        if (error) throw new AppError('E_IO', `打开目录失败：${error}`)
+      }
+      remoteService.forget()
+      return workspaceService.openRoot(project.root)
+    }
+  )
+
+  handleIpc<ProjectIdRequest, ProjectRemoveResult>(
+    IPC_CHANNELS.projectRemove,
+    projectIdInputSchema,
+    async (input) => sessionService.removeProject(input)
+  )
+
   handleIpc<undefined, RemoteProbeResultType>(IPC_CHANNELS.remoteProbe, null, async () =>
     remoteService.probe()
   )
@@ -1210,6 +1261,16 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
 
   handleIpc<undefined, SettingsResult>(IPC_CHANNELS.settingsClearSearchKey, null, async () =>
     settingsService.clearSearchApiKey()
+  )
+
+  handleIpc<SettingsSetImageRequest, SettingsResult>(
+    IPC_CHANNELS.settingsSetImage,
+    settingsSetImageInputSchema,
+    async (input) => settingsService.setImage(input)
+  )
+
+  handleIpc<undefined, SettingsResult>(IPC_CHANNELS.settingsClearImageKey, null, async () =>
+    settingsService.clearImageApiKey()
   )
 
   handleIpc<SettingsSetPricingRequest, SettingsResult>(

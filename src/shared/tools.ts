@@ -13,6 +13,7 @@ export type ToolName =
   | 'get_git_diff'
   | 'update_plan'
   | 'web_search'
+  | 'generate_image'
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
@@ -250,6 +251,33 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       required: ['query'],
       additionalProperties: false
     }
+  },
+  {
+    name: 'generate_image',
+    description:
+      '根据文字描述生成图片（需要用户在设置里配置生图 API Key 并开启）。返回一张图片的链接并展示在对话里，用于配图、艺术创作、设计参考等；默认使用智谱免费模型 cogview-3-flash。不要用它搜索工作区文件（用 search_files）或联网查资料（用 web_search）。',
+    parameters: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: '所需图像的文字描述' },
+        size: {
+          type: 'string',
+          enum: [
+            '1024x1024',
+            '768x1344',
+            '864x1152',
+            '1344x768',
+            '1152x864',
+            '1440x720',
+            '720x1440'
+          ],
+          description: '图片分辨率；不传则用设置里的默认值'
+        },
+        model: { type: 'string', description: '覆盖生图模型名；不传则用设置里的默认值' }
+      },
+      required: ['prompt'],
+      additionalProperties: false
+    }
   }
 ]
 
@@ -267,7 +295,8 @@ export function isReadOnlyTool(name: string): boolean {
     name === 'read_file' ||
     name === 'search_files' ||
     name === 'get_git_diff' ||
-    name === 'web_search'
+    name === 'web_search' ||
+    name === 'generate_image'
   )
 }
 
@@ -370,6 +399,11 @@ export function summarizeToolArgs(name: string, argsJson: string): string {
       const query = typeof args['query'] === 'string' ? args['query'] : ''
       const max = typeof args['maxResults'] === 'number' ? args['maxResults'] : null
       return `web_search「${clip(query, 80)}」${max ? `（${max} 条）` : ''}`
+    }
+    case 'generate_image': {
+      const prompt = typeof args['prompt'] === 'string' ? args['prompt'] : ''
+      const size = typeof args['size'] === 'string' && args['size'] ? ` ${args['size']}` : ''
+      return `generate_image「${clip(prompt, 80)}」${size}`
     }
     default:
       return clip(`${name} ${argsJson}`)

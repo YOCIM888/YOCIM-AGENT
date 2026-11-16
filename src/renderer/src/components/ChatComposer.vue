@@ -8,7 +8,7 @@ import {
   REASONING_EFFORT_LEVELS,
   type ReasoningEffort
 } from '@shared/providers'
-import type { ContextMenuItem } from '../lib/menu'
+import { menuContentHeight, type ContextMenuItem } from '../lib/menu'
 import { useChatStore } from '../stores/chat'
 import { usePreferencesStore } from '../stores/preferences'
 import { useProvidersStore } from '../stores/providers'
@@ -50,7 +50,8 @@ const approvalTitle = computed(() => APPROVAL_TITLES[preferences.approvalMode])
 const approvalItems = computed<ContextMenuItem[]>(() =>
   (['manual', 'auto', 'open'] as ApprovalMode[]).map((mode) => ({
     id: mode,
-    label: `${preferences.approvalMode === mode ? '✓ ' : ''}${APPROVAL_LABELS[mode]}`,
+    label: APPROVAL_LABELS[mode],
+    selected: preferences.approvalMode === mode,
     testid: `approval-mode-${mode}`,
     separatorBefore: mode !== 'manual'
   }))
@@ -63,9 +64,11 @@ const modelItems = computed<ContextMenuItem[]>(() => {
       const active = provider.id === providers.activeProviderId && model === providers.activeModel
       items.push({
         id: `${provider.id}::${model}`,
-        label: `${active ? '✓ ' : ''}${provider.name} · ${model}`,
-        testid: `model-option-${provider.id}-${model}`,
-        separatorBefore: index === 0 && items.length > 0
+        label: model,
+        title: `${provider.name} · ${model}`,
+        selected: active,
+        group: index === 0 ? provider.name : undefined,
+        testid: `model-option-${provider.id}-${model}`
       })
     })
   }
@@ -108,13 +111,15 @@ function attachCurrent(): void {
 function openModelMenu(event: MouseEvent): void {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const height = Math.min(
-    modelItems.value.length * 30 + 16 + MODEL_MENU_FOOTER_HEIGHT,
+    menuContentHeight(modelItems.value, MODEL_MENU_FOOTER_HEIGHT),
     window.innerHeight * 0.6
   )
   modelMenu.value = { x: rect.left, y: rect.top - height - 6 }
 }
 
 const MODEL_MENU_FOOTER_HEIGHT = 96
+/** 模型名较长（部分服务商带前缀路径），菜单比通用菜单宽一些 */
+const MODEL_MENU_WIDTH = 248
 
 const windowOptions = CONTEXT_WINDOW_OPTIONS
 const activeWindowLabel = computed(() => formatWindowSize(providers.contextWindow))
@@ -155,7 +160,7 @@ async function selectModel(id: string): Promise<void> {
 
 function openApprovalMenu(event: MouseEvent): void {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  const height = approvalItems.value.length * 30 + 16
+  const height = Math.min(menuContentHeight(approvalItems.value), window.innerHeight * 0.6)
   approvalMenu.value = { x: rect.left, y: rect.top - height - 6 }
 }
 
@@ -287,6 +292,7 @@ onMounted(() => {
       :y="modelMenu.y"
       :items="modelItems"
       :footer-height="MODEL_MENU_FOOTER_HEIGHT"
+      :width="MODEL_MENU_WIDTH"
       @select="selectModel"
       @close="modelMenu = null"
     >

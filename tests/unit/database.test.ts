@@ -119,6 +119,53 @@ describe('ProjectRepository and session filters', () => {
     db.close()
   })
 
+  it('removes a project with all its sessions without touching other projects', () => {
+    const db = createDb()
+    const projects = new ProjectRepository(db)
+    const sessions = new SessionRepository(db)
+    const messages = new MessageRepository(db)
+
+    const projectA = projects.ensure('E:/project-a')
+    const projectB = projects.ensure('E:/project-b')
+    const active = sessions.create({
+      title: 'A1',
+      workspaceRoot: projectA.root,
+      projectId: projectA.id
+    })
+    const archived = sessions.create({
+      title: 'A2',
+      workspaceRoot: projectA.root,
+      projectId: projectA.id
+    })
+    sessions.setArchived(archived.id, true)
+    sessions.create({ title: 'B1', workspaceRoot: projectB.root, projectId: projectB.id })
+
+    messages.insert({
+      id: 'message-a',
+      sessionId: active.id,
+      role: 'user',
+      content: '你好',
+      createdAt: Date.now()
+    })
+    db.prepare(
+      `INSERT INTO tool_calls
+       (id, session_id, run_id, call_id, tool, args_summary, result_summary, approval, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('call-a', active.id, 'run-a', 'call-a', 'read_file', '{}', 'ok', 'approved', 'done', 1)
+
+    expect(projects.delete(projectA.id)).toEqual({ removed: true, removedSessions: 2 })
+    expect(projects.get(projectA.id)).toBeNull()
+    expect(sessions.list({ includeArchived: true }).map((session) => session.title)).toEqual(['B1'])
+    expect(messages.listBySession(active.id)).toHaveLength(0)
+    const toolCalls = db
+      .prepare('SELECT COUNT(*) AS count FROM tool_calls WHERE session_id = ?')
+      .get(active.id) as { count: number }
+    expect(Number(toolCalls.count)).toBe(0)
+    expect(projects.get(projectB.id)?.sessionCount).toBe(1)
+    expect(projects.delete('missing-project')).toEqual({ removed: false, removedSessions: 0 })
+    db.close()
+  })
+
   it('supports pin, archive and moving sessions between projects', () => {
     const db = createDb()
     const projects = new ProjectRepository(db)

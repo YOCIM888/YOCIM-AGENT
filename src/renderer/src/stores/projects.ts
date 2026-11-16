@@ -60,6 +60,22 @@ export const useProjectsStore = defineStore('projects', () => {
     return true
   }
 
+  async function removeProject(projectId: string): Promise<boolean> {
+    const result = await window.yocim.projects.remove({ projectId })
+    if (!result.ok) {
+      error.value = result.error.message
+      return false
+    }
+    projects.value = projects.value.filter((project) => project.id !== projectId)
+    if (projectId in expanded.value) {
+      const next = { ...expanded.value }
+      delete next[projectId]
+      expanded.value = next
+      writeExpanded(next)
+    }
+    return true
+  }
+
   function clearError(): void {
     error.value = ''
   }
@@ -72,6 +88,7 @@ export const useProjectsStore = defineStore('projects', () => {
     isExpanded,
     toggleExpanded,
     renameProject,
+    removeProject,
     clearError
   }
 })
