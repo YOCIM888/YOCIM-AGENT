@@ -703,3 +703,430 @@ export class ExtensionRepository {
     return Number(result.changes) > 0
   }
 }
+
+export interface RemoteTargetRecord {
+  id: string
+  kind: 'wsl' | 'ssh'
+  name: string
+  distro: string | null
+  host: string | null
+  port: number | null
+  username: string | null
+  authType: 'agent' | 'key' | 'password' | null
+  keyPath: string | null
+  rootPath: string
+  hostFingerprint: string | null
+  /** safeStorage 加密后的口令；renderer 永远拿不到明文 */
+  secretEncrypted: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+interface RemoteTargetRow {
+  id: string
+  kind: string
+  name: string
+  distro: string | null
+  host: string | null
+  port: number | null
+  username: string | null
+  auth_type: string | null
+  key_path: string | null
+  root_path: string
+  host_fingerprint: string | null
+  secret_encrypted: string | null
+  created_at: number
+  updated_at: number
+}
+
+function mapRemoteTarget(row: RemoteTargetRow): RemoteTargetRecord {
+  return {
+    id: row.id,
+    kind: row.kind === 'ssh' ? 'ssh' : 'wsl',
+    name: row.name,
+    distro: row.distro,
+    host: row.host,
+    port: row.port === null ? null : Number(row.port),
+    username: row.username,
+    authType:
+      row.auth_type === 'key' || row.auth_type === 'password' || row.auth_type === 'agent'
+        ? row.auth_type
+        : null,
+    keyPath: row.key_path,
+    rootPath: row.root_path,
+    hostFingerprint: row.host_fingerprint,
+    secretEncrypted: row.secret_encrypted,
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at)
+  }
+}
+
+export class RemoteTargetRepository {
+  private readonly db: DatabaseSync
+
+  constructor(db: DatabaseSync) {
+    this.db = db
+  }
+
+  list(): RemoteTargetRecord[] {
+    const rows = this.db
+      .prepare('SELECT * FROM remote_targets ORDER BY updated_at DESC')
+      .all() as unknown as RemoteTargetRow[]
+    return rows.map(mapRemoteTarget)
+  }
+
+  get(id: string): RemoteTargetRecord | null {
+    const row = this.db.prepare('SELECT * FROM remote_targets WHERE id = ?').get(id) as
+      RemoteTargetRow | undefined
+    return row ? mapRemoteTarget(row) : null
+  }
+
+  upsert(record: RemoteTargetRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO remote_targets (
+           id, kind, name, distro, host, port, username, auth_type, key_path,
+           root_path, host_fingerprint, secret_encrypted, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           kind = excluded.kind,
+           name = excluded.name,
+           distro = excluded.distro,
+           host = excluded.host,
+           port = excluded.port,
+           username = excluded.username,
+           auth_type = excluded.auth_type,
+           key_path = excluded.key_path,
+           root_path = excluded.root_path,
+           host_fingerprint = excluded.host_fingerprint,
+           secret_encrypted = excluded.secret_encrypted,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        record.id,
+        record.kind,
+        record.name,
+        record.distro,
+        record.host,
+        record.port,
+        record.username,
+        record.authType,
+        record.keyPath,
+        record.rootPath,
+        record.hostFingerprint,
+        record.secretEncrypted,
+        record.createdAt,
+        record.updatedAt
+      )
+  }
+
+  setHostFingerprint(id: string, fingerprint: string): void {
+    this.db
+      .prepare('UPDATE remote_targets SET host_fingerprint = ?, updated_at = ? WHERE id = ?')
+      .run(fingerprint, Date.now(), id)
+  }
+
+  delete(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM remote_targets WHERE id = ?').run(id)
+    return Number(result.changes) > 0
+  }
+}
+
+export type AgentContextRole = 'user' | 'assistant' | 'tool' | 'summary'
+
+export interface AgentContextEntry {
+  id: string
+  sessionId: string
+  seq: number
+  role: AgentContextRole
+  content: string
+  toolCallsJson: string | null
+  toolCallId: string | null
+  tokens: number
+  createdAt: number
+}
+
+interface AgentContextRow {
+  id: string
+  session_id: string
+  seq: number
+  role: AgentContextRole
+  content: string
+  tool_calls_json: string | null
+  tool_call_id: string | null
+  tokens: number
+  created_at: number
+}
+
+function mapContextRow(row: AgentContextRow): AgentContextEntry {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    seq: row.seq,
+    role: row.role,
+    content: row.content,
+    toolCallsJson: row.tool_calls_json,
+    toolCallId: row.tool_call_id,
+    tokens: row.tokens,
+    createdAt: row.created_at
+  }
+}
+
+/**
+ * 模型侧上下文仓储：每个会话一条有序流水（seq 单调递增）。
+ * 压缩 = 把 seq ≤ N 的条目替换成一条 summary 条目（seq = N），
+ * 因此剩余条目顺序不变，重放时无需额外排序字段。
+ */
+export class AgentContextRepository {
+  constructor(private readonly db: DatabaseSync) {}
+
+  list(sessionId: string): AgentContextEntry[] {
+    const rows = this.db
+      .prepare('SELECT * FROM agent_context WHERE session_id = ? ORDER BY seq ASC')
+      .all(sessionId) as unknown as AgentContextRow[]
+    return rows.map(mapContextRow)
+  }
+
+  nextSeq(sessionId: string): number {
+    const row = this.db
+      .prepare('SELECT MAX(seq) AS seq FROM agent_context WHERE session_id = ?')
+      .get(sessionId) as { seq?: number | null } | undefined
+    return Number(row?.seq ?? 0) + 1
+  }
+
+  append(entry: Omit<AgentContextEntry, 'seq'> & { seq?: number }): AgentContextEntry {
+    const seq = entry.seq ?? this.nextSeq(entry.sessionId)
+    this.db
+      .prepare(
+        `INSERT INTO agent_context
+         (id, session_id, seq, role, content, tool_calls_json, tool_call_id, tokens, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        entry.id,
+        entry.sessionId,
+        seq,
+        entry.role,
+        entry.content,
+        entry.toolCallsJson,
+        entry.toolCallId,
+        entry.tokens,
+        entry.createdAt
+      )
+    return { ...entry, seq }
+  }
+
+  /** 用一条摘要替换 seq ≤ throughSeq 的全部条目 */
+  compactThrough(
+    sessionId: string,
+    throughSeq: number,
+    summary: Omit<AgentContextEntry, 'seq' | 'sessionId' | 'role'>
+  ): AgentContextEntry {
+    this.db
+      .prepare('DELETE FROM agent_context WHERE session_id = ? AND seq <= ?')
+      .run(sessionId, throughSeq)
+    return this.append({
+      ...summary,
+      sessionId,
+      seq: throughSeq,
+      role: 'summary'
+    })
+  }
+
+  /** 硬裁剪：直接删除 seq ≤ throughSeq 的条目（压缩后仍超窗口时的最后手段） */
+  deleteThrough(sessionId: string, throughSeq: number): number {
+    const result = this.db
+      .prepare('DELETE FROM agent_context WHERE session_id = ? AND seq <= ?')
+      .run(sessionId, throughSeq)
+    return Number(result.changes)
+  }
+
+  countBySession(sessionId: string): { entries: number; summaries: number } {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS entries,
+                SUM(CASE WHEN role = 'summary' THEN 1 ELSE 0 END) AS summaries
+         FROM agent_context WHERE session_id = ?`
+      )
+      .get(sessionId) as { entries?: number; summaries?: number | null } | undefined
+    return {
+      entries: Number(row?.entries ?? 0),
+      summaries: Number(row?.summaries ?? 0)
+    }
+  }
+
+  latestSummaryAt(sessionId: string): number | null {
+    const row = this.db
+      .prepare(
+        "SELECT MAX(created_at) AS ts FROM agent_context WHERE session_id = ? AND role = 'summary'"
+      )
+      .get(sessionId) as { ts?: number | null } | undefined
+    return row?.ts ?? null
+  }
+
+  clear(sessionId: string): void {
+    this.db.prepare('DELETE FROM agent_context WHERE session_id = ?').run(sessionId)
+  }
+}
+
+export interface AgentPlanRow {
+  session_id: string
+  plan_json: string
+  updated_at: number
+}
+
+/**
+ * Agent 计划存储：每会话一份当前计划，update_plan 全量覆写。
+ * 计划跨重启持久化（会话删除时随 CASCADE 清理）。
+ */
+export class AgentPlanRepository {
+  constructor(private readonly db: DatabaseSync) {}
+
+  get(
+    sessionId: string
+  ): { plan: Array<{ step: string; status: string }>; updatedAt: number } | null {
+    const row = this.db
+      .prepare('SELECT * FROM agent_plan WHERE session_id = ?')
+      .get(sessionId) as unknown as AgentPlanRow | undefined
+    if (!row) return null
+    try {
+      const plan = JSON.parse(row.plan_json) as Array<{ step: string; status: string }>
+      if (!Array.isArray(plan)) return null
+      return { plan, updatedAt: row.updated_at }
+    } catch {
+      return null
+    }
+  }
+
+  set(sessionId: string, plan: Array<{ step: string; status: string }>): void {
+    this.db
+      .prepare(
+        `INSERT INTO agent_plan (session_id, plan_json, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET plan_json = excluded.plan_json, updated_at = excluded.updated_at`
+      )
+      .run(sessionId, JSON.stringify(plan), Date.now())
+  }
+
+  clear(sessionId: string): void {
+    this.db.prepare('DELETE FROM agent_plan WHERE session_id = ?').run(sessionId)
+  }
+}
+
+export interface UsageRecord {
+  id: string
+  sessionId: string
+  providerId: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  createdAt: number
+}
+
+export interface UsageAggregate {
+  providerId: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  calls: number
+  /** 最后一次使用时间 */
+  lastUsedAt: number
+}
+
+/**
+ * Token 用量存储：每次模型调用记一条，账单面板按 provider/model 汇总。
+ * Provider 不回传 usage 的场景下不会有记录（不影响其他功能）。
+ */
+export class UsageRepository {
+  constructor(private readonly db: DatabaseSync) {}
+
+  insert(record: UsageRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO agent_usage (id, session_id, provider_id, model, input_tokens, output_tokens, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        record.id,
+        record.sessionId,
+        record.providerId,
+        record.model,
+        Math.max(0, Math.round(record.inputTokens)),
+        Math.max(0, Math.round(record.outputTokens)),
+        record.createdAt
+      )
+  }
+
+  /** 按 provider+model 汇总；可限定时间窗口 */
+  aggregate(since?: number): UsageAggregate[] {
+    const rows = (since
+      ? this.db
+          .prepare(
+            `SELECT provider_id, model,
+                      SUM(input_tokens) AS input_tokens,
+                      SUM(output_tokens) AS output_tokens,
+                      COUNT(*) AS calls,
+                      MAX(created_at) AS last_used_at
+               FROM agent_usage WHERE created_at >= ?
+               GROUP BY provider_id, model ORDER BY calls DESC`
+          )
+          .all(since)
+      : this.db
+          .prepare(
+            `SELECT provider_id, model,
+                      SUM(input_tokens) AS input_tokens,
+                      SUM(output_tokens) AS output_tokens,
+                      COUNT(*) AS calls,
+                      MAX(created_at) AS last_used_at
+               FROM agent_usage GROUP BY provider_id, model ORDER BY calls DESC`
+          )
+          .all()) as unknown as Array<{
+      provider_id: string
+      model: string
+      input_tokens: number | null
+      output_tokens: number | null
+      calls: number
+      last_used_at: number | null
+    }>
+    return rows.map((row) => ({
+      providerId: row.provider_id,
+      model: row.model,
+      inputTokens: row.input_tokens ?? 0,
+      outputTokens: row.output_tokens ?? 0,
+      calls: row.calls ?? 0,
+      lastUsedAt: row.last_used_at ?? 0
+    }))
+  }
+
+  /** 总用量（含拆分） */
+  totals(since?: number): { inputTokens: number; outputTokens: number; calls: number } {
+    const rows = (since
+      ? this.db
+          .prepare(
+            `SELECT SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens, COUNT(*) AS calls
+               FROM agent_usage WHERE created_at >= ?`
+          )
+          .all(since)
+      : this.db
+          .prepare(
+            `SELECT SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens, COUNT(*) AS calls
+               FROM agent_usage`
+          )
+          .all()) as unknown as Array<{
+      input_tokens: number | null
+      output_tokens: number | null
+      calls: number | null
+    }>
+    const row = rows[0]
+    return {
+      inputTokens: row?.input_tokens ?? 0,
+      outputTokens: row?.output_tokens ?? 0,
+      calls: row?.calls ?? 0
+    }
+  }
+
+  /** 清理时间窗口之前的记录 */
+  prune(before: number): number {
+    const result = this.db.prepare('DELETE FROM agent_usage WHERE created_at < ?').run(before)
+    return Number(result.changes ?? 0)
+  }
+}

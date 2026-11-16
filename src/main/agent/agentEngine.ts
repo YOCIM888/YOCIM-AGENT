@@ -6,26 +6,44 @@ import type {
   AgentToolRuntime,
   ChatProvider,
   ProviderFinishReason,
+  ProviderUsage,
   ToolCall,
   ToolExecutionOutcome
 } from '../../shared/agent'
 import type { ContextAttachment } from '../../shared/attachment'
+import { isReadOnlyTool, isWriteTool, summarizeToolArgs } from '../../shared/tools'
 
 export interface AgentEngineConfig {
   provider: ChatProvider
   systemPrompt?: string
   tools?: AgentToolRuntime
   emit: (event: AgentEvent) => void
+  /**
+   * 每轮把新产生的 assistant（含工具调用）/ tool 消息回传给调用方，
+   * 用于持久化上下文流；不提供则调用方只拿最终文本。
+   */
+  onAppend?: (messages: AgentMessage[]) => void
+  /**
+   * 每轮请求前给调用方一次调整上下文的机会（典型用途：超阈值时自动压缩）。
+   * 返回的数组将替换本轮及后续轮次使用的消息列表。
+   */
+  beforeRound?: (messages: AgentMessage[]) => Promise<AgentMessage[]>
+  /**
+   * 每轮结束时上报本轮 token 用量（账单统计用）。
+   * 即使随后被取消，已经产生的用量也会被上报。
+   */
+  onUsage?: (usage: ProviderUsage) => void
 }
 
-const MAX_TOOL_ROUNDS = 6
+/** 轮次上限分级：按本次 run 内的实际工作量自适应，而不是预先分类 */
+const ROUND_LIMIT_READ_ONLY = 6
+const ROUND_LIMIT_WITH_WRITES = 20
+const ROUND_LIMIT_MULTI_FILE = 60
+/** 只读工具并发执行上限 */
+const READ_ONLY_CONCURRENCY = 4
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : '未知错误'
-}
-
-function truncate(text: string, limit: number): string {
-  return text.length > limit ? `${text.slice(0, limit)}…` : text
 }
 
 function formatAttachmentContext(attachments: ContextAttachment[]): string {
@@ -71,12 +89,9 @@ export async function runAgentTurn(
   let seq = 0
   let finished = false
   let combinedText = ''
-  const messages = buildMessages(
-    config.systemPrompt,
-    input.history,
-    input.userText,
-    input.attachments
-  )
+  let messages = input.prebuiltMessages
+    ? [...input.prebuiltMessages]
+    : buildMessages(config.systemPrompt, input.history, input.userText, input.attachments)
 
   const nextMeta = (): { runId: string; seq: number; ts: number } => ({
     runId: input.runId,
@@ -105,13 +120,53 @@ export async function runAgentTurn(
     combinedText = combinedText ? `${combinedText}\n${roundText}` : roundText
   }
 
+  /** 自适应轮次上限：只读问答 6；出现写操作 20；写操作跨多个文件 60 */
+  let writeToolsUsed = 0
+  const writtenFiles = new Set<string>()
+  const roundLimit = (): number => {
+    if (writeToolsUsed === 0) return ROUND_LIMIT_READ_ONLY
+    if (writtenFiles.size >= 2) return ROUND_LIMIT_MULTI_FILE
+    return ROUND_LIMIT_WITH_WRITES
+  }
+  const observeCall = (call: ToolCall): void => {
+    if (!isWriteTool(call.name)) return
+    writeToolsUsed += 1
+    try {
+      const parsed = JSON.parse(call.argumentsJson) as { relativePath?: unknown }
+      if (typeof parsed?.relativePath === 'string' && parsed.relativePath) {
+        writtenFiles.add(parsed.relativePath)
+      }
+    } catch {
+      // 参数解析失败不影响轮次上限估算
+    }
+  }
+
   emit({ type: 'run:start', ...nextMeta(), sessionId: input.sessionId })
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+  for (let round = 0; ; round += 1) {
+    if (round >= roundLimit()) {
+      emit({
+        type: 'run:paused',
+        ...nextMeta(),
+        sessionId: input.sessionId,
+        reason: 'round_limit',
+        rounds: round
+      })
+      finish('paused')
+      return { text: combinedText, reason: 'paused' }
+    }
+    if (config.beforeRound) {
+      try {
+        messages = await config.beforeRound(messages)
+      } catch {
+        // 压缩失败不应中断运行：沿用现有上下文继续
+      }
+    }
     const messageId = `msg-${input.runId.slice(0, 8)}-${round}`
     let roundText = ''
     let finishReason: ProviderFinishReason = 'stop'
     const calls: ToolCall[] = []
+    const roundUsage: ProviderUsage = { inputTokens: 0, outputTokens: 0 }
 
     try {
       for await (const chunk of config.provider.stream(
@@ -124,6 +179,9 @@ export async function runAgentTurn(
           emit({ type: 'message:delta', ...nextMeta(), messageId, text: chunk.text })
         } else if (chunk.type === 'tool_call') {
           calls.push(chunk.toolCall)
+        } else if (chunk.type === 'usage') {
+          roundUsage.inputTokens += chunk.usage.inputTokens
+          roundUsage.outputTokens += chunk.usage.outputTokens
         } else {
           finishReason = chunk.finishReason
         }
@@ -139,6 +197,11 @@ export async function runAgentTurn(
       }
       finish('error', { code: 'E_PROVIDER', message: describeError(error) })
       return { text: combinedText, reason: 'error' }
+    } finally {
+      // 用量上报放在 finally：即使本轮报错或被取消，已产生的 token 也要计入账单
+      if (roundUsage.inputTokens > 0 || roundUsage.outputTokens > 0) {
+        config.onUsage?.(roundUsage)
+      }
     }
 
     if (signal.aborted) {
@@ -160,6 +223,7 @@ export async function runAgentTurn(
         finish('error', { code: 'E_TOOL_UNSUPPORTED', message: '模型请求了无法解析的工具调用' })
         return { text: combinedText, reason: 'error' }
       }
+      if (roundText) config.onAppend?.([{ role: 'assistant', content: roundText }])
       finish('completed')
       return { text: combinedText, reason: 'completed' }
     }
@@ -171,36 +235,69 @@ export async function runAgentTurn(
           ...nextMeta(),
           callId: call.id,
           name: call.name,
-          argsSummary: truncate(call.argumentsJson, 500)
+          argsSummary: summarizeToolArgs(call.name, call.argumentsJson)
         })
       }
       finish('error', { code: 'E_TOOL_UNSUPPORTED', message: '当前未启用工具系统' })
       return { text: combinedText, reason: 'error' }
     }
 
-    messages.push({ role: 'assistant', content: roundText, toolCalls: calls })
+    const appended: AgentMessage[] = [{ role: 'assistant', content: roundText, toolCalls: calls }]
+    messages.push(appended[0])
+    const toolRuntime = config.tools
 
-    for (const call of calls) {
-      if (signal.aborted) break
-      emit({
-        type: 'tool:call',
-        ...nextMeta(),
-        callId: call.id,
-        name: call.name,
-        argsSummary: truncate(call.argumentsJson, 500)
-      })
-
-      let outcome: ToolExecutionOutcome
+    const executeCall = async (call: ToolCall): Promise<ToolExecutionOutcome> => {
       try {
-        outcome = await config.tools.execute(call, signal)
+        return await toolRuntime.execute(call, signal)
       } catch (error) {
-        outcome = {
+        return {
           ok: false,
           content: `工具执行失败：${describeError(error)}`,
           summary: '工具执行失败'
         }
       }
+    }
 
+    for (const call of calls) {
+      if (signal.aborted) break
+      observeCall(call)
+      emit({
+        type: 'tool:call',
+        ...nextMeta(),
+        callId: call.id,
+        name: call.name,
+        argsSummary: summarizeToolArgs(call.name, call.argumentsJson)
+      })
+    }
+
+    const outcomes = new Map<string, ToolExecutionOutcome>()
+    const readOnly = calls.filter((call) => isReadOnlyTool(call.name))
+    const serial = calls.filter((call) => !isReadOnlyTool(call.name))
+
+    // 只读工具并发执行（上限 4）：结果之间无顺序依赖
+    let cursor = 0
+    const workers = Array.from(
+      { length: Math.min(READ_ONLY_CONCURRENCY, readOnly.length) },
+      async () => {
+        while (cursor < readOnly.length && !signal.aborted) {
+          const call = readOnly[cursor]
+          cursor += 1
+          outcomes.set(call.id, await executeCall(call))
+        }
+      }
+    )
+    await Promise.all(workers)
+
+    // 写工具与命令保持串行：有状态依赖与审批顺序
+    for (const call of serial) {
+      if (signal.aborted) break
+      outcomes.set(call.id, await executeCall(call))
+    }
+
+    // tool:result 与 tool 消息按调用顺序回填，保持模型侧协议一致
+    for (const call of calls) {
+      const outcome = outcomes.get(call.id)
+      if (!outcome) continue
       emit({
         type: 'tool:result',
         ...nextMeta(),
@@ -208,15 +305,20 @@ export async function runAgentTurn(
         ok: outcome.ok,
         summary: outcome.summary
       })
-      messages.push({ role: 'tool', toolCallId: call.id, content: outcome.content })
+      const toolMessage: AgentMessage = {
+        role: 'tool',
+        toolCallId: call.id,
+        content: outcome.content
+      }
+      appended.push(toolMessage)
+      messages.push(toolMessage)
     }
+
+    if (appended.length) config.onAppend?.(appended)
 
     if (signal.aborted) {
       finish('cancelled')
       return { text: combinedText, reason: 'cancelled' }
     }
   }
-
-  finish('error', { code: 'E_TOOL_LIMIT', message: '工具执行轮次超过上限' })
-  return { text: combinedText, reason: 'error' }
 }

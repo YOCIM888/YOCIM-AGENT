@@ -295,6 +295,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  /** 远程连接/断开后由 remote store 调用：整块替换工作区并重载文件树 */
+  async function applyInfo(next: WorkspaceInfo): Promise<void> {
+    writeStoredTabs([], null)
+    info.value = next
+    await resetWorkspace()
+  }
+
   async function openProject(projectId: string): Promise<boolean> {
     busy.value = true
     clearError()
@@ -700,6 +707,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     clearClipboard,
     restore,
     select,
+    applyInfo,
     openProject,
     openFile,
     openPath,

@@ -212,3 +212,93 @@ describe('SettingsService providers', () => {
     db.close()
   })
 })
+
+describe('SettingsService app settings', () => {
+  it('round-trips the search settings and hides the key', () => {
+    const settings = service.setSearch({
+      enabled: true,
+      maxResults: 8,
+      searchDepth: 'advanced',
+      topic: 'news',
+      includeAnswer: false,
+      includeRawContent: true,
+      apiKey: 'tvly-secret'
+    })
+
+    expect(settings.search).toMatchObject({
+      enabled: true,
+      maxResults: 8,
+      searchDepth: 'advanced',
+      topic: 'news',
+      includeAnswer: false,
+      includeRawContent: true,
+      hasApiKey: true
+    })
+    // 读取回来的对象里不能出现明文 Key
+    expect(JSON.stringify(settings.search)).not.toContain('tvly-secret')
+
+    const config = service.getWebSearchConfig()
+    expect(config).toMatchObject({ apiKey: 'tvly-secret', maxResults: 8 })
+    db.close()
+  })
+
+  it('clears the search key', () => {
+    service.setSearch({
+      enabled: true,
+      maxResults: 5,
+      searchDepth: 'basic',
+      topic: 'general',
+      includeAnswer: true,
+      includeRawContent: false,
+      apiKey: 'tvly-secret'
+    })
+    const settings = service.clearSearchApiKey()
+    expect(settings.search.hasApiKey).toBe(false)
+    expect(service.getWebSearchConfig()).toBeNull()
+    db.close()
+  })
+
+  it('does not expose web search until it is enabled', () => {
+    service.setSearch({
+      enabled: false,
+      maxResults: 5,
+      searchDepth: 'basic',
+      topic: 'general',
+      includeAnswer: true,
+      includeRawContent: false,
+      apiKey: 'tvly-secret'
+    })
+    expect(service.getWebSearchConfig()).toBeNull()
+    db.close()
+  })
+
+  it('round-trips the pricing table', () => {
+    const settings = service.setPricing({
+      entries: [
+        {
+          providerId: 'deepseek',
+          model: 'deepseek-v4-pro',
+          inputPrice: 2,
+          outputPrice: 8,
+          currency: 'CNY'
+        }
+      ]
+    })
+    expect(settings.pricing).toEqual([
+      {
+        providerId: 'deepseek',
+        model: 'deepseek-v4-pro',
+        inputPrice: 2,
+        outputPrice: 8,
+        currency: 'CNY'
+      }
+    ])
+    db.close()
+  })
+
+  it('round-trips the storage directory', () => {
+    const settings = service.setStorage({ dataDir: 'D://YOCIM-Data//' })
+    expect(settings.storage.dataDir).toBe('D://YOCIM-Data')
+    db.close()
+  })
+})

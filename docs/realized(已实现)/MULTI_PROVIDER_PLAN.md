@@ -10,7 +10,7 @@
 | Provider            | 协议                   | 默认 Base URL                                       | 说明                                   |
 | ------------------- | ---------------------- | --------------------------------------------------- | -------------------------------------- |
 | Mock                | 内置                   | -                                                   | 离线演示与 e2e，默认启用               |
-| DeepSeek            | OpenAI-compatible      | `https://api.deepseek.com/v1`                       | `deepseek-chat` / `deepseek-reasoner`  |
+| DeepSeek            | OpenAI-compatible      | `https://api.deepseek.com/v1`                       | `deepseek-v4-pro` / `deepseek-flash`   |
 | Qwen（通义千问）    | OpenAI-compatible      | `https://dashscope.aliyuncs.com/compatible-mode/v1` | DashScope 兼容模式                     |
 | BigModel（智谱）    | OpenAI-compatible      | `https://open.bigmodel.cn/api/paas/v4`              | GLM 系列                               |
 | Kimi（Moonshot）    | OpenAI-compatible      | `https://api.moonshot.cn/v1`                        | Moonshot/Kimi 系列                     |
@@ -19,11 +19,14 @@
 | 阿里云（百炼）      | OpenAI-compatible      | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 与 Qwen 同端点，模型清单不同           |
 | 硅基流动            | OpenAI-compatible      | `https://api.siliconflow.cn/v1`                     | 聚合模型                               |
 | 火山引擎（方舟）    | OpenAI-compatible      | `https://ark.cn-beijing.volces.com/api/v3`          | 模型名/Endpoint ID 以控制台为准        |
+| ChatGPT（OpenAI）   | OpenAI-compatible      | `https://api.openai.com/v1`                         | `Authorization: Bearer`                |
 | Claude（Anthropic） | Anthropic Messages     | `https://api.anthropic.com/v1`                      | `x-api-key` + `anthropic-version`      |
 | Gemini（Google）    | Gemini GenerateContent | `https://generativelanguage.googleapis.com/v1beta`  | SSE：`streamGenerateContent?alt=sse`   |
 | Grok（xAI）         | OpenAI-compatible      | `https://api.x.ai/v1`                               | OpenAI 兼容                            |
 | 本地 Ollama         | OpenAI-compatible      | `http://localhost:11434/v1`                         | 无需 API Key                           |
 | 自定义              | 三选一                 | 用户填写                                            | `openai` / `anthropic` / `gemini` 协议 |
+
+> 预设内置的模型清单已于 2026-11-16 按各家官方文档刷新（OpenAI GPT-6 系列、Claude 5.5 系列、Gemini 4 Argon、Grok 4.7、DeepSeek V4/V4.1、GLM-5.3、Kimi K3、MiniMax M3.1、Qwen3.8、混元 Hy3、豆包 Seed 2.1）。模型下线频繁（DeepSeek 已弃用 `deepseek-chat`/`deepseek-reasoner`，混元已下线 `hunyuan-turbos-latest`/`hunyuan-t1-latest`），**预设里的模型名只是开箱默认值，实际以各家控制台为准**，用户可在设置里自行增删。
 
 ### 1.2 协议差异
 
@@ -142,12 +145,21 @@ interface ProviderConfig {
 
 ### 4.2 设置面板
 
+设置弹窗已升级为分栏结构（左侧标签 + 右侧内容）：**账单 / 模型 / 搜索 / 外观 / 存储 / 浏览器**。
+下面这条描述的是「模型」分页（原 `SettingsDialog.vue` 的内容，现位于
+`src/renderer/src/components/settings/ModelsPanel.vue`）。
+
 - Provider 列表：名称、协议、Base URL、当前模型、是否已配置 Key；
 - 「添加提供商」：从 14 个预设中选择，自动填充协议/Base URL/推荐模型；
 - 编辑：名称、Base URL、协议（自定义）、模型列表（逗号/换行分隔）、API Key；
 - 删除：非 mock 可删；
 - 「设为当前」；保存后立即生效；
 - API Key 仍通过系统安全存储加密，输入框留空表示不修改。
+
+> 后续新增的分栏：
+> 「账单」走 DeepSeek 官方 `/user/balance` 查余额 + 本地 token 用量 × 用户填写的单价估算费用；
+> 「搜索」配置 Tavily API Key 并给 Agent 开放 `web_search` 工具；
+> 「外观」管主题/字号/换行/缩略图；「存储」可自定义数据目录；「浏览器」暂为占位。
 
 ### 4.3 输入卡模型切换
 

@@ -96,6 +96,8 @@ describe('write_file approval', () => {
       toolCall('write_file', { relativePath: 'notes/demo.txt', content: 'hello write' }),
       context()
     )
+    // diff 预览要先读文件（异步），等审批请求落地
+    await new Promise((resolve) => setTimeout(resolve, 50))
     expect(requests).toHaveLength(1)
     expect(requests[0]).toMatchObject({ tool: 'write_file', risk: 'medium' })
     expect(approvals.respond(requests[0].approvalId, 'approve')).toBe(true)
@@ -113,6 +115,8 @@ describe('write_file approval', () => {
       toolCall('write_file', { relativePath: 'notes/denied.txt', content: 'nope' }),
       context()
     )
+    // diff 预览要先读文件（异步），等审批请求落地
+    await new Promise((resolve) => setTimeout(resolve, 50))
     expect(requests).toHaveLength(1)
     approvals.respond(requests[0].approvalId, 'deny')
 
@@ -125,17 +129,18 @@ describe('write_file approval', () => {
     expect(audit.list()[0]).toMatchObject({ approval: 'denied', ok: false })
   })
 
-  it('applies a patch when oldText matches exactly once', async () => {
+  it('applies a single patch through edit_file', async () => {
     await mkdir(path.join(workspaceRoot, 'notes'), { recursive: true })
     await writeFile(path.join(workspaceRoot, 'notes', 'patch.txt'), 'alpha beta gamma')
     const run = service.execute(
-      toolCall('write_file', {
+      toolCall('edit_file', {
         relativePath: 'notes/patch.txt',
-        oldText: 'beta',
-        newText: 'BETA'
+        edits: [{ oldText: 'beta', newText: 'BETA' }]
       }),
       context()
     )
+    // diff 预览要先读文件（异步），等审批请求落地
+    await new Promise((resolve) => setTimeout(resolve, 50))
     approvals.respond(requests[0].approvalId, 'approve')
     const outcome = await run
 
@@ -143,6 +148,16 @@ describe('write_file approval', () => {
     expect(await readFile(path.join(workspaceRoot, 'notes', 'patch.txt'), 'utf8')).toBe(
       'alpha BETA gamma'
     )
+  })
+
+  it('rejects a write_file call without content', async () => {
+    const outcome = await service.execute(
+      toolCall('write_file', { relativePath: 'notes/empty-args.txt' }),
+      context()
+    )
+    expect(outcome.ok).toBe(false)
+    expect(outcome.summary).toContain('参数校验失败')
+    expect(requests).toHaveLength(0)
   })
 
   it('rejects writes into ignored directories without asking for approval', async () => {
@@ -196,6 +211,8 @@ describe('approval modes', () => {
       toolCall('run_command', { command: 'node -e "console.log(1)"' }),
       context()
     )
+    // 白名单加载是异步的（读 .yocim/commands.json），等审批请求落地
+    await new Promise((resolve) => setTimeout(resolve, 50))
     expect(requests).toHaveLength(1)
     approvals.respond(requests[0].approvalId, 'approve')
     expect((await commandRun).ok).toBe(true)
@@ -255,6 +272,8 @@ describe('run_command protection', () => {
       toolCall('run_command', { command: 'node -e "console.log(\'hi\')"' }),
       context()
     )
+    // 白名单加载是异步的（读 .yocim/commands.json），等审批请求落地
+    await new Promise((resolve) => setTimeout(resolve, 50))
     expect(requests).toHaveLength(1)
     expect(requests[0]).toMatchObject({ tool: 'run_command', risk: 'high' })
     approvals.respond(requests[0].approvalId, 'approve')
@@ -305,6 +324,8 @@ describe('write_file timeline snapshot', () => {
       toolCall('write_file', { relativePath: 'notes/hook-denied.txt', content: 'x' }),
       context()
     )
+    // diff 预览要先读文件（异步），等审批请求落地
+    await new Promise((resolve) => setTimeout(resolve, 50))
     approvals.respond(requests[0].approvalId, 'deny')
     expect((await run).ok).toBe(false)
     expect(timeline.list(guard.root, 'notes/hook-denied.txt')).toHaveLength(0)

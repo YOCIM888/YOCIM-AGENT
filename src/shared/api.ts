@@ -10,6 +10,9 @@ import type {
   ApprovalRespondResult,
   ChatCancelInput,
   ChatCancelResult,
+  ChatCompressInput,
+  ChatCompressResult,
+  ChatPlanResult,
   ChatSendInput,
   ChatSendResult,
   ClipboardWriteTextInput,
@@ -77,6 +80,16 @@ import type {
   SettingsResult,
   SettingsSetActiveInput,
   SettingsSetApprovalModeInput,
+  SettingsSetContextWindowInput,
+  SettingsSetPricingInput,
+  SettingsSetReasoningEffortInput,
+  SettingsSetSearchInput,
+  SettingsSetStorageInput,
+  BillingBalanceInput,
+  BillingBalanceResult,
+  BillingSummaryInput,
+  BillingSummaryResult,
+  StorageInfoResult,
   TimelineListResult,
   TimelineReadInput,
   TimelineReadResult,
@@ -91,7 +104,18 @@ import type {
   WorkspaceInfo,
   WorkspaceOpenProjectInput
 } from './ipc'
+import type { ContextUsage } from './context'
 import type { DebugConfigFile, DebugEvent } from './debug'
+import type {
+  RemoteConnectInput,
+  RemoteConnectResponse,
+  RemoteDisconnectResponse,
+  RemoteIdInput,
+  RemoteProbeResponse,
+  RemoteTargetInputPayload,
+  RemoteTargetListResponse
+} from './ipc'
+import type { RemoteConnectionState } from './remote'
 import type { TaskEvent } from './tasks'
 import type { ProjectSummary, SessionSummary } from './session'
 import type {
@@ -146,6 +170,9 @@ export interface YocimSearchApi {
 export interface YocimChatApi {
   send(input: ChatSendInput): Promise<IpcResult<ChatSendResult>>
   cancel(input: ChatCancelInput): Promise<IpcResult<ChatCancelResult>>
+  compress(input: ChatCompressInput): Promise<IpcResult<ChatCompressResult>>
+  contextUsage(input: SessionIdInput): Promise<IpcResult<ContextUsage>>
+  getPlan(input: SessionIdInput): Promise<IpcResult<ChatPlanResult>>
   onEvent(listener: (event: AgentEvent) => void): () => void
 }
 
@@ -208,6 +235,16 @@ export interface YocimExtensionsApi {
   reveal(input: ExtensionsIdInput): Promise<IpcResult<null>>
 }
 
+export interface YocimRemoteApi {
+  probe(): Promise<IpcResult<RemoteProbeResponse>>
+  list(): Promise<IpcResult<RemoteTargetListResponse>>
+  save(input: RemoteTargetInputPayload): Promise<IpcResult<RemoteTargetListResponse>>
+  remove(input: RemoteIdInput): Promise<IpcResult<RemoteTargetListResponse>>
+  connect(input: RemoteConnectInput): Promise<IpcResult<RemoteConnectResponse>>
+  disconnect(): Promise<IpcResult<RemoteDisconnectResponse>>
+  current(): Promise<IpcResult<RemoteConnectionState>>
+}
+
 export interface YocimSessionApi {
   list(input: SessionListInput): Promise<IpcResult<SessionListResult>>
   create(input: SessionCreateInput): Promise<IpcResult<SessionSummary>>
@@ -231,6 +268,23 @@ export interface YocimSettingsApi {
   removeProvider(input: ProviderDeleteInput): Promise<IpcResult<SettingsResult>>
   setActive(input: SettingsSetActiveInput): Promise<IpcResult<SettingsResult>>
   setApprovalMode(input: SettingsSetApprovalModeInput): Promise<IpcResult<SettingsResult>>
+  setContextWindow(input: SettingsSetContextWindowInput): Promise<IpcResult<SettingsResult>>
+  setReasoningEffort(input: SettingsSetReasoningEffortInput): Promise<IpcResult<SettingsResult>>
+  setSearch(input: SettingsSetSearchInput): Promise<IpcResult<SettingsResult>>
+  clearSearchKey(): Promise<IpcResult<SettingsResult>>
+  setPricing(input: SettingsSetPricingInput): Promise<IpcResult<SettingsResult>>
+  setStorage(input: SettingsSetStorageInput): Promise<IpcResult<SettingsResult>>
+}
+
+export interface YocimBillingApi {
+  getBalance(input: BillingBalanceInput): Promise<IpcResult<BillingBalanceResult>>
+  getSummary(input: BillingSummaryInput): Promise<IpcResult<BillingSummaryResult>>
+}
+
+export interface YocimStorageApi {
+  info(): Promise<IpcResult<StorageInfoResult>>
+  pick(): Promise<IpcResult<string | null>>
+  open(): Promise<IpcResult<null>>
 }
 
 export interface YocimWindowApi {
@@ -249,9 +303,12 @@ export interface YocimApi {
   tasks: YocimTasksApi
   debug: YocimDebugApi
   extensions: YocimExtensionsApi
+  remote: YocimRemoteApi
   sessions: YocimSessionApi
   projects: YocimProjectApi
   settings: YocimSettingsApi
+  billing: YocimBillingApi
+  storage: YocimStorageApi
   window: YocimWindowApi
   clipboard: YocimClipboardApi
   timeline: YocimTimelineApi

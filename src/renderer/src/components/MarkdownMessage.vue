@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { renderMarkdown } from '../lib/markdown'
 
 const props = defineProps<{
@@ -10,6 +10,9 @@ const props = defineProps<{
 const html = ref(renderMarkdown(props.content))
 let timer: ReturnType<typeof setTimeout> | null = null
 let pending = props.content
+
+/** 流式中给根节点挂标记，用来把光标贴到最后一段正文末尾。 */
+const rootClass = computed(() => (props.streaming ? 'is-streaming' : ''))
 
 function flush(): void {
   timer = null
@@ -61,8 +64,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <!-- eslint-disable-next-line vue/no-v-html -- 内容已通过 DOMPurify 白名单净化 -->
-  <div class="markdown-body" @click="handleClick" v-html="html"></div>
+  <!-- eslint-disable vue/no-v-html -- 内容已通过 DOMPurify 白名单净化 -->
+  <div class="markdown-body" :class="rootClass" @click="handleClick" v-html="html"></div>
+  <!-- eslint-enable vue/no-v-html -->
 </template>
 
 <style scoped>
@@ -175,5 +179,31 @@ onBeforeUnmount(() => {
   margin: 12px 0;
   border: 0;
   border-top: 1px solid var(--border);
+}
+
+/*
+ * 流式光标：贴在最后一段正文末尾（而不是掉到块级容器下面另起一行）。
+ * 用伪元素实现，正文结构不受影响。
+ */
+.markdown-body.is-streaming :deep(> *:last-child)::after {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 3px;
+  border-radius: 1px;
+  background: var(--accent);
+  content: '';
+  vertical-align: text-bottom;
+  animation: caret-blink 1.05s ease-in-out infinite;
+}
+
+@keyframes caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
 }
 </style>

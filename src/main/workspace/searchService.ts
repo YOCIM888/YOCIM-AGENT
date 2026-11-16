@@ -15,8 +15,14 @@ import {
   type SearchStartResult
 } from '../../shared/ipc'
 import type { TimelineService } from './timelineService'
-import type { WorkspacePathGuard } from './pathGuard'
-import { findRipgrepPath, parseRipgrepJson } from './ripgrep'
+import type { WorkspaceGuardLike } from './pathGuard'
+import {
+  findRipgrepPath,
+  parseRipgrepJson,
+  ripgrepSubmatchesToMatches,
+  type RipgrepJsonEvent
+} from './ripgrep'
+import { getRemoteExec, type RemoteExec } from '../remote/execRegistry'
 import {
   applyEol,
   buildRipgrepArgs,
@@ -45,11 +51,14 @@ interface SearchSession {
   truncated: boolean
   finished: boolean
   child?: ChildProcess
+  /** 远程搜索的取消入口（WSL/SSH 命令不是本地子进程） */
+  remoteCancel?: () => void
 }
 
 export interface SearchServiceDeps {
-  getGuard: () => WorkspacePathGuard
-  timeline: TimelineService
+  getGuard: () => WorkspaceGuardLike
+  /** 仅在批量替换时用于生成快照；Agent 搜索等只读场景可以不提供 */
+  timeline?: TimelineService
   findRg?: () => Promise<string | null>
 }
 
@@ -66,8 +75,13 @@ export class SearchService {
   constructor(private readonly deps: SearchServiceDeps) {}
 
   async start(query: SearchQuery, emit: (event: SearchEvent) => void): Promise<SearchStartResult> {
+    const remote = getRemoteExec()
+    if (remote && query.onlyOpenEditors) {
+      throw new AppError('E_UNSUPPORTED', '远程工作区暂不支持「仅在打开的文件中搜索」')
+    }
     const findRg = this.deps.findRg ?? findRipgrepPath
-    const rgPath = query.onlyOpenEditors ? null : await findRg()
+    // 远程搜索固定用远端的 rg：本地探测没有意义
+    const rgPath = remote ? 'rg' : query.onlyOpenEditors ? null : await findRg()
     const session: SearchSession = {
       id: randomUUID(),
       query,
@@ -94,6 +108,7 @@ export class SearchService {
     if (!session || session.finished) return { cancelled: false }
     session.cancelled = true
     session.child?.kill()
+    session.remoteCancel?.()
     this.send(session, { kind: 'cancelled' })
     this.complete(session, 'cancelled')
     return { cancelled: true }
@@ -119,7 +134,10 @@ export class SearchService {
 
   private async run(session: SearchSession): Promise<void> {
     try {
-      if (session.engine === 'ripgrep' && session.rgPath) {
+      const remote = getRemoteExec()
+      if (remote) {
+        await this.runRipgrepRemote(session, remote)
+      } else if (session.engine === 'ripgrep' && session.rgPath) {
         await this.runRipgrep(session, session.rgPath)
       } else {
         await this.runBuiltin(session)
@@ -296,7 +314,81 @@ export class SearchService {
     }
   }
 
+  /** 远程工作区：直接解析远端 rg 的 JSON 事件，不再回读文件（省一次往返） */
+  private async runRipgrepRemote(session: SearchSession, remote: RemoteExec): Promise<void> {
+    const args = buildRipgrepArgs(session.query)
+    const matched = new Map<string, SearchMatch[]>()
+    let stderr = ''
+
+    const flush = (relativePath: string): void => {
+      const matches = matched.get(relativePath)
+      matched.delete(relativePath)
+      if (!matches?.length || session.cancelled || session.truncated) return
+      const remaining = session.query.maxResults - session.totalMatches
+      const limited =
+        matches.length > remaining ? matches.slice(0, Math.max(0, remaining)) : matches
+      if (matches.length > remaining) session.truncated = true
+      if (!limited.length) {
+        session.truncated = true
+        return
+      }
+      this.send(session, {
+        kind: 'file',
+        file: { relativePath, contentHash: '', matches: limited }
+      })
+      session.totalMatches += limited.length
+      session.totalFiles += 1
+      if (session.totalMatches >= session.query.maxResults) session.truncated = true
+    }
+
+    const handle = remote.stream('rg', args, {
+      cwd: remote.rootPath,
+      onLine: (line) => {
+        let event: RipgrepJsonEvent
+        try {
+          event = JSON.parse(line) as RipgrepJsonEvent
+        } catch {
+          return
+        }
+        const relativePath = event.data?.path?.text
+        if (!relativePath) return
+        const clean = relativePath.replace(/\\/g, '/').replace(/^\.\//, '')
+        if (event.type === 'match') {
+          const matches = ripgrepSubmatchesToMatches(event, session.query)
+          if (!matches.length) return
+          matched.set(clean, [...(matched.get(clean) ?? []), ...matches])
+        } else if (event.type === 'end') {
+          flush(clean)
+        }
+      },
+      onStderr: (chunk) => {
+        stderr = `${stderr}${chunk}`.slice(-1000)
+      }
+    })
+    session.remoteCancel = handle.cancel
+
+    const { code, stderr: tail } = await handle.done
+    for (const relativePath of [...matched.keys()]) flush(relativePath)
+    if (session.cancelled) return
+    const message = (tail || stderr).trim()
+    if (code !== 0 && code !== 1) {
+      this.send(session, {
+        kind: 'error',
+        message: /not found|command not found/i.test(message)
+          ? '远端未安装 ripgrep，请先在远程环境安装（例如 sudo apt install ripgrep）'
+          : message.slice(0, 300) || '远端搜索失败'
+      })
+    }
+  }
+
   async replace(request: SearchReplaceRequest): Promise<SearchReplaceResult> {
+    if (getRemoteExec()) {
+      throw new AppError('E_UNSUPPORTED', '远程工作区暂不支持批量替换，请在远程终端中执行')
+    }
+    const timeline = this.deps.timeline
+    if (!timeline) {
+      throw new AppError('E_UNSUPPORTED', '当前未启用文件历史，无法批量替换')
+    }
     const guard = this.deps.getGuard()
     const targets =
       request.scope === 'single' ? (request.target ? [request.target] : []) : request.files
@@ -338,7 +430,7 @@ export class SearchService {
       // 搜索后文件被外部修改：拒绝覆盖，要求重新搜索
       if (target.hash && currentHash !== target.hash) {
         conflicts.push(target.relativePath)
-        await this.deps.timeline.snapshot({
+        await timeline.snapshot({
           workspaceRoot: guard.root,
           relativePath: target.relativePath,
           source: 'external',
@@ -384,7 +476,7 @@ export class SearchService {
       }
 
       // 写入前生成编辑前快照，替换可通过时间线恢复
-      await this.deps.timeline.snapshot({
+      await timeline.snapshot({
         workspaceRoot: guard.root,
         relativePath: target.relativePath,
         source: 'user',
@@ -392,7 +484,7 @@ export class SearchService {
       })
       const next = applyReplacements(content, selected)
       await writeFile(resolved.absolutePath, applyEol(next, eol), 'utf8')
-      await this.deps.timeline.snapshot({
+      await timeline.snapshot({
         workspaceRoot: guard.root,
         relativePath: target.relativePath,
         source: 'user',

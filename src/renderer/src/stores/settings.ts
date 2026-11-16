@@ -30,9 +30,9 @@ export interface WorkspaceSections {
 }
 
 export const SESSION_WIDTH_MIN = 220
-export const SESSION_WIDTH_MAX = 420
+export const SESSION_WIDTH_MAX = 360
 export const WORKSPACE_WIDTH_MIN = 220
-export const WORKSPACE_WIDTH_MAX = 420
+export const WORKSPACE_WIDTH_MAX_RATIO = 0.6
 export const SESSION_WIDTH_DEFAULT = 300
 export const WORKSPACE_WIDTH_DEFAULT = 280
 
@@ -44,8 +44,15 @@ const STORAGE_KEYS = {
   workspaceView: 'yocim.ui.workspaceView',
   workspaceSections: 'yocim.ui.workspaceSections',
   sessionWidth: 'yocim.ui.sessionWidth',
-  workspaceWidth: 'yocim.ui.workspaceWidth'
+  workspaceWidth: 'yocim.ui.workspaceWidth',
+  fontSize: 'yocim.ui.fontSize',
+  wordWrap: 'yocim.ui.wordWrap',
+  minimap: 'yocim.ui.minimap'
 } as const
+
+export const FONT_SIZE_MIN = 10
+export const FONT_SIZE_MAX = 24
+export const FONT_SIZE_DEFAULT = 13
 
 function readStorage(key: string): string | null {
   try {
@@ -76,7 +83,20 @@ function clampWidth(value: number, min: number, max: number, fallback: number): 
 }
 
 function readWidth(key: string, min: number, max: number, fallback: number): number {
-  return clampWidth(Number(readStorage(key)), min, max, fallback)
+  const raw = readStorage(key)
+  // 注意：Number(null) 是 0 而不是 NaN，必须先判空
+  if (raw === null) return fallback
+  return clampWidth(Number(raw), min, max, fallback)
+}
+
+/** 工作区栏最大宽度：屏幕宽度的 3/5（不低于最小宽度）。 */
+export function workspaceWidthMax(viewportWidth: number = window.innerWidth): number {
+  return Math.max(WORKSPACE_WIDTH_MIN, Math.round(viewportWidth * WORKSPACE_WIDTH_MAX_RATIO))
+}
+
+function clampWorkspaceWidth(value: number, fallback = WORKSPACE_WIDTH_DEFAULT): number {
+  const next = Number.isFinite(value) ? value : fallback
+  return Math.min(workspaceWidthMax(), Math.max(WORKSPACE_WIDTH_MIN, Math.round(next)))
 }
 
 function readTheme(): ThemeMode {
@@ -126,11 +146,24 @@ function applyTheme(theme: ThemeMode): void {
   document.documentElement.dataset.theme = theme
 }
 
+function readFontSize(): number {
+  const raw = readStorage(STORAGE_KEYS.fontSize)
+  // 注意：Number(null) 是 0 而不是 NaN，必须先判空
+  if (raw === null) return FONT_SIZE_DEFAULT
+  const value = Number(raw)
+  if (!Number.isFinite(value)) return FONT_SIZE_DEFAULT
+  return Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(value)))
+}
+
+function readWordWrap(): 'on' | 'off' {
+  return readStorage(STORAGE_KEYS.wordWrap) === 'on' ? 'on' : 'off'
+}
+
 export const useSettingsStore = defineStore('settings', () => {
   const theme = ref<ThemeMode>(readTheme())
-  const fontSize = ref(13)
-  const wordWrap = ref<'on' | 'off'>('off')
-  const minimap = ref(true)
+  const fontSize = ref(readFontSize())
+  const wordWrap = ref<'on' | 'off'>(readWordWrap())
+  const minimap = ref(readBoolean(STORAGE_KEYS.minimap, true))
 
   const sessionCollapsed = ref(readBoolean(STORAGE_KEYS.sessionCollapsed, false))
   const workspaceCollapsed = ref(readBoolean(STORAGE_KEYS.workspaceCollapsed, false))
@@ -145,12 +178,10 @@ export const useSettingsStore = defineStore('settings', () => {
       SESSION_WIDTH_DEFAULT
     )
   )
+  const storedWorkspaceWidth = readStorage(STORAGE_KEYS.workspaceWidth)
   const workspaceWidth = ref(
-    readWidth(
-      STORAGE_KEYS.workspaceWidth,
-      WORKSPACE_WIDTH_MIN,
-      WORKSPACE_WIDTH_MAX,
-      WORKSPACE_WIDTH_DEFAULT
+    clampWorkspaceWidth(
+      storedWorkspaceWidth === null ? WORKSPACE_WIDTH_DEFAULT : Number(storedWorkspaceWidth)
     )
   )
 
@@ -164,6 +195,21 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function toggleTheme(): void {
     setTheme(theme.value === 'dark' ? 'light' : 'dark')
+  }
+
+  function setFontSize(value: number): void {
+    fontSize.value = Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(value)))
+    writeStorage(STORAGE_KEYS.fontSize, String(fontSize.value))
+  }
+
+  function setWordWrap(value: 'on' | 'off'): void {
+    wordWrap.value = value
+    writeStorage(STORAGE_KEYS.wordWrap, value)
+  }
+
+  function setMinimap(value: boolean): void {
+    minimap.value = value
+    writeStorage(STORAGE_KEYS.minimap, String(value))
   }
 
   function setSessionCollapsed(value: boolean): void {
@@ -202,12 +248,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function setWorkspaceWidth(value: number): void {
-    workspaceWidth.value = clampWidth(
-      value,
-      WORKSPACE_WIDTH_MIN,
-      WORKSPACE_WIDTH_MAX,
-      WORKSPACE_WIDTH_DEFAULT
-    )
+    workspaceWidth.value = clampWorkspaceWidth(value)
     writeStorage(STORAGE_KEYS.workspaceWidth, String(workspaceWidth.value))
   }
 
@@ -225,6 +266,9 @@ export const useSettingsStore = defineStore('settings', () => {
     workspaceWidth,
     setTheme,
     toggleTheme,
+    setFontSize,
+    setWordWrap,
+    setMinimap,
     setSessionCollapsed,
     setWorkspaceCollapsed,
     setStatusExpanded,

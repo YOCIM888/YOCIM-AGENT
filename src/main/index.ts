@@ -6,7 +6,9 @@ import { APP_NAME } from '../shared/app'
 import { openDatabase } from './db/database'
 import { registerIpcHandlers } from './ipc'
 import { initLogger, logError, logInfo } from './logger'
+import { resolveDataDir } from './storage/storageService'
 import { workspaceService } from './workspace/workspaceService'
+import { setWorkspaceStorePath } from './workspace/workspaceStore'
 
 let database: DatabaseSync | null = null
 let rendererReloads = 0
@@ -15,8 +17,14 @@ const rendererDevUrl = process.env['ELECTRON_RENDERER_URL']
 
 app.setName(APP_NAME)
 
+/** 系统默认目录（Electron userData） */
+const userDataDir = app.getPath('userData')
+/** 实际生效的数据目录：用户可在设置 → 存储里改，改动重启后生效 */
+const dataDir = resolveDataDir(userDataDir)
+setWorkspaceStorePath(join(dataDir, 'workspace.json'))
+
 try {
-  initLogger(join(app.getPath('userData'), 'logs'))
+  initLogger(join(dataDir, 'logs'))
   logInfo(`main process starting (electron ${process.versions.electron})`)
 } catch (error) {
   console.error('failed to init logger', error)
@@ -115,9 +123,9 @@ function createMainWindow(): BrowserWindow {
 
 void app.whenReady().then(async () => {
   logInfo(`app ready v${app.getVersion()}`)
-  database = openDatabase(join(app.getPath('userData'), 'yocim.db'))
+  database = openDatabase(join(dataDir, 'yocim.db'))
   await workspaceService.restore()
-  registerIpcHandlers(database, app.getPath('userData'))
+  registerIpcHandlers(database, userDataDir, dataDir)
   createMainWindow()
 
   app.on('activate', () => {

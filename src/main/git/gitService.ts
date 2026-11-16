@@ -10,7 +10,7 @@ import type {
   GitStatus
 } from '../../shared/git'
 import { GIT_LIMITS } from '../../shared/ipcChannels'
-import { normalizeWorkspaceRelativePath, type WorkspacePathGuard } from '../workspace/pathGuard'
+import { normalizeWorkspaceRelativePath, type WorkspaceGuardLike } from '../workspace/pathGuard'
 import {
   detectGit,
   gitFailureMessage,
@@ -22,7 +22,7 @@ import {
 import { parseGitStatus } from './gitStatus'
 
 export interface GitServiceDeps {
-  getGuard: () => WorkspacePathGuard
+  getGuard: () => WorkspaceGuardLike
   /** 测试注入点：默认使用系统 git */
   runGit?: (args: string[], options: { cwd: string; timeoutMs: number }) => Promise<GitRunResult>
   detect?: () => Promise<GitAvailability>
@@ -181,7 +181,7 @@ export class GitService {
       return { ...this.emptyStatus(availability.message ?? 'Git 不可用', false), available: false }
     }
 
-    let guard: WorkspacePathGuard
+    let guard: WorkspaceGuardLike
     try {
       guard = this.deps.getGuard()
     } catch {

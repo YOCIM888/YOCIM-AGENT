@@ -8,6 +8,7 @@ import { useSettingsStore } from '../stores/settings'
 import AgentTimeline from './AgentTimeline.vue'
 import ChatComposer from './ChatComposer.vue'
 import MarkdownMessage from './MarkdownMessage.vue'
+import PlanCard from './PlanCard.vue'
 import WelcomeState from './WelcomeState.vue'
 
 const chat = useChatStore()
@@ -123,6 +124,7 @@ watch(
 
     <template v-else>
       <div ref="listRef" class="messages" @scroll.passive="handleScroll">
+        <PlanCard v-if="chat.plan.length" :plan="chat.plan" :paused="chat.paused" />
         <article
           v-for="message in chat.messages"
           :key="message.id"
@@ -142,7 +144,7 @@ watch(
               :content="message.content"
               :streaming="message.streaming"
             />
-            <span v-if="message.streaming" class="cursor">▍</span>
+            <span v-else-if="message.streaming" class="caret" aria-hidden="true"></span>
             <AgentTimeline
               v-if="message.steps?.length"
               :steps="message.steps"
@@ -363,7 +365,7 @@ watch(
 .user-bubble {
   max-width: 82%;
   padding: 8px 13px;
-  border-radius: var(--radius-md);
+  border-radius: 14px 14px 14px 4px;
   background: var(--accent-soft);
   color: var(--text);
   font-size: 13.5px;
@@ -379,8 +381,25 @@ watch(
   user-select: text;
 }
 
-.cursor {
-  color: var(--accent);
+/* 流式光标：正文为空时（模型还没吐出第一个字）单独显示 */
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  border-radius: 1px;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  animation: caret-blink 1.05s ease-in-out infinite;
+}
+
+@keyframes caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
 }
 
 .error-card {

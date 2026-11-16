@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import type { AgentEvent } from '../shared/agent'
+import type { ContextUsage } from '../shared/context'
 import type { YocimApi } from '../shared/api'
 import type { ApprovalRequest } from '../shared/approval'
 import { IPC_CHANNELS } from '../shared/ipcChannels'
@@ -13,6 +14,9 @@ import type {
   AuditQueryInput,
   ChatCancelInput,
   ChatCancelResult,
+  ChatCompressInput,
+  ChatCompressResult,
+  ChatPlanResult,
   ChatSendInput,
   ChatSendResult,
   ClipboardWriteTextInput,
@@ -80,6 +84,16 @@ import type {
   SettingsResult,
   SettingsSetActiveInput,
   SettingsSetApprovalModeInput,
+  SettingsSetContextWindowInput,
+  SettingsSetPricingInput,
+  SettingsSetReasoningEffortInput,
+  SettingsSetSearchInput,
+  SettingsSetStorageInput,
+  BillingBalanceInput,
+  BillingBalanceResult,
+  BillingSummaryInput,
+  BillingSummaryResult,
+  StorageInfoResult,
   TaskListResult,
   TaskStartInput,
   TaskStartResult,
@@ -95,6 +109,16 @@ import type {
   VscodeScanResponse
 } from '../shared/ipc'
 import type { DebugConfigFile, DebugEvent } from '../shared/debug'
+import type {
+  RemoteConnectInput,
+  RemoteConnectResponse,
+  RemoteDisconnectResponse,
+  RemoteIdInput,
+  RemoteProbeResponse,
+  RemoteTargetInputPayload,
+  RemoteTargetListResponse
+} from '../shared/ipc'
+import type { RemoteConnectionState } from '../shared/remote'
 import type { TaskEvent } from '../shared/tasks'
 import type { ProjectSummary, SessionSummary } from '../shared/session'
 import type {
@@ -163,6 +187,12 @@ const api: YocimApi = {
     send: (input: ChatSendInput) => invoke<IpcResult<ChatSendResult>>(IPC_CHANNELS.chatSend, input),
     cancel: (input: ChatCancelInput) =>
       invoke<IpcResult<ChatCancelResult>>(IPC_CHANNELS.chatCancel, input),
+    compress: (input: ChatCompressInput) =>
+      invoke<IpcResult<ChatCompressResult>>(IPC_CHANNELS.chatCompress, input),
+    contextUsage: (input: SessionIdInput) =>
+      invoke<IpcResult<ContextUsage>>(IPC_CHANNELS.chatContextUsage, input),
+    getPlan: (input: SessionIdInput) =>
+      invoke<IpcResult<ChatPlanResult>>(IPC_CHANNELS.chatGetPlan, input),
     onEvent: (listener: (event: AgentEvent) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, payload: AgentEvent): void => {
         listener(payload)
@@ -252,6 +282,18 @@ const api: YocimApi = {
       }
     }
   },
+  remote: {
+    probe: () => invoke<IpcResult<RemoteProbeResponse>>(IPC_CHANNELS.remoteProbe),
+    list: () => invoke<IpcResult<RemoteTargetListResponse>>(IPC_CHANNELS.remoteList),
+    save: (input: RemoteTargetInputPayload) =>
+      invoke<IpcResult<RemoteTargetListResponse>>(IPC_CHANNELS.remoteSave, input),
+    remove: (input: RemoteIdInput) =>
+      invoke<IpcResult<RemoteTargetListResponse>>(IPC_CHANNELS.remoteDelete, input),
+    connect: (input: RemoteConnectInput) =>
+      invoke<IpcResult<RemoteConnectResponse>>(IPC_CHANNELS.remoteConnect, input),
+    disconnect: () => invoke<IpcResult<RemoteDisconnectResponse>>(IPC_CHANNELS.remoteDisconnect),
+    current: () => invoke<IpcResult<RemoteConnectionState>>(IPC_CHANNELS.remoteCurrent)
+  },
   extensions: {
     list: () => invoke<IpcResult<ExtensionListResult>>(IPC_CHANNELS.extensionsList),
     installLocal: (input: ExtensionsInstallLocalInput) =>
@@ -305,7 +347,29 @@ const api: YocimApi = {
     setActive: (input: SettingsSetActiveInput) =>
       invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetActive, input),
     setApprovalMode: (input: SettingsSetApprovalModeInput) =>
-      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetApprovalMode, input)
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetApprovalMode, input),
+    setContextWindow: (input: SettingsSetContextWindowInput) =>
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetContextWindow, input),
+    setReasoningEffort: (input: SettingsSetReasoningEffortInput) =>
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetReasoningEffort, input),
+    setSearch: (input: SettingsSetSearchInput) =>
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetSearch, input),
+    clearSearchKey: () => invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsClearSearchKey),
+    setPricing: (input: SettingsSetPricingInput) =>
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetPricing, input),
+    setStorage: (input: SettingsSetStorageInput) =>
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetStorage, input)
+  },
+  billing: {
+    getBalance: (input: BillingBalanceInput) =>
+      invoke<IpcResult<BillingBalanceResult>>(IPC_CHANNELS.billingBalance, input),
+    getSummary: (input: BillingSummaryInput) =>
+      invoke<IpcResult<BillingSummaryResult>>(IPC_CHANNELS.billingSummary, input)
+  },
+  storage: {
+    info: () => invoke<IpcResult<StorageInfoResult>>(IPC_CHANNELS.storageInfo),
+    pick: () => invoke<IpcResult<string | null>>(IPC_CHANNELS.storagePick),
+    open: () => invoke<IpcResult<null>>(IPC_CHANNELS.storageOpen)
   },
   window: {
     control: (input: WindowControlInput) =>

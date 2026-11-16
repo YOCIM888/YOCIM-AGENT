@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import ChatPanel from '../components/ChatPanel.vue'
 import ResizeHandle from '../components/ResizeHandle.vue'
 import SessionSidebar from '../components/SessionSidebar.vue'
@@ -17,9 +17,9 @@ import {
   SESSION_WIDTH_MAX,
   SESSION_WIDTH_MIN,
   WORKSPACE_WIDTH_DEFAULT,
-  WORKSPACE_WIDTH_MAX,
   WORKSPACE_WIDTH_MIN,
-  useSettingsStore
+  useSettingsStore,
+  workspaceWidthMax
 } from '../stores/settings'
 import { useWorkspaceStore } from '../stores/workspace'
 
@@ -33,9 +33,15 @@ const settings = useSettingsStore()
 const commands = useAppCommands()
 
 const NARROW_WIDTH = 1024
+const viewportWidth = ref(window.innerWidth)
+const workspaceMax = computed(() => workspaceWidthMax(viewportWidth.value))
 let wasNarrow = false
 
 function syncViewport(): void {
+  viewportWidth.value = window.innerWidth
+  if (settings.workspaceWidth > workspaceMax.value) {
+    settings.setWorkspaceWidth(workspaceMax.value)
+  }
   const narrow = window.innerWidth < NARROW_WIDTH
   if (narrow && !wasNarrow) {
     settings.setWorkspaceCollapsed(true)
@@ -130,7 +136,7 @@ onBeforeUnmount(() => {
         side="right"
         :value="settings.workspaceWidth"
         :min="WORKSPACE_WIDTH_MIN"
-        :max="WORKSPACE_WIDTH_MAX"
+        :max="workspaceMax"
         @update="settings.setWorkspaceWidth"
         @reset="settings.setWorkspaceWidth(WORKSPACE_WIDTH_DEFAULT)"
       />

@@ -133,6 +133,17 @@ describe('buildRipgrepArgs', () => {
     expect(args).toContain('src/**')
     expect(args).toContain('!*.min.js')
   })
+
+  it('keeps --hidden but always excludes VCS metadata directories', () => {
+    const args = buildRipgrepArgs(query())
+    expect(args).toContain('--hidden')
+    // 非 git 目录也要走 .gitignore，否则内置搜索与 ripgrep 结果不一致
+    expect(args).toContain('--no-require-git')
+    for (const name of ['.git', '.hg', '.svn', 'node_modules', 'dist', 'release']) {
+      expect(args).toContain(`!${name}`)
+      expect(args).toContain(`!${name}/**`)
+    }
+  })
 })
 
 describe('file filters and gitignore', () => {

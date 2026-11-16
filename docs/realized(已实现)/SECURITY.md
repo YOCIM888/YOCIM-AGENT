@@ -81,7 +81,31 @@
 5. CSP 禁止 `unsafe-eval`；Monaco 使用本地打包资源，不加载远程脚本；
 6. 渲染用户/模型文本统一作为纯文本或受控 Markdown 渲染，禁止直接 `v-html` 注入未净化内容。
 
-### 2.6 数据库与审计完整性
+### 2.6 远程工作区（WSL / SSH）
+
+威胁：连接不可信主机、凭据泄漏、通过远端路径逃出工作区、远程命令绕过审批。
+
+应对：
+
+1. SSH 主机指纹按 TOFU：首次连接返回 `SHA256:...` 由用户确认后才写入目标记录，之后指纹变化直接以 `E_CONFLICT` 阻断（不实现 `known_hosts` 兼容读取）；
+2. 凭据只存在主进程：口令经 `safeStorage` 加密写入 `remote_targets.secret_encrypted`，renderer 只拿到 `hasSecret`；私钥路径不读入内存，而是交给 ssh2 读取；
+3. 远端路径一律经 `normalizeRemotePath` 拒绝 `..`、绝对路径与空段，命令参数按数组传递：WSL 用 `wsl.exe -d <distro> --cd <dir> --exec`（不经 shell），SSH 用 `cd <quoted> && <quoted command>` 由 POSIX 引号处理；
+4. 远程工作区仍复用本地审批与命令白名单（Agent 工具暂不支持远程，直接报错），远程 Git/搜索/任务不继承 `NODE_OPTIONS` 等本地环境；
+5. 连接失败不改变当前本地工作区，错误信息只包含主机/端口与失败原因，不回显口令。
+
+### 2.7 扩展、调试与任务
+
+威胁：安装扩展即执行任意代码、调试器启动任意程序、任务执行注入命令。
+
+应对：
+
+1. 扩展只做第一层：**不执行任何扩展 JS**，不加载 `main` 入口；VSIX 解压用自研 zip 读取器，拒绝 zip64 与路径穿越，`copyTree` 跳过 `node_modules`/`.git`/`out`/`dist`；
+2. 不兼容扩展默认禁用，启用请求被主进程拒绝；片段贡献只注册为 Monaco 补全，语法/主题仅展示；
+3. 调试只允许 `.yocim/launch.json`（或 `package.json main`）声明、`type` 为 `node`/`pwa-node` 的配置，`program` 必须落在工作区内；首次启动展示完整命令并要求确认；
+4. 任务只接受 `package.json` scripts 名与 `.yocim/tasks.json`（label/command/args/cwd 白名单校验，cwd 必须是工作区内的相对路径），Windows `.cmd/.bat` 经 `cmd.exe /d /s /c` 包裹但参数仍按数组拼接；
+5. 调试与任务输出都经过 `redactSecrets` 脱敏与 ANSI 清洗，输出上限 512KB，停止时 `taskkill /T /F` 杀进程树（远程则关闭 SSH 通道）。
+
+### 2.8 数据库与审计完整性
 
 威胁：审计被篡改、DB 被工作区内容污染。
 

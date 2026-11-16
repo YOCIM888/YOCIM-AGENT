@@ -155,3 +155,48 @@ export class WorkspacePathGuard {
     throw new AppError('E_NOT_FOUND', '无法确定工作区内的写入位置')
   }
 }
+
+/**
+ * Git / 搜索只依赖 `root` 与 `resolve`，远程（SSH）工作区没有本地路径，
+ * 用这个最小接口让它们复用同一套调用。
+ */
+export interface WorkspaceGuardLike {
+  root: string
+  resolve: (
+    relativePath: string,
+    options?: { mustExist?: boolean }
+  ) => Promise<ResolvedWorkspacePath>
+}
+
+/**
+ * SSH 远程工作区的“虚拟守卫”：只做相对路径规范化，不触碰本地文件系统。
+ * 真实文件读写由 remoteFs（SFTP）负责，不要把它传给本地 fs 调用。
+ */
+export class RemotePathGuard implements WorkspaceGuardLike {
+  private readonly rootLabel: string
+  private readonly placeholder: string
+
+  constructor(rootLabel: string, placeholder = '.yocim-remote') {
+    this.rootLabel = rootLabel
+    this.placeholder = placeholder
+  }
+
+  get root(): string {
+    return `${this.placeholder}/${this.rootLabel}`
+  }
+
+  async resolve(relativePath: string): Promise<ResolvedWorkspacePath> {
+    const normalized = normalizeWorkspaceRelativePath(relativePath)
+    return {
+      absolutePath: normalized ? `${this.root}/${normalized}` : this.root,
+      relativePath: normalized || '.'
+    }
+  }
+
+  async resolveForCreate(relativePath: string): Promise<ResolvedWorkspacePath> {
+    if (!normalizeWorkspaceRelativePath(relativePath)) {
+      throw new AppError('E_INVALID_INPUT', '写入路径不能为空')
+    }
+    return this.resolve(relativePath)
+  }
+}

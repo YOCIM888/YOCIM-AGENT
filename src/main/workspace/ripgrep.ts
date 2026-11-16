@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile)
 export type RipgrepRecord =
   { kind: 'begin' | 'match' | 'end'; relativePath: string } | { kind: 'other' }
 
-interface RipgrepJsonEvent {
+export interface RipgrepJsonEvent {
   type?: string
   data?: {
     path?: { text?: string }

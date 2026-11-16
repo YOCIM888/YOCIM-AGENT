@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { ATTACHMENT_LIMITS, contextAttachmentSchema } from './attachment'
+import type { PlanItem } from './agent'
+import { CONTEXT_WINDOW_MAX, CONTEXT_WINDOW_MIN, type ContextUsage } from './context'
 import type { IpcErrorCode } from './errors'
 import { AUDIT_LIMITS, DEBUG_LIMITS, FS_LIMITS, GIT_LIMITS, SEARCH_LIMITS } from './ipcChannels'
 import type { AuditEntry, AuditExportResult, AuditPage, AuditStats } from './audit'
@@ -17,8 +19,22 @@ import type {
   VscodeScanResult
 } from './extensions'
 import type { TaskDiscovery, TaskRun } from './tasks'
-import { PROVIDER_PRESET_IDS } from './providers'
+import {
+  REMOTE_LIMITS,
+  type RemoteConnectionState,
+  type RemoteEnvironment,
+  type RemoteTargetSummary
+} from './remote'
+import { PROVIDER_PRESET_IDS, REASONING_EFFORT_LEVELS } from './providers'
 import type { PublicSettings, ProjectSummary, SessionSummary, StoredMessage } from './session'
+import {
+  PRICING_CURRENCIES,
+  PRICING_LIMITS,
+  SEARCH_DEPTHS,
+  SEARCH_TOPICS,
+  WEB_SEARCH_LIMITS
+} from './settings'
+import type { BillingSummary, ProviderBalance, StorageInfo } from './billing'
 
 export type { IpcErrorCode } from './errors'
 export {
@@ -50,7 +66,17 @@ export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: IpcError 
 
 export const workspaceInfoSchema = z.object({
   root: z.string().min(1),
-  name: z.string().min(1)
+  name: z.string().min(1),
+  /** 远程工作区元信息；本地工作区为 undefined */
+  remote: z
+    .object({
+      kind: z.enum(['wsl', 'ssh']),
+      targetId: z.string().min(1),
+      label: z.string().min(1),
+      rootPath: z.string().min(1),
+      displayRoot: z.string().min(1)
+    })
+    .optional()
 })
 
 export type WorkspaceInfo = z.infer<typeof workspaceInfoSchema>
@@ -220,6 +246,17 @@ export const chatHistoryMessageSchema = z.object({
   content: z.string().min(1).max(20_000)
 })
 
+export const contextHintSchema = z.object({
+  activeFile: z.string().max(1024).optional(),
+  selection: z
+    .object({
+      startLine: z.number().int().min(1),
+      endLine: z.number().int().min(1)
+    })
+    .optional(),
+  dirtyFiles: z.array(z.string().max(1024)).max(20).optional()
+})
+
 export const chatSendInputSchema = z
   .object({
     sessionId: z.string().min(1).max(64),
@@ -229,7 +266,8 @@ export const chatSendInputSchema = z
       .array(contextAttachmentSchema)
       .max(ATTACHMENT_LIMITS.maxCount)
       .optional()
-      .default([])
+      .default([]),
+    contextHint: contextHintSchema.optional()
   })
   .superRefine((value, ctx) => {
     const total = value.attachments.reduce((sum, item) => sum + item.content.length, 0)
@@ -260,9 +298,26 @@ export interface ChatCancelResult {
   cancelled: boolean
 }
 
+export type ChatPlanResult = PlanItem[]
+
+export const chatCompressInputSchema = z.object({
+  sessionId: z.string().min(1).max(64)
+})
+
+export type ChatCompressInput = z.input<typeof chatCompressInputSchema>
+export type ChatCompressRequest = z.output<typeof chatCompressInputSchema>
+
+export interface ChatCompressResult {
+  /** 是否真的执行了压缩（内容太少时不压缩） */
+  compacted: boolean
+  /** 提示文案 */
+  message: string
+  usage: ContextUsage
+}
+
 export const approvalRespondInputSchema = z.object({
   approvalId: z.string().min(1).max(64),
-  decision: z.enum(['approve', 'deny'])
+  decision: z.enum(['approve', 'approve_session', 'approve_project', 'deny'])
 })
 
 export type ApprovalRespondInput = z.input<typeof approvalRespondInputSchema>
@@ -400,6 +455,89 @@ export const settingsSetApprovalModeInputSchema = z.object({
 
 export type SettingsSetApprovalModeInput = z.input<typeof settingsSetApprovalModeInputSchema>
 export type SettingsSetApprovalModeRequest = z.output<typeof settingsSetApprovalModeInputSchema>
+
+export const settingsSetContextWindowInputSchema = z.object({
+  providerId: z.string().min(1).max(64),
+  model: z.string().min(1).max(200),
+  contextWindow: z.number().int().min(CONTEXT_WINDOW_MIN).max(CONTEXT_WINDOW_MAX)
+})
+
+export type SettingsSetContextWindowInput = z.input<typeof settingsSetContextWindowInputSchema>
+export type SettingsSetContextWindowRequest = z.output<typeof settingsSetContextWindowInputSchema>
+
+export const settingsSetReasoningEffortInputSchema = z.object({
+  providerId: z.string().min(1).max(64),
+  model: z.string().min(1).max(200),
+  effort: z.enum(REASONING_EFFORT_LEVELS)
+})
+
+export type SettingsSetReasoningEffortInput = z.input<typeof settingsSetReasoningEffortInputSchema>
+export type SettingsSetReasoningEffortRequest = z.output<
+  typeof settingsSetReasoningEffortInputSchema
+>
+
+export const settingsSetSearchInputSchema = z.object({
+  enabled: z.boolean(),
+  maxResults: z.number().int().min(WEB_SEARCH_LIMITS.minResults).max(WEB_SEARCH_LIMITS.maxResults),
+  searchDepth: z.enum(SEARCH_DEPTHS),
+  topic: z.enum(SEARCH_TOPICS),
+  includeAnswer: z.boolean(),
+  includeRawContent: z.boolean(),
+  /** 留空表示不修改；传空字符串表示清除已保存的 Key */
+  apiKey: z.string().max(500).optional()
+})
+
+export type SettingsSetSearchInput = z.input<typeof settingsSetSearchInputSchema>
+export type SettingsSetSearchRequest = z.output<typeof settingsSetSearchInputSchema>
+
+export const modelPricingEntrySchema = z.object({
+  providerId: z.string().min(1).max(64),
+  model: z.string().min(1).max(200),
+  inputPrice: z.number().min(0).max(PRICING_LIMITS.maxPrice),
+  outputPrice: z.number().min(0).max(PRICING_LIMITS.maxPrice),
+  currency: z.enum(PRICING_CURRENCIES)
+})
+
+export const settingsSetPricingInputSchema = z.object({
+  entries: z.array(modelPricingEntrySchema).max(PRICING_LIMITS.maxEntries)
+})
+
+export type SettingsSetPricingInput = z.input<typeof settingsSetPricingInputSchema>
+export type SettingsSetPricingRequest = z.output<typeof settingsSetPricingInputSchema>
+
+export const settingsSetStorageInputSchema = z.object({
+  dataDir: z.string().max(1024)
+})
+
+export type SettingsSetStorageInput = z.input<typeof settingsSetStorageInputSchema>
+export type SettingsSetStorageRequest = z.output<typeof settingsSetStorageInputSchema>
+
+export const billingBalanceInputSchema = z.object({
+  providerId: z.string().min(1).max(64)
+})
+
+export type BillingBalanceInput = z.input<typeof billingBalanceInputSchema>
+export type BillingBalanceRequest = z.output<typeof billingBalanceInputSchema>
+
+export const billingSummaryInputSchema = z.object({
+  /** 统计最近多少天；不传表示全部 */
+  sinceDays: z.number().int().min(1).max(3650).optional()
+})
+
+export type BillingSummaryInput = z.input<typeof billingSummaryInputSchema>
+export type BillingSummaryRequest = z.output<typeof billingSummaryInputSchema>
+
+export const storagePickInputSchema = z.object({
+  /** true 表示选目录，false 表示选文件 */
+  directory: z.boolean().optional()
+})
+
+export type StoragePickInput = z.input<typeof storagePickInputSchema>
+export type StoragePickRequest = z.output<typeof storagePickInputSchema>
+
+export type BillingBalanceResult = ProviderBalance
+export type BillingSummaryResult = BillingSummary
+export type StorageInfoResult = StorageInfo
 
 export type SettingsResult = PublicSettings
 
@@ -783,3 +921,59 @@ export type ExtensionListResult = ExtensionInfo[]
 export type ExtensionInstallResponse = ExtensionInstallResult
 export type VscodeScanResponse = VscodeScanResult
 export type ExtensionContributionsResult = ExtensionContributionBundle
+
+/** 远程工作区（P5）：目标保存、探测与连接 */
+export const remoteTargetInputSchema = z
+  .object({
+    id: z.string().min(1).max(120).optional(),
+    kind: z.enum(['wsl', 'ssh']),
+    name: z.string().max(REMOTE_LIMITS.maxNameLength).optional(),
+    distro: z.string().max(REMOTE_LIMITS.maxDistroLength).optional(),
+    host: z.string().max(REMOTE_LIMITS.maxHostLength).optional(),
+    port: z.number().int().min(1).max(65535).optional(),
+    username: z.string().max(REMOTE_LIMITS.maxUsernameLength).optional(),
+    authType: z.enum(['agent', 'key', 'password']).optional(),
+    keyPath: z.string().max(REMOTE_LIMITS.maxKeyPathLength).optional(),
+    rootPath: z.string().min(1).max(REMOTE_LIMITS.maxPathLength),
+    /** 口令只写不读；留空表示保持原值 */
+    secret: z.string().max(REMOTE_LIMITS.maxSecretLength).optional(),
+    trustHostFingerprint: z.boolean().optional()
+  })
+  .strict()
+
+export type RemoteTargetInputPayload = z.input<typeof remoteTargetInputSchema>
+export type RemoteTargetSaveRequest = z.output<typeof remoteTargetInputSchema>
+
+export const remoteIdInputSchema = z.object({
+  id: z.string().min(1).max(120)
+})
+
+export type RemoteIdInput = z.input<typeof remoteIdInputSchema>
+export type RemoteIdRequest = z.output<typeof remoteIdInputSchema>
+
+export const remoteConnectInputSchema = z.object({
+  id: z.string().min(1).max(120),
+  /** 首次连接确认主机指纹 */
+  trustHostFingerprint: z.boolean().optional()
+})
+
+export type RemoteConnectInput = z.input<typeof remoteConnectInputSchema>
+export type RemoteConnectRequest = z.output<typeof remoteConnectInputSchema>
+
+export type RemoteProbeResult = RemoteEnvironment
+export type RemoteTargetListResult = RemoteTargetSummary[]
+export type RemoteSaveResult = RemoteTargetSummary[]
+export type RemoteConnectResult = {
+  connection: RemoteConnectionState
+  workspace: WorkspaceInfo | null
+}
+export type RemoteDisconnectResult = {
+  connection: RemoteConnectionState
+  workspace: WorkspaceInfo | null
+}
+
+// renderer / preload 侧命名
+export type RemoteProbeResponse = RemoteProbeResult
+export type RemoteTargetListResponse = RemoteTargetListResult
+export type RemoteConnectResponse = RemoteConnectResult
+export type RemoteDisconnectResponse = RemoteDisconnectResult

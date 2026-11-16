@@ -1,14 +1,16 @@
 import { defineStore } from 'pinia'
 import { computed, ref, toRaw } from 'vue'
-import type { AgentEvent } from '@shared/agent'
+import type { AgentEvent, PlanItem } from '@shared/agent'
 import type { ApprovalDecision, ApprovalRequest } from '@shared/approval'
 import {
   ATTACHMENT_LIMITS,
   type ContextAttachment,
   type ContextAttachmentRange
 } from '@shared/attachment'
+import { type ContextHint, type ContextUsage } from '@shared/context'
 import {
   attachStepApproval,
+  appendStepOutput,
   closePendingApprovals,
   resolveStepApproval,
   resolveToolStep,
@@ -18,6 +20,7 @@ import {
 } from '../lib/agentSteps'
 import { checkAttachment, createSelectionAttachment } from '../lib/attachments'
 import { languageForPath } from '../lib/language'
+import { useWorkspaceStore } from './workspace'
 import { useSessionStore } from './session'
 
 export type ChatRole = 'user' | 'assistant' | 'system'
@@ -46,6 +49,7 @@ function createId(): string {
 
 export const useChatStore = defineStore('chat', () => {
   const sessionStore = useSessionStore()
+  const workspaceStore = useWorkspaceStore()
   const messagesBySession = ref<Record<string, ChatMessage[]>>({})
   const draft = ref('')
   const sending = ref(false)
@@ -53,14 +57,38 @@ export const useChatStore = defineStore('chat', () => {
   const pendingApprovals = ref<ApprovalRequest[]>([])
   const attachments = ref<ContextAttachment[]>([])
   const attachmentError = ref('')
+  const usageBySession = ref<Record<string, ContextUsage>>({})
+  const compressing = ref(false)
+  const compressError = ref('')
+  const planBySession = ref<Record<string, PlanItem[]>>({})
+  const pausedBySession = ref<Record<string, boolean>>({})
 
   let activeSessionId: string | null = null
   let cancelRequested = false
   let activeRunStartedAt = 0
 
+  /** 当前会话的上下文用量（圆环数据源） */
+  const contextUsage = computed<ContextUsage | null>(() => {
+    const sessionId = sessionStore.activeSessionId
+    if (!sessionId) return null
+    return usageBySession.value[sessionId] ?? null
+  })
+
   const messages = computed<ChatMessage[]>(() => {
     const sessionId = sessionStore.activeSessionId
     return sessionId ? (messagesBySession.value[sessionId] ?? []) : []
+  })
+
+  /** 当前会话的计划（计划卡数据源） */
+  const plan = computed<PlanItem[]>(() => {
+    const sessionId = sessionStore.activeSessionId
+    return sessionId ? (planBySession.value[sessionId] ?? []) : []
+  })
+
+  /** 当前会话是否处于「轮次用尽已暂停」状态 */
+  const paused = computed<boolean>(() => {
+    const sessionId = sessionStore.activeSessionId
+    return sessionId ? (pausedBySession.value[sessionId] ?? false) : false
   })
 
   function ensureMessages(sessionId: string): ChatMessage[] {
@@ -148,6 +176,26 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
 
+    // 上下文事件不绑定具体 run（手动压缩发生在运行之外），先于 runId 校验处理
+    if (event.type === 'context:usage') {
+      usageBySession.value = { ...usageBySession.value, [event.sessionId]: event.usage }
+      return
+    }
+    if (event.type === 'context:compacted') {
+      usageBySession.value = { ...usageBySession.value, [event.sessionId]: event.usage }
+      const label =
+        event.reason === 'auto'
+          ? `上下文接近上限，已自动压缩：${event.dropped} 条旧内容并入摘要`
+          : `已手动压缩上下文：${event.dropped} 条旧内容并入摘要`
+      append(event.sessionId, 'system', label)
+      return
+    }
+    // 计划更新不绑定具体 run（会话切换后计划卡仍要刷新）
+    if (event.type === 'plan:updated') {
+      planBySession.value = { ...planBySession.value, [event.sessionId]: event.plan }
+      return
+    }
+
     if (event.runId !== activeRunId.value || !activeSessionId) return
 
     switch (event.type) {
@@ -171,6 +219,12 @@ export const useChatStore = defineStore('chat', () => {
           argsSummary: event.argsSummary,
           startedAt: event.ts
         })
+        break
+      }
+      case 'tool:output': {
+        const message = findStepMessage(activeSessionId, event.callId)
+        const step = message?.steps?.find((item) => item.callId === event.callId)
+        if (step) appendStepOutput(step, event.text)
         break
       }
       case 'tool:result': {
@@ -206,7 +260,11 @@ export const useChatStore = defineStore('chat', () => {
             closePendingApprovals(message.steps)
             settleRunningSteps(
               message.steps,
-              event.reason === 'cancelled' ? '已取消' : '运行结束',
+              event.reason === 'cancelled'
+                ? '已取消'
+                : event.reason === 'paused'
+                  ? '已暂停'
+                  : '运行结束',
               event.ts
             )
           }
@@ -217,6 +275,15 @@ export const useChatStore = defineStore('chat', () => {
         activeRunStartedAt = 0
         cancelRequested = false
         pendingApprovals.value = []
+        break
+      }
+      case 'run:paused': {
+        pausedBySession.value = { ...pausedBySession.value, [event.sessionId]: true }
+        append(
+          activeSessionId,
+          'system',
+          `已连续执行 ${event.rounds} 轮工具，任务已暂停。确认当前进展后点击「继续」接着做。`
+        )
         break
       }
       default:
@@ -271,6 +338,61 @@ export const useChatStore = defineStore('chat', () => {
       content: message.content,
       createdAt: message.createdAt
     }))
+    void refreshUsage(sessionId)
+    // 计划卡跨重启恢复
+    const planResult = await window.yocim.chat.getPlan({ sessionId })
+    if (planResult.ok) {
+      planBySession.value = { ...planBySession.value, [sessionId]: planResult.data }
+    }
+  }
+
+  /** 拉取会话的上下文用量（圆环数据源；运行中则由事件推送更新） */
+  async function refreshUsage(sessionId: string): Promise<void> {
+    const result = await window.yocim.chat.contextUsage({ sessionId })
+    if (!result.ok) return
+    usageBySession.value = { ...usageBySession.value, [sessionId]: result.data }
+  }
+
+  /** 切换上下文窗口后按当前会话刷新用量 */
+  async function refreshActiveUsage(): Promise<void> {
+    const sessionId = sessionStore.activeSessionId
+    if (sessionId) await refreshUsage(sessionId)
+  }
+
+  /** 手动压缩：点击用量圆环触发 */
+  async function compress(): Promise<void> {
+    const sessionId = sessionStore.activeSessionId
+    if (!sessionId || compressing.value || sending.value) return
+    compressing.value = true
+    compressError.value = ''
+    try {
+      const result = await window.yocim.chat.compress({ sessionId })
+      if (result.ok) {
+        usageBySession.value = { ...usageBySession.value, [sessionId]: result.data.usage }
+        if (!result.data.compacted) {
+          append(sessionId, 'system', result.data.message)
+        }
+      } else {
+        compressError.value = result.error.message
+        appendError(sessionId, `压缩失败：${result.error.message}`, result.error.code)
+      }
+    } catch {
+      compressError.value = '压缩失败：主进程无响应'
+    } finally {
+      compressing.value = false
+    }
+  }
+
+  /** 当前处境提示：正在看的文件与未保存的文件，随请求带给主进程注入 prompt */
+  function buildContextHint(): ContextHint {
+    const hint: ContextHint = {}
+    if (workspaceStore.activeFile) hint.activeFile = workspaceStore.activeFile.relativePath
+    const dirty = workspaceStore.tabs
+      .filter((tab) => tab.content !== tab.savedContent)
+      .map((tab) => tab.relativePath)
+      .slice(0, 20)
+    if (dirty.length) hint.dirtyFiles = dirty
+    return hint
   }
 
   function appendSystem(content: string, sessionId?: string): void {
@@ -340,12 +462,13 @@ export const useChatStore = defineStore('chat', () => {
     attachmentError.value = ''
   }
 
-  async function send(): Promise<void> {
-    const text = draft.value.trim()
+  async function send(textArg?: string): Promise<void> {
+    const text = (textArg ?? draft.value).trim()
     if (!text || sending.value) return
 
     sending.value = true
     const sessionId = sessionStore.activeSessionId ?? (await sessionStore.createSession())
+    if (textArg === undefined) draft.value = ''
     if (!sessionId) {
       sending.value = false
       return
@@ -360,7 +483,6 @@ export const useChatStore = defineStore('chat', () => {
       }))
 
     append(sessionId, 'user', text)
-    draft.value = ''
     // IPC 结构化克隆无法序列化 Vue 响应式 Proxy，先转成纯数据
     const pendingAttachments = toRaw(attachments.value).map((item) => ({ ...toRaw(item) }))
 
@@ -370,7 +492,8 @@ export const useChatStore = defineStore('chat', () => {
         sessionId,
         text,
         history,
-        attachments: pendingAttachments
+        attachments: pendingAttachments,
+        contextHint: buildContextHint()
       })
     } catch {
       sending.value = false
@@ -420,6 +543,14 @@ export const useChatStore = defineStore('chat', () => {
     await window.yocim.chat.cancel({ runId })
   }
 
+  /** 轮次暂停后继续：发送固定指令，上下文在 DB 里完整回放 */
+  async function continuePlan(): Promise<void> {
+    const sessionId = sessionStore.activeSessionId
+    if (!sessionId || !pausedBySession.value[sessionId] || sending.value) return
+    pausedBySession.value = { ...pausedBySession.value, [sessionId]: false }
+    await send('继续：从上一步往下接着做，完成后按计划推进直至全部结束。')
+  }
+
   return {
     messagesBySession,
     messages,
@@ -429,9 +560,18 @@ export const useChatStore = defineStore('chat', () => {
     pendingApprovals,
     attachments,
     attachmentError,
+    contextUsage,
+    compressing,
+    compressError,
+    plan,
+    paused,
     send,
     retry,
     cancel,
+    compress,
+    refreshUsage,
+    refreshActiveUsage,
+    continuePlan,
     respondApproval,
     loadSession,
     appendSystem,

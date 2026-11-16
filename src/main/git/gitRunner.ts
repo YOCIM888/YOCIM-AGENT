@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { redactSecrets } from '../util/redact'
+import { getRemoteExec, type RemoteExec } from '../remote/execRegistry'
 
 export interface GitRunOptions {
   cwd: string
@@ -35,6 +36,8 @@ function firstMeaningfulLine(text: string): string {
  * 只允许 GitService 内部调用，避免任意命令注入。
  */
 export function runGit(args: string[], options: GitRunOptions): Promise<GitRunResult> {
+  const remote = getRemoteExec()
+  if (remote) return runGitRemote(remote, args, options)
   return new Promise((resolve) => {
     let stdout = ''
     let stderr = ''
@@ -102,6 +105,32 @@ export function runGit(args: string[], options: GitRunOptions): Promise<GitRunRe
       })
     })
   })
+}
+
+/** 远程工作区：Git 跑在 WSL/远端主机上，路径用远端绝对路径 */
+async function runGitRemote(
+  remote: RemoteExec,
+  args: string[],
+  options: GitRunOptions
+): Promise<GitRunResult> {
+  const cwd = remote.toRemotePath(options.cwd) ?? remote.rootPath
+  try {
+    const result = await remote.run('git', args, { cwd, timeoutMs: options.timeoutMs })
+    return {
+      code: result.code,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      ...(result.spawnError ? { spawnError: result.spawnError } : {}),
+      ...(result.timedOut ? { timedOut: true } : {})
+    }
+  } catch (error) {
+    return {
+      code: null,
+      stdout: '',
+      stderr: '',
+      spawnError: error instanceof Error ? error.message : '远端 Git 启动失败'
+    }
+  }
 }
 
 export interface GitAvailability {

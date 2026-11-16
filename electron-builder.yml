@@ -8,7 +8,30 @@ files:
   - out/**/*
   - package.json
   - node_modules/zod/**/*
+  # ssh2 及其运行时依赖（main 由 externalizeDepsPlugin 保持 external）
+  - node_modules/ssh2/**/*
+  - node_modules/asn1/**/*
+  - node_modules/bcrypt-pbkdf/**/*
+  - node_modules/tweetnacl/**/*
+  - node_modules/safer-buffer/**/*
+  # cpu-features 是 ssh2 的可选原生加速依赖：没有按 Electron ABI 编译，
+  # 打进去反而会加载失败，运行时 ssh2 会自动回退纯 JS 实现。
+  - '!node_modules/cpu-features/**/*'
+  - '!node_modules/nan/**/*'
+  - '!node_modules/buildcheck/**/*'
 asar: true
+# 本项目没有需要用到的原生模块（node:sqlite 为运行时内置）；
+# ssh2 的 cpu-features 是可选加速依赖，未打包也不需要重编译。
+# 关闭 rebuild 还避免了「项目路径含空格时 node-gyp 构建失败」的问题。
+npmRebuild: false
+# ripgrep 二进制放在 asar 外，主进程按 process.resourcesPath/ripgrep/rg(.exe) 探测
+extraResources:
+  - from: resources/ripgrep
+    to: ripgrep
+    filter:
+      - rg.exe
+      - rg
+      - README.md
 win:
   icon: build/icon.png
   target:

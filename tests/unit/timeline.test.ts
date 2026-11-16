@@ -29,9 +29,13 @@ describe('schema migration', () => {
     const db = memoryDb()
     migrate(db)
     expect(userVersion(db)).toBe(SCHEMA_VERSION)
-    expect(SCHEMA_VERSION).toBe(5)
+    expect(SCHEMA_VERSION).toBe(9)
     expect(hasTable(db, 'file_history')).toBe(true)
     expect(hasTable(db, 'extensions')).toBe(true)
+    expect(hasTable(db, 'agent_context')).toBe(true)
+    expect(hasTable(db, 'agent_plan')).toBe(true)
+    expect(hasTable(db, 'remote_targets')).toBe(true)
+    expect(hasTable(db, 'agent_usage')).toBe(true)
     db.close()
   })
 
@@ -44,6 +48,7 @@ describe('schema migration', () => {
     expect(hasTable(db, 'projects')).toBe(true)
     expect(hasTable(db, 'file_history')).toBe(true)
     expect(hasTable(db, 'extensions')).toBe(true)
+    expect(hasTable(db, 'remote_targets')).toBe(true)
     db.close()
   })
 

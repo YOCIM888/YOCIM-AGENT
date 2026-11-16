@@ -6,6 +6,8 @@ const props = defineProps<{
   x: number
   y: number
   items: ContextMenuItem[]
+  /** 额外页脚（如模型菜单里的上下文窗口选择）占用的高度，用于定位计算 */
+  footerHeight?: number
 }>()
 
 const emit = defineEmits<{
@@ -22,6 +24,7 @@ const position = computed(() => {
   const rawHeight =
     props.items.length * ITEM_HEIGHT +
     props.items.filter((item) => item.separatorBefore).length * SEPARATOR_HEIGHT +
+    (props.footerHeight ?? 0) +
     10
   const height = Math.min(rawHeight, window.innerHeight * 0.6)
   return {
@@ -62,6 +65,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
           {{ item.label }}
         </button>
       </template>
+      <div v-if="$slots.footer" class="footer" @mousedown.stop>
+        <slot name="footer"></slot>
+      </div>
     </div>
   </Teleport>
 </template>
@@ -119,5 +125,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
   height: 1px;
   margin: 4px 6px;
   background: var(--border);
+}
+
+.footer {
+  margin-top: 5px;
+  padding: 8px 6px 4px;
+  border-top: 1px solid var(--border);
 }
 </style>

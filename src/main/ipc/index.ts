@@ -1,9 +1,11 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type { AgentEvent } from '../../shared/agent'
+import type { ContextUsage } from '../../shared/context'
 import type { ApprovalRequest } from '../../shared/approval'
 import type { AuditExportResult, AuditFilter, AuditPage, AuditStats } from '../../shared/audit'
 import type {
@@ -22,6 +24,7 @@ import type {
   VscodeScanResult
 } from '../../shared/extensions'
 import type { TaskDiscovery, TaskEvent, TaskRun } from '../../shared/tasks'
+import type { RemoteConnectionState } from '../../shared/remote'
 import { AppError } from '../../shared/errors'
 import type {
   GitBranches,
@@ -38,6 +41,8 @@ import {
   auditFilterSchema,
   auditListInputSchema,
   auditQueryInputSchema,
+  billingBalanceInputSchema,
+  billingSummaryInputSchema,
   chatCancelInputSchema,
   chatSendInputSchema,
   debugBreakpointsInputSchema,
@@ -69,6 +74,9 @@ import {
   gitPathsInputSchema,
   IPC_CHANNELS,
   projectRenameInputSchema,
+  remoteConnectInputSchema,
+  remoteIdInputSchema,
+  remoteTargetInputSchema,
   providerDeleteInputSchema,
   providerSaveInputSchema,
   searchCancelInputSchema,
@@ -83,6 +91,13 @@ import {
   sessionRenameInputSchema,
   settingsSetActiveInputSchema,
   settingsSetApprovalModeInputSchema,
+  settingsSetContextWindowInputSchema,
+  settingsSetPricingInputSchema,
+  settingsSetReasoningEffortInputSchema,
+  settingsSetSearchInputSchema,
+  settingsSetStorageInputSchema,
+  storagePickInputSchema,
+  chatCompressInputSchema,
   timelineReadInputSchema,
   windowControlInputSchema,
   workspaceOpenProjectInputSchema,
@@ -93,7 +108,21 @@ import {
   type AuditListRequest,
   type AuditQueryRequest,
   type AuditListResult,
+  type BillingBalanceRequest,
+  type BillingBalanceResult,
+  type BillingSummaryRequest,
+  type BillingSummaryResult,
   type ChatCancelRequest,
+  type ChatCompressInput,
+  type ChatCompressResult,
+  type ChatPlanResult,
+  type SettingsSetContextWindowRequest,
+  type SettingsSetPricingRequest,
+  type SettingsSetReasoningEffortRequest,
+  type SettingsSetSearchRequest,
+  type SettingsSetStorageRequest,
+  type StorageInfoResult,
+  type StoragePickRequest,
   type ChatCancelResult,
   type ChatSendRequest,
   type ChatSendResult,
@@ -131,6 +160,13 @@ import {
   type GitDiffRequest,
   type GitPathsRequest,
   type IpcResult,
+  type RemoteConnectRequest,
+  type RemoteConnectResult as RemoteConnectResultType,
+  type RemoteDisconnectResult as RemoteDisconnectResultType,
+  type RemoteIdRequest,
+  type RemoteProbeResult as RemoteProbeResultType,
+  type RemoteTargetListResult as RemoteTargetListResultType,
+  type RemoteTargetSaveRequest,
   type SearchCancelRequest,
   type SearchCancelResult,
   type SearchEvent,
@@ -166,25 +202,36 @@ import {
 } from '../../shared/ipc'
 import type { ProjectSummary } from '../../shared/session'
 import { AgentService } from '../agent/agentService'
+import { AllowRuleStore } from '../approval/allowRules'
 import { ApprovalManager } from '../approval/approvalManager'
 import { auditToCsv, auditToJson } from '../audit/auditExport'
 import { AuditStore } from '../audit/auditStore'
 import {
   AuditRepository,
+  AgentContextRepository,
+  AgentPlanRepository,
   ExtensionRepository,
   FileHistoryRepository,
   MessageRepository,
   ProjectRepository,
   SessionRepository,
   SettingsRepository,
-  ToolCallRepository
+  ToolCallRepository,
+  UsageRepository
 } from '../db/repositories'
 import { DebugService } from '../debug/debugService'
 import { ExtensionService } from '../extensions/extensionService'
 import { TaskService } from '../tasks/taskService'
 import { SessionService } from '../sessions/sessionService'
 import { GitService } from '../git/gitService'
+import { runGit } from '../git/gitRunner'
+import { loadProjectCommands } from '../tools/commandPolicy'
+import { PlanStore } from '../agent/planStore'
 import { SettingsService, type SettingsCrypto } from '../settings/settingsService'
+import { BillingService } from '../billing/billingService'
+import { StorageService } from '../storage/storageService'
+import { createSearchServiceRunner } from '../tools/searchTools'
+import { createTavilySearchRunner } from '../tools/webSearchTools'
 import { ToolService } from '../tools/toolService'
 import {
   copyWorkspaceEntry,
@@ -197,7 +244,22 @@ import { fileClipboard } from '../workspace/fileClipboard'
 import { SearchService } from '../workspace/searchService'
 import { TimelineService } from '../workspace/timelineService'
 import { readWorkspaceFile, readWorkspaceTree, writeWorkspaceFile } from '../workspace/workspaceFs'
+import { RemoteTargetRepository } from '../db/repositories'
+import { RemoteService } from '../remote/remoteService'
+import { setRemoteExec } from '../remote/execRegistry'
+import {
+  copyRemoteEntry,
+  createRemoteEntry,
+  deleteRemoteEntry,
+  moveRemoteEntry,
+  readRemoteFile,
+  readRemoteTree,
+  renameRemoteEntry,
+  writeRemoteFile
+} from '../remote/remoteFs'
+
 import { workspaceService } from '../workspace/workspaceService'
+import { normalizeWorkspaceRelativePath } from '../workspace/pathGuard'
 import { runIpcHandler, type InputSchema } from './runIpcHandler'
 
 function broadcastAgentEvent(event: AgentEvent): void {
@@ -283,28 +345,49 @@ function auditFilterOf(input: AuditFilterRequest): AuditFilter {
   }
 }
 
-export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
+export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?: string): void {
+  // dataDir 可自定义（设置 → 存储）；缺省等于系统默认目录
+  const storageRoot = dataDir ?? userData
   const sessionRepo = new SessionRepository(db)
   const messageRepo = new MessageRepository(db)
+  const agentContextRepo = new AgentContextRepository(db)
+  const planStore = new PlanStore({
+    repo: new AgentPlanRepository(db),
+    onChange: (sessionId, plan) => {
+      broadcastAgentEvent({
+        type: 'plan:updated',
+        runId: 'plan',
+        seq: 0,
+        ts: Date.now(),
+        sessionId,
+        plan
+      })
+    }
+  })
   const projectRepo = new ProjectRepository(db)
   const toolCallRepo = new ToolCallRepository(db)
   const settingsRepo = new SettingsRepository(db)
   const auditRepo = new AuditRepository(db)
+  const allowRules = new AllowRuleStore(settingsRepo)
   const fileHistoryRepo = new FileHistoryRepository(db)
   const extensionRepo = new ExtensionRepository(db)
+  const remoteTargetRepo = new RemoteTargetRepository(db)
 
   const auditStore = new AuditStore({ repo: auditRepo })
   const approvalManager = new ApprovalManager(broadcastApprovalRequest)
   const settingsService = new SettingsService(settingsRepo, createSettingsCrypto())
+  const usageRepo = new UsageRepository(db)
+  const billingService = new BillingService(usageRepo, settingsService)
+  const storageService = new StorageService(userData, storageRoot)
   const timelineService = new TimelineService({
     history: fileHistoryRepo,
-    baseDir: join(userData, 'timeline')
+    baseDir: join(storageRoot, 'timeline')
   })
   const searchService = new SearchService({
-    getGuard: () => workspaceService.requireGuard(),
+    getGuard: () => workspaceService.accessGuard(),
     timeline: timelineService
   })
-  const gitService = new GitService({ getGuard: () => workspaceService.requireGuard() })
+  const gitService = new GitService({ getGuard: () => workspaceService.accessGuard() })
   const taskService = new TaskService({
     getRoot: () => workspaceService.current()?.root ?? null,
     emit: broadcastTaskEvent
@@ -315,10 +398,20 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
   })
   const extensionService = new ExtensionService({
     repo: extensionRepo,
-    userData
+    userData: storageRoot
+  })
+  const remoteService = new RemoteService({
+    targets: remoteTargetRepo,
+    openWorkspace: (info) => workspaceService.openRemote(info),
+    restoreWorkspaceRoot: async (root) => {
+      if (!root) return null
+      return workspaceService.openRoot(root).catch(() => null)
+    },
+    setRemoteExec: (exec) => setRemoteExec(exec)
   })
   app.once('before-quit', () => {
     taskService.dispose()
+    remoteService.dispose()
     void debugService.dispose()
   })
   const trashItem = (absolutePath: string): Promise<void> => shell.trashItem(absolutePath)
@@ -328,7 +421,49 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
     toolCalls: toolCallRepo,
     timeline: timelineService,
     requireGuard: () => workspaceService.requireGuard(),
-    getApprovalMode: () => settingsService.getApprovalMode()
+    // 搜索走 accessGuard：SSH 远程工作区没有本地守卫，需要虚拟守卫交给远端 rg
+    accessGuard: () => workspaceService.accessGuard(),
+    search: createSearchServiceRunner(searchService),
+    getApprovalMode: () => settingsService.getApprovalMode(),
+    projectCommands: async () => {
+      try {
+        return await loadProjectCommands(workspaceService.accessGuard().root)
+      } catch {
+        // 配置文件非法时回退默认白名单；具体报错会在 assertCommandAllowed 前抛出
+        return new Set<string>()
+      }
+    },
+    onToolOutput: (callId, runId, text) => {
+      broadcastAgentEvent({
+        type: 'tool:output',
+        runId,
+        seq: 0,
+        ts: Date.now(),
+        callId,
+        text
+      })
+    },
+    planStore,
+    allowRules,
+    webSearch: createTavilySearchRunner(() => settingsService.getWebSearchConfig()),
+    webSearchEnabled: () => settingsService.getWebSearchConfig() !== null,
+    gitDiff: async ({ staged, relativePath }) => {
+      const args = ['diff', '--unified=3', ...(staged ? ['--cached'] : [])]
+      if (relativePath) args.push('--', relativePath)
+      const result = await runGit(args, {
+        cwd: workspaceService.accessGuard().root,
+        timeoutMs: 30_000
+      })
+      if (result.spawnError) {
+        return { ok: false, text: '', message: result.spawnError }
+      }
+      const text = [result.stdout, result.stderr].filter(Boolean).join('\n').trim()
+      return {
+        ok: result.code === 0,
+        text,
+        message: result.code === 0 ? undefined : result.stderr.slice(0, 300)
+      }
+    }
   })
   const sessionService = new SessionService({
     sessions: sessionRepo,
@@ -341,12 +476,55 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
   const agentService = new AgentService({
     resolveProvider: () => settingsService.createProvider(),
     emit: broadcastAgentEvent,
-    toolDefinitions: toolService.getDefinitions(),
+    toolDefinitions: () => toolService.getDefinitions(),
     toolExecutor: (call, context) => toolService.execute(call, context),
-    persist: { sessions: sessionRepo, messages: messageRepo }
+    persist: { sessions: sessionRepo, messages: messageRepo, context: agentContextRepo },
+    workspaceInfo: () => {
+      const info = workspaceService.current()
+      if (!info) return null
+      return {
+        name: info.name,
+        root: info.root,
+        remote: info.remote?.kind ?? null
+      }
+    },
+    contextWindow: () => settingsService.getContextWindow(),
+    planStore,
+    onUsage: (usage, sessionId) => {
+      const settings = settingsService.getPublic()
+      const provider = settings.providers.find((item) => item.id === settings.activeProviderId)
+      usageRepo.insert({
+        id: randomUUID(),
+        sessionId,
+        providerId: settings.activeProviderId,
+        model: settings.activeModel || provider?.model || 'unknown',
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        createdAt: Date.now()
+      })
+    }
   })
 
+  handleIpc<ChatCompressInput, ChatCompressResult>(
+    IPC_CHANNELS.chatCompress,
+    chatCompressInputSchema,
+    (input) => agentService.compress(input.sessionId)
+  )
+
+  handleIpc<SessionIdRequest, ContextUsage>(
+    IPC_CHANNELS.chatContextUsage,
+    sessionIdInputSchema,
+    async (input) => agentService.usage(input.sessionId)
+  )
+
+  handleIpc<SessionIdRequest, ChatPlanResult>(
+    IPC_CHANNELS.chatGetPlan,
+    sessionIdInputSchema,
+    async (input) => agentService.plan(input.sessionId)
+  )
+
   handleIpc<undefined, WorkspaceInfo | null>(IPC_CHANNELS.workspaceSelect, null, async () => {
+    remoteService.forget()
     const info = await workspaceService.select()
     if (info) sessionService.ensureProjectForCurrentWorkspace()
     return info
@@ -362,52 +540,110 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
     async (input) => {
       const project = projectRepo.get(input.projectId)
       if (!project) throw new AppError('E_NOT_FOUND', '项目不存在')
+      remoteService.forget()
       return workspaceService.openRoot(project.root)
     }
   )
 
-  handleIpc<FsTreeRequest, FsTreeNode[]>(IPC_CHANNELS.fsTree, fsTreeInputSchema, (input) =>
-    readWorkspaceTree(workspaceService.requireGuard(), input)
-  )
+  const sshRemote = (): { rootPath: string } | null => {
+    const remote = workspaceService.currentRemote()
+    return remote?.kind === 'ssh' ? { rootPath: remote.rootPath } : null
+  }
+
+  handleIpc<FsTreeRequest, FsTreeNode[]>(IPC_CHANNELS.fsTree, fsTreeInputSchema, async (input) => {
+    const ssh = sshRemote()
+    if (ssh) return readRemoteTree(await remoteService.sshSftp(), ssh.rootPath, input)
+    return readWorkspaceTree(workspaceService.requireGuard(), input)
+  })
 
   handleIpc<FsReadFileRequest, FsReadFileResult>(
     IPC_CHANNELS.fsReadFile,
     fsReadFileInputSchema,
-    (input) => readWorkspaceFile(workspaceService.requireGuard(), input, timelineService)
+    async (input) => {
+      const ssh = sshRemote()
+      if (ssh) {
+        return readRemoteFile(
+          await remoteService.sshSftp(),
+          ssh.rootPath,
+          input,
+          timelineService,
+          ssh.rootPath
+        )
+      }
+      return readWorkspaceFile(workspaceService.requireGuard(), input, timelineService)
+    }
   )
 
   handleIpc<FsWriteFileRequest, FsWriteFileResult>(
     IPC_CHANNELS.fsWriteFile,
     fsWriteFileInputSchema,
-    (input) => writeWorkspaceFile(workspaceService.requireGuard(), input, timelineService)
+    async (input) => {
+      const ssh = sshRemote()
+      if (ssh) {
+        return writeRemoteFile(
+          await remoteService.sshSftp(),
+          ssh.rootPath,
+          input,
+          timelineService,
+          ssh.rootPath
+        )
+      }
+      return writeWorkspaceFile(workspaceService.requireGuard(), input, timelineService)
+    }
   )
 
   handleIpc<FsCreateEntryRequest, FsTreeNode>(
     IPC_CHANNELS.fsCreateFile,
     fsCreateEntryInputSchema,
-    (input) => createWorkspaceEntry(workspaceService.requireGuard(), input, 'file')
+    async (input) => {
+      const ssh = sshRemote()
+      if (ssh) {
+        return createRemoteEntry(await remoteService.sshSftp(), ssh.rootPath, input, 'file')
+      }
+      return createWorkspaceEntry(workspaceService.requireGuard(), input, 'file')
+    }
   )
 
   handleIpc<FsCreateEntryRequest, FsTreeNode>(
     IPC_CHANNELS.fsCreateFolder,
     fsCreateEntryInputSchema,
-    (input) => createWorkspaceEntry(workspaceService.requireGuard(), input, 'directory')
+    async (input) => {
+      const ssh = sshRemote()
+      if (ssh) {
+        return createRemoteEntry(await remoteService.sshSftp(), ssh.rootPath, input, 'directory')
+      }
+      return createWorkspaceEntry(workspaceService.requireGuard(), input, 'directory')
+    }
   )
 
-  handleIpc<FsRenameRequest, FsTreeNode>(IPC_CHANNELS.fsRename, fsRenameInputSchema, (input) =>
-    renameWorkspaceEntry(workspaceService.requireGuard(), input)
+  handleIpc<FsRenameRequest, FsTreeNode>(
+    IPC_CHANNELS.fsRename,
+    fsRenameInputSchema,
+    async (input) => {
+      const ssh = sshRemote()
+      if (ssh) return renameRemoteEntry(await remoteService.sshSftp(), ssh.rootPath, input)
+      return renameWorkspaceEntry(workspaceService.requireGuard(), input)
+    }
   )
 
   handleIpc<FsTransferRequest, FsTransferResult>(
     IPC_CHANNELS.fsCopy,
     fsTransferInputSchema,
-    (input) => copyWorkspaceEntry(workspaceService.requireGuard(), input)
+    async (input) => {
+      const ssh = sshRemote()
+      if (ssh) return copyRemoteEntry(await remoteService.sshSftp(), ssh.rootPath, input)
+      return copyWorkspaceEntry(workspaceService.requireGuard(), input)
+    }
   )
 
   handleIpc<FsTransferRequest, FsTransferResult>(
     IPC_CHANNELS.fsMove,
     fsTransferInputSchema,
     async (input) => {
+      const ssh = sshRemote()
+      if (ssh) {
+        return moveRemoteEntry(await remoteService.sshSftp(), ssh.rootPath, input)
+      }
       const guard = workspaceService.requireGuard()
       const result = await moveWorkspaceEntry(guard, input, trashItem)
       const clip = fileClipboard.get()
@@ -427,6 +663,10 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
     IPC_CHANNELS.fsDelete,
     fsPathInputSchema,
     async (input) => {
+      const ssh = sshRemote()
+      if (ssh) {
+        return deleteRemoteEntry(await remoteService.sshSftp(), ssh.rootPath, input.relativePath)
+      }
       const guard = workspaceService.requireGuard()
       const result = await deleteWorkspaceEntry(guard, input.relativePath, trashItem)
       const clip = fileClipboard.get()
@@ -438,6 +678,10 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
   )
 
   handleIpc<FsPathRequest, null>(IPC_CHANNELS.fsReveal, fsPathInputSchema, async (input) => {
+    const remote = workspaceService.currentRemote()
+    if (remote?.kind === 'ssh') {
+      throw new AppError('E_UNSUPPORTED', '远程工作区没有本地文件系统位置，无法在资源管理器中显示')
+    }
     const resolved = await workspaceService
       .requireGuard()
       .resolve(input.relativePath, { mustExist: true })
@@ -457,6 +701,17 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
       if (input.action === 'get') {
         const clip = fileClipboard.get()
         return clip && clip.workspaceRoot === root ? fileClipboard.publicState() : null
+      }
+      const remote = workspaceService.currentRemote()
+      if (remote?.kind === 'ssh') {
+        fileClipboard.set({
+          mode: input.mode,
+          relativePath: normalizeWorkspaceRelativePath(input.relativePath),
+          name: normalizeWorkspaceRelativePath(input.relativePath).split('/').pop() ?? '',
+          workspaceRoot: remote.targetId,
+          ts: Date.now()
+        })
+        return fileClipboard.publicState()
       }
       const guard = workspaceService.requireGuard()
       const resolved = await guard.resolve(input.relativePath, { mustExist: true })
@@ -664,6 +919,13 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
     IPC_CHANNELS.debugStart,
     debugStartInputSchema,
     async (input) => {
+      const remote = workspaceService.currentRemote()
+      if (remote) {
+        throw new AppError(
+          'E_UNSUPPORTED',
+          `远程工作区（${remote.kind === 'wsl' ? 'WSL' : 'SSH'}）暂不支持调试，请在远程终端中启动调试器`
+        )
+      }
       const session = await debugService.start(input)
       return { session, commandLine: session.commandLine }
     }
@@ -852,6 +1114,54 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
     async (input) => sessionService.renameProject(input)
   )
 
+  handleIpc<undefined, RemoteProbeResultType>(IPC_CHANNELS.remoteProbe, null, async () =>
+    remoteService.probe()
+  )
+
+  handleIpc<undefined, RemoteTargetListResultType>(IPC_CHANNELS.remoteList, null, async () =>
+    remoteService.list()
+  )
+
+  handleIpc<RemoteTargetSaveRequest, RemoteTargetListResultType>(
+    IPC_CHANNELS.remoteSave,
+    remoteTargetInputSchema,
+    async (input) => {
+      if (!workspaceService.currentRemote()) {
+        remoteService.rememberLocalRoot(workspaceService.current()?.root ?? null)
+      }
+      return remoteService.save(input)
+    }
+  )
+
+  handleIpc<RemoteIdRequest, RemoteTargetListResultType>(
+    IPC_CHANNELS.remoteDelete,
+    remoteIdInputSchema,
+    async (input) => remoteService.delete(input.id)
+  )
+
+  handleIpc<RemoteConnectRequest, RemoteConnectResultType>(
+    IPC_CHANNELS.remoteConnect,
+    remoteConnectInputSchema,
+    async (input) => {
+      if (!workspaceService.currentRemote()) {
+        remoteService.rememberLocalRoot(workspaceService.current()?.root ?? null)
+      }
+      const result = await remoteService.connect(input.id, {
+        ...(input.trustHostFingerprint ? { trustHostFingerprint: true } : {})
+      })
+      if (result.workspace) sessionService.ensureProjectForCurrentWorkspace()
+      return result
+    }
+  )
+
+  handleIpc<undefined, RemoteDisconnectResultType>(IPC_CHANNELS.remoteDisconnect, null, async () =>
+    remoteService.disconnect()
+  )
+
+  handleIpc<undefined, RemoteConnectionState>(IPC_CHANNELS.remoteCurrent, null, async () =>
+    remoteService.current()
+  )
+
   handleIpc<undefined, SettingsResult>(IPC_CHANNELS.settingsGet, null, async () =>
     settingsService.getPublic()
   )
@@ -879,6 +1189,82 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string): void {
     settingsSetApprovalModeInputSchema,
     async (input) => settingsService.setApprovalMode(input)
   )
+
+  handleIpc<SettingsSetContextWindowRequest, SettingsResult>(
+    IPC_CHANNELS.settingsSetContextWindow,
+    settingsSetContextWindowInputSchema,
+    async (input) => settingsService.setContextWindow(input)
+  )
+
+  handleIpc<SettingsSetReasoningEffortRequest, SettingsResult>(
+    IPC_CHANNELS.settingsSetReasoningEffort,
+    settingsSetReasoningEffortInputSchema,
+    async (input) => settingsService.setReasoningEffort(input)
+  )
+
+  handleIpc<SettingsSetSearchRequest, SettingsResult>(
+    IPC_CHANNELS.settingsSetSearch,
+    settingsSetSearchInputSchema,
+    async (input) => settingsService.setSearch(input)
+  )
+
+  handleIpc<undefined, SettingsResult>(IPC_CHANNELS.settingsClearSearchKey, null, async () =>
+    settingsService.clearSearchApiKey()
+  )
+
+  handleIpc<SettingsSetPricingRequest, SettingsResult>(
+    IPC_CHANNELS.settingsSetPricing,
+    settingsSetPricingInputSchema,
+    async (input) => settingsService.setPricing(input)
+  )
+
+  handleIpc<SettingsSetStorageRequest, SettingsResult>(
+    IPC_CHANNELS.settingsSetStorage,
+    settingsSetStorageInputSchema,
+    async (input) => {
+      const result = settingsService.setStorage(input)
+      // 引导文件写在系统默认目录，重启后才会切到新目录
+      storageService.persistDataDir(input.dataDir)
+      return result
+    }
+  )
+
+  handleIpc<BillingBalanceRequest, BillingBalanceResult>(
+    IPC_CHANNELS.billingBalance,
+    billingBalanceInputSchema,
+    async (input) => billingService.getBalance(input.providerId)
+  )
+
+  handleIpc<BillingSummaryRequest, BillingSummaryResult>(
+    IPC_CHANNELS.billingSummary,
+    billingSummaryInputSchema,
+    async (input) => billingService.getSummary(input.sinceDays)
+  )
+
+  handleIpc<undefined, StorageInfoResult>(IPC_CHANNELS.storageInfo, null, async () =>
+    storageService.getInfo()
+  )
+
+  handleIpc<StoragePickRequest, string | null>(
+    IPC_CHANNELS.storagePick,
+    storagePickInputSchema,
+    async () => {
+      const picked = await dialog.showOpenDialog({
+        title: '选择数据目录',
+        defaultPath: storageService.getInfo().dataDir,
+        properties: ['openDirectory', 'createDirectory']
+      })
+      if (picked.canceled || !picked.filePaths.length) return null
+      return picked.filePaths[0]
+    }
+  )
+
+  handleIpc<undefined, null>(IPC_CHANNELS.storageOpen, null, async () => {
+    const target = storageService.getInfo().dataDir
+    const error = await shell.openPath(target)
+    if (error) throw new AppError('E_IO', `打开目录失败：${error}`)
+    return null
+  })
 
   handleIpc<WindowControlRequest, null>(
     IPC_CHANNELS.windowControl,

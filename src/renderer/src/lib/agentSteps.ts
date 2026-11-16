@@ -19,6 +19,18 @@ export interface AgentStep {
   endedAt?: number
   summary?: string
   approval?: StepApproval
+  /** 命令等长任务的增量输出（tool:output 事件追加，保留尾部） */
+  output?: string
+}
+
+/** 单步输出在 UI 里保留的最大长度：只展示尾部，避免长时间运行撑爆内存 */
+const STEP_OUTPUT_MAX_CHARS = 8000
+
+export function appendStepOutput(step: AgentStep, text: string): AgentStep {
+  const merged = `${step.output ?? ''}${text}`
+  step.output =
+    merged.length > STEP_OUTPUT_MAX_CHARS ? merged.slice(-STEP_OUTPUT_MAX_CHARS) : merged
+  return step
 }
 
 export interface ToolStepInput {

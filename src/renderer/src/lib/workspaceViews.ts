@@ -19,17 +19,7 @@ export const WORKSPACE_VIEWS: WorkspaceViewDef[] = [
   { key: 'scm', label: '源代码管理', testid: 'workspace-tab-scm' },
   { key: 'extensions', label: '扩展安装', testid: 'workspace-tab-extensions' },
   { key: 'debug', label: '运行和调试', testid: 'workspace-tab-debug' },
-  {
-    key: 'remote',
-    label: '远程管理器',
-    testid: 'workspace-tab-remote',
-    phase: 'P5',
-    summary: [
-      'WSL 发行版枚举与连接（先行）',
-      'SSH 主机管理（后置），凭据加密存储',
-      '远程工作区浏览、编辑、搜索、Git 与运行'
-    ]
-  }
+  { key: 'remote', label: '远程管理器', testid: 'workspace-tab-remote' }
 ]
 
 export function isWorkspaceView(value: string | null): value is WorkspaceView {
