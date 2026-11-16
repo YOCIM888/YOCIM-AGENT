@@ -14,6 +14,11 @@ export interface AgentMessage {
   content: string
   toolCallId?: string
   toolCalls?: ToolCall[]
+  /**
+   * OpenAI 兼容 Provider 的隐藏思考内容（DeepSeek 等）。
+   * 带工具调用时必须原样回传，否则后续请求会被 Provider 拒绝（HTTP 400）。
+   */
+  reasoningContent?: string
 }
 
 export interface ToolExecutionOutcome {
@@ -40,6 +45,8 @@ export interface ProviderUsage {
 
 export type ProviderEvent =
   | { type: 'text'; text: string }
+  /** 思考内容既随助手消息回传 Provider，也以折叠块流式展示在 UI */
+  | { type: 'reasoning'; text: string }
   | { type: 'tool_call'; toolCall: ToolCall }
   | { type: 'usage'; usage: ProviderUsage }
   | { type: 'done'; finishReason: ProviderFinishReason }
@@ -77,7 +84,15 @@ interface AgentEventBase {
 export type AgentEvent =
   | (AgentEventBase & { type: 'run:start'; sessionId: string })
   | (AgentEventBase & { type: 'message:delta'; messageId: string; text: string })
-  | (AgentEventBase & { type: 'message:done'; messageId: string; content: string })
+  /** 思考链流式增量：与该轮的 messageId 绑定，渲染层挂在同一个助手消息上 */
+  | (AgentEventBase & { type: 'reasoning:delta'; messageId: string; text: string })
+  | (AgentEventBase & {
+      type: 'message:done'
+      messageId: string
+      content: string
+      /** 本轮完整的思考内容（用于精确覆盖累积值 + 落库） */
+      reasoning?: string
+    })
   | (AgentEventBase & { type: 'tool:call'; callId: string; name: string; argsSummary: string })
   | (AgentEventBase & {
       type: 'tool:output'

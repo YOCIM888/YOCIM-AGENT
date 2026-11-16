@@ -193,6 +193,78 @@ describe('runAgentTurn', () => {
     expect(events[events.length - 1]).toMatchObject({ type: 'run:done', reason: 'error' })
   })
 
+  it('keeps hidden reasoning on the assistant message across tool rounds', async () => {
+    const provider = new ScriptedProvider([
+      [
+        { type: 'reasoning', text: '先列目录' },
+        {
+          type: 'tool_call',
+          toolCall: { id: 'call-1', name: 'list_dir', argumentsJson: '{}' }
+        },
+        { type: 'done', finishReason: 'tool_calls' }
+      ],
+      [
+        { type: 'text', text: '完成' },
+        { type: 'done', finishReason: 'stop' }
+      ]
+    ])
+    const appended: Array<{ role: string; reasoningContent?: string }> = []
+
+    await runAgentTurn(
+      {
+        provider,
+        emit: () => {},
+        tools: {
+          definitions: [],
+          execute: async () => ({ ok: true, content: 'a.txt', summary: 'a.txt' })
+        },
+        onAppend: (messages) => appended.push(...messages)
+      },
+      baseInput,
+      new AbortController().signal
+    )
+
+    expect(provider.requests[1].messages).toContainEqual(
+      expect.objectContaining({
+        role: 'assistant',
+        reasoningContent: '先列目录',
+        toolCalls: [expect.objectContaining({ id: 'call-1' })]
+      })
+    )
+    expect(appended[0]).toMatchObject({ role: 'assistant', reasoningContent: '先列目录' })
+  })
+
+  it('streams reasoning deltas to the UI and finalizes them with message:done', async () => {
+    const provider = new ScriptedProvider([
+      [
+        { type: 'reasoning', text: '先' },
+        { type: 'reasoning', text: '分析' },
+        { type: 'text', text: '答案' },
+        { type: 'done', finishReason: 'stop' }
+      ]
+    ])
+    const events: AgentEvent[] = []
+
+    await runAgentTurn(
+      { provider, emit: (event) => events.push(event) },
+      baseInput,
+      new AbortController().signal
+    )
+
+    const reasoning = events.flatMap((event) =>
+      event.type === 'reasoning:delta' ? [{ messageId: event.messageId, text: event.text }] : []
+    )
+    expect(reasoning).toEqual([
+      { messageId: 'msg-run-1-0', text: '先' },
+      { messageId: 'msg-run-1-0', text: '分析' }
+    ])
+    expect(events.find((event) => event.type === 'message:done')).toMatchObject({
+      type: 'message:done',
+      content: '答案',
+      reasoning: '先分析'
+    })
+  })
+
   it('reports unsupported tool calls until the tool system lands', async () => {
     const events: AgentEvent[] = []
     const result = await runAgentTurn(

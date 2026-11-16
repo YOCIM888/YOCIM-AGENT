@@ -80,7 +80,7 @@ test('checks once on startup when online and shows the notice', async () => {
     // 必须在窗口加载完成前打桩：启动检查在 did-finish-load 后 1.5s 触发。
     // 未打包的 e2e 进程里 app.getVersion() 会返回 Electron 版本，这里固定为应用版本。
     await app.evaluate(({ app }) => {
-      app.getVersion = () => '0.1.1'
+      app.getVersion = () => '0.1.2'
     })
     await app.evaluate(({ net }) => {
       net.isOnline = () => true

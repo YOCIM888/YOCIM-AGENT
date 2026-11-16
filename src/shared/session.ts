@@ -30,6 +30,8 @@ export interface StoredMessage {
   role: StoredMessageRole
   content: string
   createdAt: number
+  /** 助手消息对应的思考内容（可展开查看） */
+  reasoningContent?: string
 }
 
 export interface PublicSettings {

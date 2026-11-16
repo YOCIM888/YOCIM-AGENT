@@ -37,6 +37,7 @@ interface MessageRow {
   role: StoredMessageRole
   content: string
   created_at: number
+  reasoning_content: string | null
 }
 
 interface AuditRow {
@@ -83,7 +84,8 @@ function mapMessage(row: MessageRow): StoredMessage {
     id: row.id,
     role: row.role,
     content: row.content,
-    createdAt: Number(row.created_at)
+    createdAt: Number(row.created_at),
+    ...(row.reasoning_content ? { reasoningContent: row.reasoning_content } : {})
   }
 }
 
@@ -355,9 +357,16 @@ export class MessageRepository {
   insert(message: StoredMessage & { sessionId: string }): void {
     this.db
       .prepare(
-        'INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO messages (id, session_id, role, content, reasoning_content, created_at) VALUES (?, ?, ?, ?, ?, ?)'
       )
-      .run(message.id, message.sessionId, message.role, message.content, message.createdAt)
+      .run(
+        message.id,
+        message.sessionId,
+        message.role,
+        message.content,
+        message.reasoningContent ?? null,
+        message.createdAt
+      )
   }
 
   countBySession(sessionId: string): number {
@@ -866,6 +875,8 @@ export interface AgentContextEntry {
   content: string
   toolCallsJson: string | null
   toolCallId: string | null
+  /** 推理模型的隐藏思考内容：原样回传，不参与 UI 渲染 */
+  reasoningContent?: string | null
   tokens: number
   createdAt: number
 }
@@ -878,6 +889,7 @@ interface AgentContextRow {
   content: string
   tool_calls_json: string | null
   tool_call_id: string | null
+  reasoning_content: string | null
   tokens: number
   created_at: number
 }
@@ -891,6 +903,7 @@ function mapContextRow(row: AgentContextRow): AgentContextEntry {
     content: row.content,
     toolCallsJson: row.tool_calls_json,
     toolCallId: row.tool_call_id,
+    reasoningContent: row.reasoning_content,
     tokens: row.tokens,
     createdAt: row.created_at
   }
@@ -923,8 +936,9 @@ export class AgentContextRepository {
     this.db
       .prepare(
         `INSERT INTO agent_context
-         (id, session_id, seq, role, content, tool_calls_json, tool_call_id, tokens, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, session_id, seq, role, content, tool_calls_json, tool_call_id, reasoning_content,
+          tokens, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         entry.id,
@@ -934,6 +948,7 @@ export class AgentContextRepository {
         entry.content,
         entry.toolCallsJson,
         entry.toolCallId,
+        entry.reasoningContent ?? null,
         entry.tokens,
         entry.createdAt
       )

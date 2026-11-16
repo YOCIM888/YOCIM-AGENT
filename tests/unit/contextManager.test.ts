@@ -95,6 +95,29 @@ describe('ContextManager', () => {
     db.close()
   })
 
+  it('round-trips hidden reasoning content for tool-call assistant entries', () => {
+    const { db, repo, manager, sessionId } = createManager()
+    manager.appendMessage(sessionId, {
+      role: 'assistant',
+      content: '',
+      reasoningContent: '先看目录',
+      toolCalls: [{ id: 'c1', name: 'list_dir', argumentsJson: '{}' }]
+    })
+    manager.appendMessage(sessionId, {
+      role: 'tool',
+      toolCallId: 'c1',
+      content: 'a.txt'
+    })
+
+    const entries = repo.list(sessionId)
+    expect(entries[0].reasoningContent).toBe('先看目录')
+    expect(manager.toMessages(entries)[0]).toMatchObject({
+      role: 'assistant',
+      reasoningContent: '先看目录'
+    })
+    db.close()
+  })
+
   it('seeds legacy history only when the store is empty', () => {
     const { db, repo, manager, sessionId } = createManager()
     manager.seedFromHistory(sessionId, [

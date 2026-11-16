@@ -164,6 +164,21 @@ export async function runAgentTurn(
     }
     const messageId = `msg-${input.runId.slice(0, 8)}-${round}`
     let roundText = ''
+    let roundReasoning = ''
+    const reasoningSuffix = (): { reasoningContent?: string } =>
+      roundReasoning ? { reasoningContent: roundReasoning } : {}
+    /** 收口本轮助手消息：只有正文或思考内容至少一样时才推 message:done */
+    const finishRoundMessage = (): void => {
+      if (!roundText && !roundReasoning) return
+      if (roundText) appendRoundText(roundText)
+      emit({
+        type: 'message:done',
+        ...nextMeta(),
+        messageId,
+        content: roundText,
+        ...(roundReasoning ? { reasoning: roundReasoning } : {})
+      })
+    }
     let finishReason: ProviderFinishReason = 'stop'
     const calls: ToolCall[] = []
     const roundUsage: ProviderUsage = { inputTokens: 0, outputTokens: 0 }
@@ -177,6 +192,10 @@ export async function runAgentTurn(
         if (chunk.type === 'text') {
           roundText += chunk.text
           emit({ type: 'message:delta', ...nextMeta(), messageId, text: chunk.text })
+        } else if (chunk.type === 'reasoning') {
+          // 思考内容既要随助手消息回传 Provider（避免 400），也要流式推给 UI 展示。
+          roundReasoning += chunk.text
+          emit({ type: 'reasoning:delta', ...nextMeta(), messageId, text: chunk.text })
         } else if (chunk.type === 'tool_call') {
           calls.push(chunk.toolCall)
         } else if (chunk.type === 'usage') {
@@ -187,10 +206,7 @@ export async function runAgentTurn(
         }
       }
     } catch (error) {
-      if (roundText) {
-        appendRoundText(roundText)
-        emit({ type: 'message:done', ...nextMeta(), messageId, content: roundText })
-      }
+      finishRoundMessage()
       if (signal.aborted) {
         finish('cancelled')
         return { text: combinedText, reason: 'cancelled' }
@@ -205,25 +221,21 @@ export async function runAgentTurn(
     }
 
     if (signal.aborted) {
-      if (roundText) {
-        appendRoundText(roundText)
-        emit({ type: 'message:done', ...nextMeta(), messageId, content: roundText })
-      }
+      finishRoundMessage()
       finish('cancelled')
       return { text: combinedText, reason: 'cancelled' }
     }
 
-    if (roundText) {
-      appendRoundText(roundText)
-      emit({ type: 'message:done', ...nextMeta(), messageId, content: roundText })
-    }
+    finishRoundMessage()
 
     if (calls.length === 0) {
       if (finishReason === 'tool_calls') {
         finish('error', { code: 'E_TOOL_UNSUPPORTED', message: '模型请求了无法解析的工具调用' })
         return { text: combinedText, reason: 'error' }
       }
-      if (roundText) config.onAppend?.([{ role: 'assistant', content: roundText }])
+      if (roundText || roundReasoning) {
+        config.onAppend?.([{ role: 'assistant', content: roundText, ...reasoningSuffix() }])
+      }
       finish('completed')
       return { text: combinedText, reason: 'completed' }
     }
@@ -242,7 +254,9 @@ export async function runAgentTurn(
       return { text: combinedText, reason: 'error' }
     }
 
-    const appended: AgentMessage[] = [{ role: 'assistant', content: roundText, toolCalls: calls }]
+    const appended: AgentMessage[] = [
+      { role: 'assistant', content: roundText, toolCalls: calls, ...reasoningSuffix() }
+    ]
     messages.push(appended[0])
     const toolRuntime = config.tools
 

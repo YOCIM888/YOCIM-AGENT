@@ -145,7 +145,7 @@ $env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-bu
 npm run package
 ```
 
-- Windows 产物：`release/0.1.1/YOCIM AGENT-0.1.1-setup.exe` 与 `release/0.1.1/win-unpacked/`
+- Windows 产物：`release/0.1.2/YOCIM AGENT-0.1.2-setup.exe` 与 `release/0.1.2/win-unpacked/`
 - 内置 ripgrep：`resources/ripgrep/rg.exe`（14.1.1）经 `extraResources` 放入，缺失时回退 PATH 的 `rg` 与内置 JS 搜索
 - 运行依赖：`zod` 与 `ssh2`（含 `asn1` / `bcrypt-pbkdf` / `tweetnacl` / `safer-buffer`）外置并打进 asar；`cpu-features` 为可选原生加速依赖，未编译也不打包；`npmRebuild: false` 规避路径含空格时 node-gyp 失败
 - 应用图标：`build/icon.png`（由 `public/image/yocim.png` 复制）；当前未配置代码签名，安装时可能出现 SmartScreen 提示

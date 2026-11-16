@@ -209,6 +209,7 @@ export class AgentService {
           sessionId: input.sessionId,
           role: 'assistant',
           content: event.content,
+          reasoningContent: event.reasoning,
           createdAt: Date.now()
         })
       }
@@ -273,7 +274,9 @@ export class AgentService {
         onAppend: context
           ? (messages) => {
               for (const message of messages) {
-                if (!message.content.trim()) continue
+                // 纯工具调用的助手消息 content 为空，但 toolCalls/reasoningContent
+                // 必须入上下文，否则下一轮会出现孤立的 tool 消息并触发 Provider 400。
+                if (!message.content.trim() && !message.toolCalls?.length) continue
                 context.appendMessage(input.sessionId, message)
               }
             }

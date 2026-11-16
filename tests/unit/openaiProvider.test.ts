@@ -85,15 +85,77 @@ describe('OpenAICompatibleProvider', () => {
     expect(events[events.length - 1]).toEqual({ type: 'done', finishReason: 'tool_calls' })
   })
 
-  it('throws on non-ok responses', async () => {
+  it('throws on non-ok responses with the provider error detail', async () => {
     const provider = new OpenAICompatibleProvider({
       baseUrl: 'https://api.example.com/v1',
       apiKey: 'test-key',
       model: 'test-model',
-      fetchImpl: async () => new Response('nope', { status: 401 })
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ error: { message: 'invalid request' } }), { status: 401 })
     })
 
-    await expect(collect(provider)).rejects.toThrow('Provider 返回 HTTP 401')
+    await expect(collect(provider)).rejects.toThrow('Provider 返回 HTTP 401：invalid request')
+  })
+
+  it('captures reasoning_content and echoes it back after tool calls', async () => {
+    const bodies: string[] = []
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'test-key',
+      model: 'test-model',
+      fetchImpl: async (_url, init) => {
+        bodies.push(String(init.body))
+        if (bodies.length === 1) {
+          return sseResponse([
+            'data: {"choices":[{"delta":{"reasoning_content":"先看目录"},"finish_reason":null}]}\n\n',
+            'data: {"choices":[{"delta":{"reasoning_content":"再读文件"},"finish_reason":null}]}\n\n',
+            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"read_file","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}\n\n',
+            'data: [DONE]\n\n'
+          ])
+        }
+        return sseResponse(['data: [DONE]\n\n'])
+      }
+    })
+
+    const events: ProviderEvent[] = []
+    for await (const event of provider.stream(
+      { messages: [{ role: 'user', content: 'hi' }] },
+      new AbortController().signal
+    )) {
+      events.push(event)
+    }
+    expect(events.filter((event) => event.type === 'reasoning')).toEqual([
+      { type: 'reasoning', text: '先看目录' },
+      { type: 'reasoning', text: '再读文件' }
+    ])
+
+    const toolCall = events.find((event) => event.type === 'tool_call')
+    expect(toolCall?.type).toBe('tool_call')
+    if (toolCall?.type !== 'tool_call') return
+    for await (const event of provider.stream(
+      {
+        messages: [
+          {
+            role: 'assistant',
+            content: '',
+            reasoningContent: '先看目录再读文件',
+            toolCalls: [toolCall.toolCall]
+          },
+          { role: 'tool', toolCallId: toolCall.toolCall.id, content: 'file' }
+        ]
+      },
+      new AbortController().signal
+    )) {
+      void event // 只需触发请求体构造
+    }
+    const assistantMessage = JSON.parse(bodies[1]).messages.find(
+      (message: { role: string }) => message.role === 'assistant'
+    )
+    expect(assistantMessage).toMatchObject({
+      content: null,
+      reasoning_content: '先看目录再读文件',
+      tool_calls: [{ id: 'call_1' }]
+    })
   })
 
   it('requests usage and emits it as a usage event', async () => {

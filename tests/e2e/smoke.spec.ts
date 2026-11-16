@@ -198,6 +198,18 @@ test('launches the shell, streams a reply and cancels generation', async () => {
     await expect(page.getByTestId('chat-panel')).toContainText('Mock Provider 已收到：你好 YOCIM')
     await expect(page.getByTestId('chat-send')).toBeVisible()
 
+    // 思考链：产出时可见，结束后折叠，点击可展开/收起
+    await page.getByTestId('chat-input').fill('/think 看看思考链')
+    await page.getByTestId('chat-send').click()
+    await expect(page.getByTestId('reasoning-toggle')).toBeVisible()
+    await expect(page.getByTestId('chat-panel')).toContainText('思考完成：看看思考链')
+    await expect(page.getByTestId('reasoning-toggle')).toContainText('已思考')
+    await expect(page.getByTestId('reasoning-content')).toHaveCount(0)
+    await page.getByTestId('reasoning-toggle').click()
+    await expect(page.getByTestId('reasoning-content')).toContainText('先拆解问题')
+    await page.getByTestId('reasoning-toggle').click()
+    await expect(page.getByTestId('reasoning-content')).toHaveCount(0)
+
     const longText = Array.from({ length: 60 }, (_, index) => `cancel-${index}`).join(' ')
     await page.getByTestId('chat-input').fill(longText)
     await page.getByTestId('chat-send').click()

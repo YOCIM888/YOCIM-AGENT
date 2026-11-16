@@ -9,6 +9,7 @@ import AgentTimeline from './AgentTimeline.vue'
 import ChatComposer from './ChatComposer.vue'
 import MarkdownMessage from './MarkdownMessage.vue'
 import PlanCard from './PlanCard.vue'
+import ReasoningBlock from './ReasoningBlock.vue'
 import WelcomeState from './WelcomeState.vue'
 
 const chat = useChatStore()
@@ -63,6 +64,10 @@ watch(
 )
 watch(
   () => chat.messages[chat.messages.length - 1]?.content,
+  () => scrollToBottom()
+)
+watch(
+  () => chat.messages[chat.messages.length - 1]?.reasoningContent,
   () => scrollToBottom()
 )
 watch(
@@ -139,12 +144,21 @@ watch(
             {{ message.content }}
           </div>
           <div v-else class="content">
+            <ReasoningBlock
+              v-if="message.reasoningContent"
+              :content="message.reasoningContent"
+              :streaming="message.reasoningStreaming"
+            />
             <MarkdownMessage
               v-if="message.content"
               :content="message.content"
               :streaming="message.streaming"
             />
-            <span v-else-if="message.streaming" class="caret" aria-hidden="true"></span>
+            <span
+              v-else-if="message.streaming && !message.reasoningContent"
+              class="caret"
+              aria-hidden="true"
+            ></span>
             <AgentTimeline
               v-if="message.steps?.length"
               :steps="message.steps"
@@ -360,6 +374,10 @@ watch(
 
 .content {
   min-width: 0;
+}
+
+.message.assistant .content {
+  flex: 1;
 }
 
 .user-bubble {

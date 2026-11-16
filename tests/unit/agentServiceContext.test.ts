@@ -9,7 +9,7 @@ import {
   SessionRepository
 } from '../../src/main/db/repositories'
 import { CONTEXT_WINDOW_DEFAULT, type ContextUsage } from '../../src/shared/context'
-import type { AgentEvent } from '../../src/shared/agent'
+import type { AgentEvent, ChatProvider, ProviderEvent } from '../../src/shared/agent'
 
 function createService(options: { contextWindow?: number } = {}): {
   db: DatabaseSync
@@ -85,6 +85,46 @@ describe('AgentService 上下文管理', () => {
       .pop()
     expect(usageEvent?.usage.entries).toBe(5)
     expect(usageEvent?.usage.limit).toBe(CONTEXT_WINDOW_DEFAULT)
+    db.close()
+  })
+
+  it('persists tool-only assistant messages with hidden reasoning', async () => {
+    const { db, sessions, context, events } = createService()
+    const session = sessions.create({ title: '工具会话', workspaceRoot: null, projectId: null })
+    let round = 0
+    const provider: ChatProvider = {
+      async *stream(): AsyncGenerator<ProviderEvent> {
+        round += 1
+        if (round === 1) {
+          yield { type: 'reasoning', text: '先列目录' }
+          yield {
+            type: 'tool_call',
+            toolCall: { id: 'call-1', name: 'list_dir', argumentsJson: '{}' }
+          }
+          yield { type: 'done', finishReason: 'tool_calls' }
+          return
+        }
+        yield { type: 'text', text: '完成' }
+        yield { type: 'done', finishReason: 'stop' }
+      }
+    }
+    const service = new AgentService({
+      resolveProvider: () => provider,
+      emit: (event) => events.push(event),
+      toolDefinitions: [{ name: 'list_dir', description: 'list', parameters: { type: 'object' } }],
+      toolExecutor: async () => ({ ok: true, content: 'a.txt', summary: 'a.txt' }),
+      persist: { sessions: new SessionRepository(db), messages: new MessageRepository(db), context }
+    })
+
+    service.start({ sessionId: session.id, text: '列目录', history: [] })
+    await waitFor(() => events.some((event) => event.type === 'run:done'))
+
+    const entries = context.list(session.id)
+    expect(entries.map((entry) => entry.role)).toEqual(['user', 'assistant', 'tool', 'assistant'])
+    expect(entries[1]).toMatchObject({
+      reasoningContent: '先列目录',
+      toolCallsJson: expect.stringContaining('call-1')
+    })
     db.close()
   })
 
