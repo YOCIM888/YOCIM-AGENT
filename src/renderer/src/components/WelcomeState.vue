@@ -2,7 +2,7 @@
   <section class="welcome" data-testid="welcome-state">
     <img class="welcome-logo" src="/image/yocim.png" alt="YOCIM" />
     <h1>YOCIM AGENT 让想法落地</h1>
-    <span class="badge">测试版</span>
+    <span class="badge">预览版</span>
   </section>
 </template>
 
