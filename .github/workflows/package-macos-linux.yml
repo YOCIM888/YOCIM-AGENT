@@ -33,7 +33,7 @@ jobs:
             arch: x64
             rg_target: x86_64-apple-darwin
             artifact_glob: 'release/*/*.dmg'
-          - os: macos-14
+          - os: macos-15
             platform: mac
             arch: arm64
             rg_target: aarch64-apple-darwin
