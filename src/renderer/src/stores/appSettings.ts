@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { BillingSummary, ProviderBalance, StorageInfo } from '@shared/billing'
 import type {
+  SettingsSetBrowserInput,
   SettingsSetCommandWhitelistInput,
   SettingsSetImageInput,
   SettingsSetPricingInput,
@@ -9,8 +10,10 @@ import type {
   SettingsSetStorageInput
 } from '@shared/ipc'
 import {
+  BROWSER_SETTINGS_DEFAULTS,
   IMAGE_SETTINGS_DEFAULTS,
   SEARCH_SETTINGS_DEFAULTS,
+  type BrowserSettings,
   type ImageSettings,
   type ModelPricing,
   type SearchSettings,
@@ -27,6 +30,7 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
   const pricing = ref<ModelPricing[]>([])
   const commandWhitelist = ref<string[]>([])
   const storage = ref<StorageSettings>({ dataDir: '' })
+  const browser = ref<BrowserSettings>({ ...BROWSER_SETTINGS_DEFAULTS })
   const balances = ref<Record<string, ProviderBalance>>({})
   const summary = ref<BillingSummary | null>(null)
   const storageInfo = ref<StorageInfo | null>(null)
@@ -43,12 +47,14 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
     pricing: ModelPricing[]
     commandWhitelist: string[]
     storage: StorageSettings
+    browser: BrowserSettings
   }): void {
     search.value = { ...settings.search }
     image.value = { ...settings.image }
     pricing.value = settings.pricing.map((item) => ({ ...item }))
     commandWhitelist.value = [...settings.commandWhitelist]
     storage.value = { ...settings.storage }
+    browser.value = { ...settings.browser }
   }
 
   async function refresh(): Promise<void> {
@@ -144,6 +150,17 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
     return false
   }
 
+  async function setBrowser(input: SettingsSetBrowserInput): Promise<boolean> {
+    error.value = ''
+    const result = await window.yocim.settings.setBrowser(input)
+    if (result.ok) {
+      apply(result.data)
+      return true
+    }
+    error.value = result.error.message
+    return false
+  }
+
   async function fetchBalance(providerId: string): Promise<ProviderBalance | null> {
     error.value = ''
     const result = await window.yocim.billing.getBalance({ providerId })
@@ -195,6 +212,7 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
     pricing,
     commandWhitelist,
     storage,
+    browser,
     balances,
     summary,
     storageInfo,
@@ -211,6 +229,7 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
     setPricing,
     setCommandWhitelist,
     setStorage,
+    setBrowser,
     fetchBalance,
     fetchSummary,
     refreshStorageInfo,

@@ -14,7 +14,8 @@ import type {
   SettingsSetPricingRequest,
   SettingsSetReasoningEffortRequest,
   SettingsSetSearchRequest,
-  SettingsSetStorageRequest
+  SettingsSetStorageRequest,
+  SettingsSetBrowserRequest
 } from '../../shared/ipc'
 import {
   getProviderPreset,
@@ -27,11 +28,13 @@ import {
 import {
   COMMAND_WHITELIST_LIMITS,
   IMAGE_SETTINGS_DEFAULTS,
+  normalizeBrowserSettings,
   normalizeCommandWhitelist,
   normalizeImageSettings,
   normalizePricing,
   normalizeSearchSettings,
   normalizeStorageSettings,
+  type BrowserSettings,
   type ImageSettings,
   type ModelPricing,
   type SearchSettings,
@@ -60,6 +63,7 @@ const KEY_SEARCH = 'search'
 const KEY_IMAGE = 'image'
 const KEY_PRICING = 'pricing'
 const KEY_STORAGE = 'storage'
+const KEY_BROWSER = 'browser'
 const KEY_TAVILY_API_KEY = 'tavilyApiKey'
 const KEY_IMAGE_API_KEY = 'imageApiKey'
 const KEY_LEGACY_PROVIDER = 'provider'
@@ -144,7 +148,8 @@ export class SettingsService {
       search: this.getSearchSettings(),
       image: this.getImageSettings(),
       pricing: this.getPricing(),
-      storage: this.getStorageSettings()
+      storage: this.getStorageSettings(),
+      browser: this.getBrowserSettings()
     }
   }
 
@@ -278,6 +283,27 @@ export class SettingsService {
   setStorage(input: SettingsSetStorageRequest): PublicSettings {
     const next = normalizeStorageSettings({ dataDir: input.dataDir })
     this.repo.set(KEY_STORAGE, next)
+    return this.getPublic()
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* AI 可操作浏览器                                                     */
+  /* ------------------------------------------------------------------ */
+
+  getBrowserSettings(): BrowserSettings {
+    return normalizeBrowserSettings(this.repo.get(KEY_BROWSER))
+  }
+
+  setBrowser(input: SettingsSetBrowserRequest): PublicSettings {
+    // 风险提示与显式勾选在设置面板完成；仓储只保存用户最终确认的值。
+    const next: BrowserSettings = normalizeBrowserSettings({
+      enabled: input.enabled,
+      headless: input.headless,
+      idleRecycleMinutes: input.idleRecycleMinutes,
+      allowEvaluate: input.allowEvaluate,
+      inheritProfile: input.inheritProfile
+    })
+    this.repo.set(KEY_BROWSER, next)
     return this.getPublic()
   }
 

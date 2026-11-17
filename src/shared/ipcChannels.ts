@@ -56,6 +56,13 @@ export const IPC_CHANNELS = {
   terminalRun: 'terminal:run',
   terminalCancel: 'terminal:cancel',
   terminalEvent: 'terminal:event',
+  browserState: 'browser:state',
+  browserViewport: 'browser:viewport',
+  browserNavigate: 'browser:navigate',
+  browserControl: 'browser:control',
+  browserRetry: 'browser:retry',
+  browserAudit: 'browser:audit',
+  browserEvent: 'browser:event',
   debugConfigs: 'debug:configs',
   debugStart: 'debug:start',
   debugStop: 'debug:stop',
@@ -112,6 +119,7 @@ export const IPC_CHANNELS = {
   settingsClearSearchKey: 'settings:clearSearchKey',
   settingsSetImage: 'settings:setImage',
   settingsClearImageKey: 'settings:clearImageKey',
+  settingsSetBrowser: 'settings:setBrowser',
   settingsSetPricing: 'settings:setPricing',
   settingsSetStorage: 'settings:setStorage',
   billingBalance: 'billing:balance',
@@ -190,6 +198,12 @@ export const TERMINAL_LIMITS = {
   maxCommandLength: 4000,
   maxOutputBytes: 512 * 1024,
   maxInputChars: 4000
+} as const
+
+export const BROWSER_IPC_LIMITS = {
+  maxUrlLength: 2048,
+  maxViewportDimension: 8192,
+  maxAuditLimit: 200
 } as const
 
 export const DEBUG_LIMITS = {

@@ -1,4 +1,5 @@
 import type { ToolDefinition } from './agent'
+import { BROWSER_ALLOWED_METHODS, BROWSER_WAIT_KINDS } from './browser'
 
 export type ToolName =
   | 'list_dir'
@@ -14,6 +15,8 @@ export type ToolName =
   | 'update_plan'
   | 'web_search'
   | 'generate_image'
+  | 'browser_cdp'
+  | 'browser_wait'
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
@@ -278,6 +281,51 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       required: ['prompt'],
       additionalProperties: false
     }
+  },
+  {
+    name: 'browser_cdp',
+    description:
+      '通过 Chrome DevTools Protocol 观察或操作当前会话的内置浏览器页面。这是薄原语：method 必须是允许列表中的一个，params 按该 CDP 方法的原生参数填写；不要指望有 click()/type() 这类封装，复杂动作请自行组合 Page.navigate、Input.dispatchMouseEvent、Input.dispatchKeyEvent、Runtime.evaluate 等原语。导航/点击/输入等有副作用的方法可能需要人工审批；人类接管期间指令会被明确拒绝。观察结果（截图、标题、DOM、AX 树、网络）会返回给模型。',
+    parameters: {
+      type: 'object',
+      properties: {
+        method: { type: 'string', enum: [...BROWSER_ALLOWED_METHODS] },
+        params: {
+          type: 'object',
+          description: 'CDP 方法原生参数对象；Runtime.evaluate 可传 expression / returnByValue',
+          additionalProperties: true
+        },
+        intent: {
+          type: 'string',
+          description: '本次操作的自然语言意图，会显示在可观测面板便于人类对照审计日志'
+        }
+      },
+      required: ['method'],
+      additionalProperties: false
+    }
+  },
+  {
+    name: 'browser_wait',
+    description:
+      '等待浏览器页面进入可操作状态，避免用固定 sleep。支持 networkIdle（网络静默）、selector（选择器出现）、expression（表达式为真）、load（页面加载完成）。条件带超时，失败会返回明确错误而不是静默挂起。',
+    parameters: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: [...BROWSER_WAIT_KINDS] },
+        value: {
+          type: 'string',
+          description: 'selector 为 CSS 选择器；expression 为 JS 表达式；其余可省略'
+        },
+        timeoutMs: {
+          type: 'integer',
+          minimum: 500,
+          maximum: 60000,
+          description: '超时（毫秒），默认 15000'
+        }
+      },
+      required: ['kind'],
+      additionalProperties: false
+    }
   }
 ]
 
@@ -404,6 +452,16 @@ export function summarizeToolArgs(name: string, argsJson: string): string {
       const prompt = typeof args['prompt'] === 'string' ? args['prompt'] : ''
       const size = typeof args['size'] === 'string' && args['size'] ? ` ${args['size']}` : ''
       return `generate_image「${clip(prompt, 80)}」${size}`
+    }
+    case 'browser_cdp': {
+      const method = typeof args['method'] === 'string' ? args['method'] : '?'
+      const intent = typeof args['intent'] === 'string' && args['intent'] ? `（${clip(args['intent'], 60)}）` : ''
+      return `browser_cdp ${method}${intent}`
+    }
+    case 'browser_wait': {
+      const kind = typeof args['kind'] === 'string' ? args['kind'] : '?'
+      const value = typeof args['value'] === 'string' && args['value'] ? `「${clip(args['value'], 60)}」` : ''
+      return `browser_wait ${kind}${value}`
     }
     default:
       return clip(`${name} ${argsJson}`)

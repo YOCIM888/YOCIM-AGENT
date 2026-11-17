@@ -6,6 +6,7 @@ import { CONTEXT_WINDOW_MAX, CONTEXT_WINDOW_MIN, type ContextUsage } from './con
 import type { IpcErrorCode } from './errors'
 import {
   AUDIT_LIMITS,
+  BROWSER_IPC_LIMITS,
   CONVENTION_LIMITS,
   DEBUG_LIMITS,
   FS_LIMITS,
@@ -29,6 +30,14 @@ import type {
 } from './extensions'
 import type { TaskDiscovery, TaskRun } from './tasks'
 import type { TerminalEvent, TerminalRunResult, TerminalState } from './terminal'
+import type {
+  BrowserAuditEntry,
+  BrowserConsoleEntry,
+  BrowserEvent,
+  BrowserExceptionEntry,
+  BrowserNetworkEntry,
+  BrowserState
+} from './browser'
 import {
   REMOTE_LIMITS,
   type RemoteConnectionState,
@@ -53,6 +62,7 @@ import { UPDATE_RELEASES_URL } from './update'
 export type { IpcErrorCode } from './errors'
 export {
   AUDIT_LIMITS,
+  BROWSER_IPC_LIMITS,
   CONVENTION_LIMITS,
   DEBUG_LIMITS,
   EXTENSION_LIMITS,
@@ -639,6 +649,74 @@ export const settingsSetPricingInputSchema = z.object({
 
 export type SettingsSetPricingInput = z.input<typeof settingsSetPricingInputSchema>
 export type SettingsSetPricingRequest = z.output<typeof settingsSetPricingInputSchema>
+
+/* -------------------------------------------------------------------------- */
+/* AI 可操作浏览器                                                             */
+/* -------------------------------------------------------------------------- */
+
+export const browserViewportInputSchema = z.object({
+  sessionId: z.string().min(1).max(120),
+  x: z.number().int().min(0).max(BROWSER_IPC_LIMITS.maxViewportDimension),
+  y: z.number().int().min(0).max(BROWSER_IPC_LIMITS.maxViewportDimension),
+  width: z.number().int().min(1).max(BROWSER_IPC_LIMITS.maxViewportDimension),
+  height: z.number().int().min(1).max(BROWSER_IPC_LIMITS.maxViewportDimension),
+  /** false 表示切到别的 tab：隐藏原生视图但保留上下文（keep-alive） */
+  visible: z.boolean().optional().default(true)
+})
+
+export type BrowserViewportInput = z.input<typeof browserViewportInputSchema>
+export type BrowserViewportRequest = z.output<typeof browserViewportInputSchema>
+
+export const browserNavigateInputSchema = z.object({
+  sessionId: z.string().min(1).max(120),
+  url: z.string().min(1).max(BROWSER_IPC_LIMITS.maxUrlLength)
+})
+
+export type BrowserNavigateInput = z.input<typeof browserNavigateInputSchema>
+export type BrowserNavigateRequest = z.output<typeof browserNavigateInputSchema>
+
+export const browserControlInputSchema = z.object({
+  sessionId: z.string().min(1).max(120),
+  mode: z.enum(['ai', 'paused', 'human'])
+})
+
+export type BrowserControlInput = z.input<typeof browserControlInputSchema>
+export type BrowserControlRequest = z.output<typeof browserControlInputSchema>
+
+export const browserSessionInputSchema = z.object({
+  sessionId: z.string().min(1).max(120)
+})
+
+export type BrowserSessionInput = z.input<typeof browserSessionInputSchema>
+export type BrowserSessionRequest = z.output<typeof browserSessionInputSchema>
+
+export const browserAuditInputSchema = z.object({
+  sessionId: z.string().min(1).max(120),
+  limit: z.number().int().min(1).max(BROWSER_IPC_LIMITS.maxAuditLimit).optional().default(100)
+})
+
+export type BrowserAuditInput = z.input<typeof browserAuditInputSchema>
+export type BrowserAuditRequest = z.output<typeof browserAuditInputSchema>
+
+export const settingsSetBrowserInputSchema = z.object({
+  enabled: z.boolean(),
+  headless: z.boolean(),
+  idleRecycleMinutes: z.number().int().min(0).max(24 * 60),
+  allowEvaluate: z.boolean(),
+  inheritProfile: z.boolean()
+})
+
+export type SettingsSetBrowserInput = z.input<typeof settingsSetBrowserInputSchema>
+export type SettingsSetBrowserRequest = z.output<typeof settingsSetBrowserInputSchema>
+
+export type {
+  BrowserAuditEntry,
+  BrowserConsoleEntry,
+  BrowserEvent,
+  BrowserExceptionEntry,
+  BrowserNetworkEntry,
+  BrowserState
+}
 
 export const settingsSetStorageInputSchema = z.object({
   dataDir: z.string().max(1024)

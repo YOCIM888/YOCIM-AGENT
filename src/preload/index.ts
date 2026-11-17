@@ -100,6 +100,12 @@ import type {
   SettingsSetReasoningEffortInput,
   SettingsSetSearchInput,
   SettingsSetStorageInput,
+  SettingsSetBrowserInput,
+  BrowserAuditInput,
+  BrowserControlInput,
+  BrowserNavigateInput,
+  BrowserSessionInput,
+  BrowserViewportInput,
   BillingBalanceInput,
   BillingBalanceResult,
   BillingSummaryInput,
@@ -122,6 +128,7 @@ import type {
   VscodeScanResponse
 } from '../shared/ipc'
 import type { DebugConfigFile, DebugEvent } from '../shared/debug'
+import type { BrowserAuditEntry, BrowserEvent, BrowserState } from '../shared/browser'
 import type {
   RemoteConnectInput,
   RemoteConnectResponse,
@@ -294,6 +301,29 @@ const api: YocimApi = {
       }
     }
   },
+  browser: {
+    state: (input: BrowserSessionInput) =>
+      invoke<IpcResult<BrowserState>>(IPC_CHANNELS.browserState, input),
+    viewport: (input: BrowserViewportInput) =>
+      invoke<IpcResult<{ applied: boolean }>>(IPC_CHANNELS.browserViewport, input),
+    navigate: (input: BrowserNavigateInput) =>
+      invoke<IpcResult<{ url: string }>>(IPC_CHANNELS.browserNavigate, input),
+    control: (input: BrowserControlInput) =>
+      invoke<IpcResult<BrowserState>>(IPC_CHANNELS.browserControl, input),
+    retry: (input: BrowserSessionInput) =>
+      invoke<IpcResult<BrowserState>>(IPC_CHANNELS.browserRetry, input),
+    audit: (input: BrowserAuditInput) =>
+      invoke<IpcResult<BrowserAuditEntry[]>>(IPC_CHANNELS.browserAudit, input),
+    onEvent: (listener: (event: BrowserEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, payload: BrowserEvent): void => {
+        listener(payload)
+      }
+      ipcRenderer.on(IPC_CHANNELS.browserEvent, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.browserEvent, handler)
+      }
+    }
+  },
   debug: {
     configs: () => invoke<IpcResult<DebugConfigFile>>(IPC_CHANNELS.debugConfigs),
     start: (input: DebugStartInput) =>
@@ -415,7 +445,9 @@ const api: YocimApi = {
     setPricing: (input: SettingsSetPricingInput) =>
       invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetPricing, input),
     setStorage: (input: SettingsSetStorageInput) =>
-      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetStorage, input)
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetStorage, input),
+    setBrowser: (input: SettingsSetBrowserInput) =>
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetBrowser, input)
   },
   billing: {
     getBalance: (input: BillingBalanceInput) =>

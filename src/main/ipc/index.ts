@@ -25,6 +25,7 @@ import type {
 } from '../../shared/extensions'
 import type { TaskDiscovery, TaskEvent, TaskRun } from '../../shared/tasks'
 import type { TerminalEvent, TerminalRunResult, TerminalState } from '../../shared/terminal'
+import type { BrowserAuditEntry, BrowserEvent, BrowserState } from '../../shared/browser'
 import type { RemoteConnectionState } from '../../shared/remote'
 import { AppError } from '../../shared/errors'
 import type {
@@ -40,6 +41,11 @@ import type {
 import {
   approvalRespondInputSchema,
   AUDIT_LIMITS,
+  browserAuditInputSchema,
+  browserControlInputSchema,
+  browserNavigateInputSchema,
+  browserSessionInputSchema,
+  browserViewportInputSchema,
   auditExportInputSchema,
   auditFilterSchema,
   auditListInputSchema,
@@ -106,6 +112,7 @@ import {
   settingsSetPricingInputSchema,
   settingsSetReasoningEffortInputSchema,
   settingsSetSearchInputSchema,
+  settingsSetBrowserInputSchema,
   settingsSetStorageInputSchema,
   storagePickInputSchema,
   chatCompressInputSchema,
@@ -124,6 +131,11 @@ import {
   type BillingBalanceResult,
   type BillingSummaryRequest,
   type BillingSummaryResult,
+  type BrowserAuditRequest,
+  type BrowserControlRequest,
+  type BrowserNavigateRequest,
+  type BrowserSessionRequest,
+  type BrowserViewportRequest,
   type ChatCancelRequest,
   type ChatCompressInput,
   type ChatCompressResult,
@@ -136,6 +148,7 @@ import {
   type SettingsSetReasoningEffortRequest,
   type SettingsSetSearchRequest,
   type SettingsSetStorageRequest,
+  type SettingsSetBrowserRequest,
   type StorageInfoResult,
   type StoragePickRequest,
   type ChatCancelResult,
@@ -251,6 +264,7 @@ import { DebugService } from '../debug/debugService'
 import { ExtensionService } from '../extensions/extensionService'
 import { TaskService } from '../tasks/taskService'
 import { TerminalService } from '../terminal/terminalService'
+import { BrowserService } from '../browser/browserService'
 import { SessionService } from '../sessions/sessionService'
 import { GitService } from '../git/gitService'
 import { runGit } from '../git/gitRunner'
@@ -330,6 +344,14 @@ function broadcastDebugEvent(event: DebugEvent): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
       window.webContents.send(IPC_CHANNELS.debugEvent, event)
+    }
+  }
+}
+
+function broadcastBrowserEvent(event: BrowserEvent): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.browserEvent, event)
     }
   }
 }
@@ -452,6 +474,22 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     getRoot: () => workspaceService.current()?.root ?? null,
     emit: broadcastDebugEvent
   })
+  const browserService = new BrowserService({
+    getWindow: () => BrowserWindow.getAllWindows()[0] ?? null,
+    resolveScope: (sessionId) => {
+      const session = sessionRepo.get(sessionId)
+      if (!session) return null
+      return {
+        sessionId: session.id,
+        projectId: session.projectId,
+        workspaceRoot: session.workspaceRoot
+      }
+    },
+    getSettings: () => settingsService.getBrowserSettings(),
+    auditFilePath: join(dataDir ?? userData, 'browser-audit.jsonl'),
+    emit: broadcastBrowserEvent
+  })
+  browserService.start()
   const extensionService = new ExtensionService({
     repo: extensionRepo,
     userData: storageRoot
@@ -469,6 +507,7 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     taskService.dispose()
     terminalService.dispose()
     remoteService.dispose()
+    browserService.disposeAll()
     void debugService.dispose()
   })
   const trashItem = (absolutePath: string): Promise<void> => shell.trashItem(absolutePath)
@@ -516,6 +555,12 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     webSearchEnabled: () => settingsService.getWebSearchConfig() !== null,
     imageGen: createImageGenRunner(() => settingsService.getImageConfig()),
     imageGenEnabled: () => settingsService.getImageConfig() !== null,
+    browser: {
+      service: browserService,
+      approvals: approvalManager,
+      getApprovalMode: () => settingsService.getApprovalMode()
+    },
+    browserEnabled: () => settingsService.getBrowserSettings().enabled,
     gitDiff: async ({ staged, relativePath }) => {
       const args = ['diff', '--unified=3', ...(staged ? ['--cached'] : [])]
       if (relativePath) args.push('--', relativePath)
@@ -1020,6 +1065,43 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     stopped: terminalService.cancel()
   }))
 
+  /* AI 可操作浏览器 ---------------------------------------------------- */
+  handleIpc<BrowserSessionRequest, BrowserState>(
+    IPC_CHANNELS.browserState,
+    browserSessionInputSchema,
+    async (input) => browserService.state(input.sessionId)
+  )
+
+  handleIpc<BrowserViewportRequest, { applied: boolean }>(
+    IPC_CHANNELS.browserViewport,
+    browserViewportInputSchema,
+    async (input) => browserService.viewport(input)
+  )
+
+  handleIpc<BrowserNavigateRequest, { url: string }>(
+    IPC_CHANNELS.browserNavigate,
+    browserNavigateInputSchema,
+    async (input) => browserService.navigate(input.sessionId, input.url)
+  )
+
+  handleIpc<BrowserControlRequest, BrowserState>(
+    IPC_CHANNELS.browserControl,
+    browserControlInputSchema,
+    async (input) => browserService.control(input.sessionId, input.mode)
+  )
+
+  handleIpc<BrowserSessionRequest, BrowserState>(
+    IPC_CHANNELS.browserRetry,
+    browserSessionInputSchema,
+    async (input) => browserService.retry(input.sessionId)
+  )
+
+  handleIpc<BrowserAuditRequest, BrowserAuditEntry[]>(
+    IPC_CHANNELS.browserAudit,
+    browserAuditInputSchema,
+    async (input) => browserService.audit(input.sessionId, input.limit)
+  )
+
   handleIpc<undefined, DebugConfigFile>(IPC_CHANNELS.debugConfigs, null, async () =>
     debugService.configs()
   )
@@ -1429,6 +1511,12 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
       storageService.persistDataDir(input.dataDir)
       return result
     }
+  )
+
+  handleIpc<SettingsSetBrowserRequest, SettingsResult>(
+    IPC_CHANNELS.settingsSetBrowser,
+    settingsSetBrowserInputSchema,
+    async (input) => settingsService.setBrowser(input)
   )
 
   handleIpc<BillingBalanceRequest, BillingBalanceResult>(

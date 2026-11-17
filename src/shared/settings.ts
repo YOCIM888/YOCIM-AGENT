@@ -363,3 +363,47 @@ export function isCommandWhitelisted(command: string, whitelist: readonly string
   }
   return false
 }
+
+/* -------------------------------------------------------------------------- */
+/* AI 可操作浏览器                                                             */
+/* -------------------------------------------------------------------------- */
+
+export const BROWSER_SETTINGS_DEFAULTS = {
+  /** 是否允许 AI 使用浏览器工具（UI 入口始终可用，便于人工查看页面） */
+  enabled: true,
+  /** 有头可见（默认）；关闭后视图隐藏，但仍可通过 CDP 操作并在控制台观察 */
+  headless: false,
+  /** 空闲回收（分钟）；0 表示不自动回收 */
+  idleRecycleMinutes: 30,
+  /** 是否允许受限 Runtime.evaluate；关闭后仅能用观察 / 输入原语 */
+  allowEvaluate: true,
+  /** 是否复用日常 profile（高风险，默认独立 profile） */
+  inheritProfile: false
+} as const
+
+export interface BrowserSettings {
+  enabled: boolean
+  headless: boolean
+  idleRecycleMinutes: number
+  allowEvaluate: boolean
+  /** 仅经用户在设置里显式确认后为 true；每次启动都会提示风险 */
+  inheritProfile: boolean
+}
+
+/** 把任意来源的浏览器设置收敛成合法值 */
+export function normalizeBrowserSettings(value: unknown): BrowserSettings {
+  const raw = (
+    typeof unwrapJson(value) === 'object' && unwrapJson(value) !== null ? unwrapJson(value) : {}
+  ) as Record<string, unknown>
+  const idle = Number(raw['idleRecycleMinutes'])
+  return {
+    enabled: raw['enabled'] !== false,
+    headless: raw['headless'] === true,
+    idleRecycleMinutes: Number.isFinite(idle)
+      ? Math.min(24 * 60, Math.max(0, Math.round(idle)))
+      : BROWSER_SETTINGS_DEFAULTS.idleRecycleMinutes,
+    allowEvaluate: raw['allowEvaluate'] !== false,
+    // 仅持久化用户显式勾选的结果，设置面板必须给出风险提示（见 BrowserPanel.vue）
+    inheritProfile: raw['inheritProfile'] === true
+  }
+}

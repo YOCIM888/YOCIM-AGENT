@@ -41,6 +41,11 @@ import {
 } from './verifyTools'
 import { runWebSearch, type WebSearchRunner } from './webSearchTools'
 import { runGenerateImage, type ImageGenRunner } from './imageGenTools'
+import {
+  runBrowserCdp,
+  runBrowserWait,
+  type BrowserToolDeps
+} from './browserCdpTools'
 import { allowRuleValue, classifyCommand, needsApproval } from './commandRisk'
 
 function describeError(error: unknown): string {
@@ -93,6 +98,9 @@ export interface ToolServiceDeps {
   imageGen?: ImageGenRunner
   /** 生图是否可用：用于决定是否把 generate_image 放进工具列表 */
   imageGenEnabled?: () => boolean
+  /** AI 可操作浏览器：CDP 原语执行器与可用性开关 */
+  browser?: BrowserToolDeps
+  browserEnabled?: () => boolean
   /**
    * 工作区是否有未提交改动：git pull 在工作区干净时降为本地风险；
    * 缺省或查询失败时按「有改动」保守处理。
@@ -126,6 +134,9 @@ export class ToolService {
       }
       if (definition.name === 'generate_image') {
         return Boolean(this.deps.imageGen && this.deps.imageGenEnabled?.() !== false)
+      }
+      if (definition.name === 'browser_cdp' || definition.name === 'browser_wait') {
+        return Boolean(this.deps.browser && this.deps.browserEnabled?.() !== false)
       }
       return true
     })
@@ -458,6 +469,18 @@ export class ToolService {
           throw new AppError('E_UNSUPPORTED', '生图未配置')
         }
         return runGenerateImage(parsed.args, this.deps.imageGen, context.signal)
+      }
+      case 'browser_cdp': {
+        if (!this.deps.browser) {
+          throw new AppError('E_UNSUPPORTED', '浏览器能力未启用')
+        }
+        return runBrowserCdp(parsed.args, context, callId, this.deps.browser)
+      }
+      case 'browser_wait': {
+        if (!this.deps.browser) {
+          throw new AppError('E_UNSUPPORTED', '浏览器能力未启用')
+        }
+        return runBrowserWait(parsed.args, context, this.deps.browser)
       }
     }
   }

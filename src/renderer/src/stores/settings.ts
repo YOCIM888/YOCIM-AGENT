@@ -45,6 +45,7 @@ const STORAGE_KEYS = {
   workspaceSections: 'yocim.ui.workspaceSections',
   sessionWidth: 'yocim.ui.sessionWidth',
   workspaceWidth: 'yocim.ui.workspaceWidth',
+  toolPanelHeight: 'yocim.ui.toolPanelHeight',
   fontSize: 'yocim.ui.fontSize',
   wordWrap: 'yocim.ui.wordWrap',
   minimap: 'yocim.ui.minimap'
@@ -53,6 +54,10 @@ const STORAGE_KEYS = {
 export const FONT_SIZE_MIN = 10
 export const FONT_SIZE_MAX = 24
 export const FONT_SIZE_DEFAULT = 13
+
+export const TOOL_PANEL_HEIGHT_DEFAULT = 40
+export const TOOL_PANEL_HEIGHT_MIN = 18
+export const TOOL_PANEL_HEIGHT_MAX = 70
 
 function readStorage(key: string): string | null {
   try {
@@ -184,6 +189,16 @@ export const useSettingsStore = defineStore('settings', () => {
       storedWorkspaceWidth === null ? WORKSPACE_WIDTH_DEFAULT : Number(storedWorkspaceWidth)
     )
   )
+  const storedToolPanelHeight = Number(readStorage(STORAGE_KEYS.toolPanelHeight))
+  const toolPanelHeight = ref(
+    Number.isFinite(storedToolPanelHeight) && storedToolPanelHeight > 0
+      ? Math.min(
+          TOOL_PANEL_HEIGHT_MAX,
+          Math.max(TOOL_PANEL_HEIGHT_MIN, Math.round(storedToolPanelHeight))
+        )
+      : TOOL_PANEL_HEIGHT_DEFAULT
+  )
+  const toolPanelHeightDefault = TOOL_PANEL_HEIGHT_DEFAULT
 
   applyTheme(theme.value)
 
@@ -237,6 +252,14 @@ export const useSettingsStore = defineStore('settings', () => {
     writeStorage(STORAGE_KEYS.workspaceSections, JSON.stringify(workspaceSections.value))
   }
 
+  function setToolPanelHeight(value: number): void {
+    toolPanelHeight.value = Math.min(
+      TOOL_PANEL_HEIGHT_MAX,
+      Math.max(TOOL_PANEL_HEIGHT_MIN, Math.round(value))
+    )
+    writeStorage(STORAGE_KEYS.toolPanelHeight, String(toolPanelHeight.value))
+  }
+
   function setSessionWidth(value: number): void {
     sessionWidth.value = clampWidth(
       value,
@@ -264,6 +287,8 @@ export const useSettingsStore = defineStore('settings', () => {
     workspaceSections,
     sessionWidth,
     workspaceWidth,
+    toolPanelHeight,
+    toolPanelHeightDefault,
     setTheme,
     toggleTheme,
     setFontSize,
@@ -275,6 +300,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setWorkspaceView,
     setSectionCollapsed,
     setSessionWidth,
-    setWorkspaceWidth
+    setWorkspaceWidth,
+    setToolPanelHeight
   }
 })
