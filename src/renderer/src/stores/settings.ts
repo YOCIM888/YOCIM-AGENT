@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { locale as appLocale, setLocale as persistAppLocale, type Locale } from '../i18n'
 import { isWorkspaceView, type WorkspaceView } from '../lib/workspaceViews'
 
 export type ThemeMode = 'light' | 'dark'
@@ -48,7 +49,9 @@ const STORAGE_KEYS = {
   toolPanelHeight: 'yocim.ui.toolPanelHeight',
   fontSize: 'yocim.ui.fontSize',
   wordWrap: 'yocim.ui.wordWrap',
-  minimap: 'yocim.ui.minimap'
+  minimap: 'yocim.ui.minimap',
+  locale: 'yocim.locale',
+  languageOnboarded: 'yocim.onboarding.language'
 } as const
 
 export const FONT_SIZE_MIN = 10
@@ -165,6 +168,20 @@ function readWordWrap(): 'on' | 'off' {
 }
 
 export const useSettingsStore = defineStore('settings', () => {
+  /** 界面语言：唯一状态源在 i18n 模块，store 只做代理，保证切换后立即生效。 */
+  const locale = computed<Locale>({
+    get: () => appLocale.value,
+    set: (value) => persistAppLocale(value)
+  })
+
+  /** 测试/自动化可用 URL 参数跳过首启引导，不写入持久化标记。 */
+  const skipLanguageOnboarding =
+    typeof location !== 'undefined' &&
+    new URLSearchParams(location.search).get('onboarding') === 'skip'
+  const languageOnboarded = ref(
+    skipLanguageOnboarding || readBoolean(STORAGE_KEYS.languageOnboarded, false)
+  )
+
   const theme = ref<ThemeMode>(readTheme())
   const fontSize = ref(readFontSize())
   const wordWrap = ref<'on' | 'off'>(readWordWrap())
@@ -201,6 +218,15 @@ export const useSettingsStore = defineStore('settings', () => {
   const toolPanelHeightDefault = TOOL_PANEL_HEIGHT_DEFAULT
 
   applyTheme(theme.value)
+
+  function setLocale(value: Locale): void {
+    persistAppLocale(value)
+  }
+
+  function completeLanguageOnboarding(): void {
+    languageOnboarded.value = true
+    writeStorage(STORAGE_KEYS.languageOnboarded, 'true')
+  }
 
   function setTheme(next: ThemeMode): void {
     theme.value = next
@@ -276,6 +302,8 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   return {
+    locale,
+    languageOnboarded,
     theme,
     fontSize,
     wordWrap,
@@ -289,6 +317,8 @@ export const useSettingsStore = defineStore('settings', () => {
     workspaceWidth,
     toolPanelHeight,
     toolPanelHeightDefault,
+    setLocale,
+    completeLanguageOnboarding,
     setTheme,
     toggleTheme,
     setFontSize,

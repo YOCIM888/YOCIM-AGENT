@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed } from 'vue'
 import type { SearchReplaceResult } from '@shared/ipc'
 
@@ -15,31 +16,30 @@ const emit = defineEmits<{
 const changedFiles = computed(() => props.result.files.filter((file) => file.replaced > 0))
 const conflicts = computed(() => props.result.files.filter((file) => file.status === 'conflict'))
 
-const scopeLabel: Record<string, string> = {
-  single: '单条替换',
-  file: '文件内全部替换',
-  all: '全局全部替换'
-}
+const scopeLabel = computed<Record<string, string>>(() => ({
+  single: t('单条替换'),
+  file: t('文件内全部替换'),
+  all: t('全局全部替换')
+}))
 </script>
 
 <template>
   <div class="overlay" @click.self="emit('cancel')">
     <section class="dialog" data-testid="replace-preview-dialog">
-      <h2>替换预览</h2>
+      <h2>{{ t('替换预览') }}</h2>
       <p class="summary" data-testid="replace-preview-summary">
-        {{ scopeLabel[scope] ?? scope }} · 将替换
-        <strong>{{ result.totalReplaced }}</strong> 处，涉及
-        <strong>{{ changedFiles.length }}</strong> 个文件。应用前会校验文件内容
-        hash，并在时间线生成回滚快照。
+        {{ scopeLabel[scope] ?? scope }} {{ t('· 将替换') }}
+        <strong>{{ result.totalReplaced }}</strong> {{ t('处，涉及') }}
+        <strong>{{ changedFiles.length }}</strong>
+        {{ t('个文件。应用前会校验文件内容 hash，并在时间线生成回滚快照。') }}
       </p>
       <p v-if="conflicts.length" class="conflict" data-testid="replace-preview-conflicts">
-        {{ conflicts.length }} 个文件在搜索后被修改，将被跳过：{{
-          conflicts.map((f) => f.relativePath).join('、')
-        }}
+        {{ conflicts.length }} {{ t('个文件在搜索后被修改，将被跳过：')
+        }}{{ conflicts.map((f) => f.relativePath).join('、') }}
       </p>
       <div class="previews" data-testid="replace-preview-list">
         <div v-for="file in changedFiles.slice(0, 8)" :key="file.relativePath" class="file">
-          <div class="file-name">{{ file.relativePath }} · {{ file.replaced }} 处</div>
+          <div class="file-name">{{ file.relativePath }} · {{ file.replaced }} {{ t('处') }}</div>
           <div v-for="line in file.previews" :key="line.line" class="line">
             <span class="line-no">{{ line.line }}</span>
             <span class="diff-text">
@@ -48,11 +48,11 @@ const scopeLabel: Record<string, string> = {
             </span>
           </div>
         </div>
-        <p v-if="!changedFiles.length" class="empty">没有可替换的命中</p>
+        <p v-if="!changedFiles.length" class="empty">{{ t('没有可替换的命中') }}</p>
       </div>
       <div class="actions">
         <button type="button" data-testid="replace-preview-cancel" @click="emit('cancel')">
-          取消
+          {{ t('取消') }}
         </button>
         <button
           type="button"
@@ -61,7 +61,7 @@ const scopeLabel: Record<string, string> = {
           :disabled="!changedFiles.length"
           @click="emit('confirm')"
         >
-          应用替换
+          {{ t('应用替换') }}
         </button>
       </div>
     </section>

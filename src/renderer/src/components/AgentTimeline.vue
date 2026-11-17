@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { ApprovalDecision } from '@shared/approval'
 import type { AgentStep } from '../lib/agentSteps'
@@ -85,9 +86,10 @@ const activeLabel = computed(() => {
 })
 
 const summary = computed(() => {
-  if (pending.value) return `等待审批 · ${props.steps.length} 个步骤`
-  if (props.startedAt && props.endedAt) return `已执行 ${props.steps.length} 个步骤`
-  return `正在执行 ${props.steps.length} 个步骤`
+  if (pending.value) return t('等待审批 · {count} 个步骤', { count: props.steps.length })
+  if (props.startedAt && props.endedAt)
+    return t('已执行 {count} 个步骤', { count: props.steps.length })
+  return t('正在执行 {count} 个步骤', { count: props.steps.length })
 })
 
 const elapsed = computed(() => {
@@ -107,7 +109,7 @@ function detailOf(step: AgentStep): string {
 }
 
 function riskLabel(risk: 'medium' | 'high'): string {
-  return risk === 'high' ? '高风险' : '中风险'
+  return risk === 'high' ? t('高风险') : t('中风险')
 }
 
 function isBlocked(step: AgentStep): boolean {
@@ -190,7 +192,7 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
             </span>
             <span class="step-tail">
               <span v-if="stepDuration(step)" class="step-time">{{ stepDuration(step) }}</span>
-              <span class="step-state" :class="step.status">{{ stepStatusLabel(step) }}</span>
+              <span class="step-state" :class="step.status">{{ t(stepStatusLabel(step)) }}</span>
             </span>
           </div>
 
@@ -206,7 +208,7 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
               class="step-image-link"
               :title="src"
             >
-              <img :src="src" alt="生成的图片" class="step-image" />
+              <img :src="src" :alt="t('生成的图片')" class="step-image" />
             </a>
           </div>
 
@@ -223,7 +225,7 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
             <div class="approval-title">
               <span class="approval-mark" aria-hidden="true">!</span>
               <span class="approval-name"
-                >{{ isBlocked(step) ? '命令被拦截 · ' : '需要审批 · ' }}{{ step.name }}</span
+                >{{ isBlocked(step) ? t('命令被拦截 · ') : t('需要审批 · ') }}{{ step.name }}</span
               >
               <span class="risk">{{ riskLabel(step.approval.risk) }}</span>
             </div>
@@ -247,7 +249,7 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
 </code></pre>
               </div>
               <div v-if="requestOf(step)!.diff!.truncated" class="diff-truncated">
-                （diff 已截断，仅展示部分内容）
+                {{ t('（diff 已截断，仅展示部分内容）') }}
               </div>
             </div>
 
@@ -257,19 +259,19 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
                   type="button"
                   class="approve"
                   data-testid="approval-allow-once"
-                  title="只放行这一次命令，不写入白名单"
+                  :title="t('只放行这一次命令，不写入白名单')"
                   @click="respond(step, 'allow_once')"
                 >
-                  允许一次
+                  {{ t('允许一次') }}
                 </button>
                 <button
                   type="button"
                   class="allow"
                   data-testid="approval-allow-whitelist"
-                  title="把这条命令加入白名单，并放行本次执行"
+                  :title="t('把这条命令加入白名单，并放行本次执行')"
                   @click="respond(step, 'allow_whitelist')"
                 >
-                  加入白名单
+                  {{ t('加入白名单') }}
                 </button>
               </template>
               <template v-else>
@@ -279,27 +281,27 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
                   data-testid="approval-approve"
                   @click="respond(step, 'approve')"
                 >
-                  批准
+                  {{ t('批准') }}
                 </button>
                 <button
                   v-if="requestOf(step)?.canAllowAlways"
                   type="button"
                   class="allow"
                   data-testid="approval-allow-session"
-                  title="本会话内同类操作不再询问（白名单与危险命令拦截仍然生效）"
+                  :title="t('本会话内同类操作不再询问（白名单与危险命令拦截仍然生效）')"
                   @click="respond(step, 'approve_session')"
                 >
-                  会话内允许
+                  {{ t('会话内允许') }}
                 </button>
                 <button
                   v-if="requestOf(step)?.canAllowAlways"
                   type="button"
                   class="allow"
                   data-testid="approval-allow-project"
-                  title="本项目内同类操作不再询问（持久化，白名单与危险命令拦截仍然生效）"
+                  :title="t('本项目内同类操作不再询问（持久化，白名单与危险命令拦截仍然生效）')"
                   @click="respond(step, 'approve_project')"
                 >
-                  项目内允许
+                  {{ t('项目内允许') }}
                 </button>
               </template>
               <button
@@ -308,11 +310,11 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
                 data-testid="approval-deny"
                 @click="respond(step, 'deny')"
               >
-                拒绝
+                {{ t('拒绝') }}
               </button>
             </div>
             <p v-else class="decision" :class="step.approval.status">
-              {{ approvalDecisionLabel(step.approval.status, step.approval.decision) }}
+              {{ t(approvalDecisionLabel(step.approval.status, step.approval.decision)) }}
             </p>
           </div>
         </div>

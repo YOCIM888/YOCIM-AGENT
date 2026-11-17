@@ -9,6 +9,7 @@ A local-first desktop AI coding assistant (Electron + Vue 3 + TypeScript). Pick 
 ## Features
 
 - **Multi-model support**: DeepSeek, Qwen, BigModel, Kimi, MiniMax, Tencent Cloud, Alibaba Cloud, SiliconFlow, Volcano Engine, ChatGPT, Claude, Gemini, Grok, local Ollama, and custom endpoints. Add them in Settings and switch from the bottom-right of the composer (grouped by provider, model name only, selected item marked with a green filled circle).
+- **Two languages**: English and Simplified Chinese. The first launch asks for a language and then opens Model settings to guide you through entering an API Key; this happens only once. Change it any time in Settings → Appearance → Interface language (takes effect immediately, no restart).
 - **Tabbed settings**: Billing, Models, Search, Image Generation, Appearance, Storage, and Browser. Approval mode (Manual / Auto / Open) is toggled at the bottom-left of the composer and persisted.
 - **Three-pane workspace**: project-based session list on the left, a pure chat area in the middle, and an 8-view icon activity bar on the right (Files / Search / Editor / Audit / Source Control / Extensions / Debug / Remote). Side panels can be collapsed and resized by dragging, with state persisted across restarts.
 - **AI-operable browser**: the lower tool area of the chat column has Terminal / Browser tabs (shared resizable height). The agent drives an embedded, visible Chromium view through thin CDP primitives (`browser_cdp` / `browser_wait`) — navigate, screenshot, read DOM/title, dispatch input coordinates, wait for conditions. An in-view console aggregates Console / Network / exceptions / an append-only action audit, with pause AI / take over / resume controls. Browser contexts are isolated per session, and Runtime.evaluate is sandboxed away from Node/Electron.
@@ -35,7 +36,7 @@ A local-first desktop AI coding assistant (Electron + Vue 3 + TypeScript). Pick 
 - **Left**: brand and "New Session" at the top, then search, workspace count, pinned section, and project groups. Right-click a session to rename / export / pin / archive / move / delete; right-click a project to create a session / rename.
 - **Middle**: empty sessions show a welcome state and a large composer; streaming replies can be stopped; tool steps collapse into "N steps executed · Xs" and expand to show arguments and results; failures show a retryable error card.
 - **Right**: the 8 icon views; clicking a file switches to the editor, and a search hit can be jumped to and selected. The divider can be dragged to resize, double-clicked to reset, or nudged with arrow keys when focused.
-- **Title bar**: the "Application" menu switches workspace / theme and opens Settings; the "Edit" menu creates/searches sessions, collapses the workspace, and toggles the status bar.
+- **Title bar**: the "Application" menu switches workspace / theme and opens Settings; the "Edit" menu creates/searches sessions, collapses the workspace, and toggles the status bar. Language lives in Settings → Appearance.
 
 | Shortcut       | Action                           |
 | -------------- | -------------------------------- |
@@ -155,4 +156,4 @@ npm run package
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+MIT License. See [LICENSE](LICENSE).

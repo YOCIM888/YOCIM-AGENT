@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { t } from '../i18n'
+import { computed, ref, watch } from 'vue'
+import type { SettingsTabId } from '../stores/ui'
 import AppearancePanel from './settings/AppearancePanel.vue'
 import BillingPanel from './settings/BillingPanel.vue'
 import BrowserPanel from './settings/BrowserPanel.vue'
@@ -11,10 +13,20 @@ import StoragePanel from './settings/StoragePanel.vue'
 const emit = defineEmits<{
   close: []
 }>()
+const props = defineProps<{
+  initialTab?: SettingsTabId
+  guideApiKey?: boolean
+}>()
 
-type TabId = 'billing' | 'models' | 'search' | 'image' | 'appearance' | 'storage' | 'browser'
+type TabId = SettingsTabId
 
-const active = ref<TabId>('models')
+const active = ref<TabId>(props.initialTab ?? 'models')
+watch(
+  () => props.initialTab,
+  (tab) => {
+    if (tab) active.value = tab
+  }
+)
 
 /** 标签图标（24×24 线性描边，stroke 由 CSS 统一控制） */
 const ICONS: Record<TabId, string[]> = {
@@ -45,23 +57,25 @@ const ICONS: Record<TabId, string[]> = {
   ]
 }
 
-const tabs: Array<{ id: TabId; label: string }> = [
-  { id: 'billing', label: '账单' },
-  { id: 'models', label: '模型' },
-  { id: 'search', label: '搜索' },
-  { id: 'image', label: '生图' },
-  { id: 'appearance', label: '外观' },
-  { id: 'storage', label: '存储' },
-  { id: 'browser', label: '浏览器' }
-]
+const tabs = computed<Array<{ id: TabId; label: string }>>(() => [
+  { id: 'billing', label: t('账单') },
+  { id: 'models', label: t('模型') },
+  { id: 'search', label: t('搜索') },
+  { id: 'image', label: t('生图') },
+  { id: 'appearance', label: t('外观') },
+  { id: 'storage', label: t('存储') },
+  { id: 'browser', label: t('浏览器') }
+])
 </script>
 
 <template>
   <div class="overlay" @click.self="emit('close')">
     <section class="dialog" data-testid="settings-dialog">
       <header class="dialog-head">
-        <h2>设置</h2>
-        <button type="button" class="close" aria-label="关闭设置" @click="emit('close')">✕</button>
+        <h2>{{ t('设置') }}</h2>
+        <button type="button" class="close" :aria-label="t('关闭设置')" @click="emit('close')">
+          ✕
+        </button>
       </header>
 
       <div class="dialog-body">
@@ -94,7 +108,11 @@ const tabs: Array<{ id: TabId; label: string }> = [
         </nav>
 
         <div class="panel-area">
-          <ModelsPanel v-if="active === 'models'" @close="emit('close')" />
+          <ModelsPanel
+            v-if="active === 'models'"
+            :guide-api-key="props.guideApiKey"
+            @close="emit('close')"
+          />
           <BillingPanel v-else-if="active === 'billing'" @close="emit('close')" />
           <SearchPanel v-else-if="active === 'search'" @close="emit('close')" />
           <ImagePanel v-else-if="active === 'image'" @close="emit('close')" />
@@ -106,7 +124,7 @@ const tabs: Array<{ id: TabId; label: string }> = [
 
       <footer class="dialog-foot">
         <button type="button" class="sp-btn" data-testid="settings-close" @click="emit('close')">
-          关闭
+          {{ t('关闭') }}
         </button>
       </footer>
     </section>

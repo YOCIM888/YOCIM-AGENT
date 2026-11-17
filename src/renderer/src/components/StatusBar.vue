@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed } from 'vue'
 import { APP_VERSION } from '@shared/app'
 import { useChatStore } from '../stores/chat'
@@ -10,13 +11,13 @@ const workspace = useWorkspaceStore()
 const chat = useChatStore()
 const settings = useSettingsStore()
 
-const runState = computed(() => (chat.sending ? '生成中' : '空闲'))
+const runState = computed(() => (chat.sending ? t('生成中') : t('空闲')))
 </script>
 
 <template>
   <footer class="statusbar" :class="{ expanded: settings.statusExpanded }" data-testid="status-bar">
     <span>v{{ APP_VERSION }}</span>
-    <span class="workspace-name">{{ workspace.info ? workspace.info.name : '无工作区' }}</span>
+    <span class="workspace-name">{{ workspace.info ? workspace.info.name : t('无工作区') }}</span>
     <span
       v-if="workspace.info?.remote"
       class="remote-badge"
@@ -40,10 +41,10 @@ const runState = computed(() => (chat.sending ? '生成中' : '空闲'))
       type="button"
       class="toggle"
       data-testid="status-toggle"
-      :title="settings.statusExpanded ? '收起状态栏 (Ctrl+J)' : '展开状态栏 (Ctrl+J)'"
+      :title="settings.statusExpanded ? t('收起状态栏 (Ctrl+J)') : t('展开状态栏 (Ctrl+J)')"
       @click="settings.setStatusExpanded(!settings.statusExpanded)"
     >
-      {{ settings.statusExpanded ? '收起' : '展开' }}
+      {{ settings.statusExpanded ? t('收起') : t('展开') }}
     </button>
   </footer>
 </template>

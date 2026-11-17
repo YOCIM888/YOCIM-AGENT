@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, ref } from 'vue'
 import { useDebugStore } from '../stores/debug'
 import CollapsibleSection from './CollapsibleSection.vue'
@@ -30,13 +31,13 @@ async function applyCondition(id: string): Promise<void> {
 
 <template>
   <CollapsibleSection
-    title="断点"
+    :title="t('断点')"
     section="debugBreakpoints"
     testid="debug-breakpoints"
     :count="breakpointCount"
   >
     <div v-if="!breakpointCount" class="hint" data-testid="debug-breakpoints-empty">
-      在编辑器左侧点击行号槽位添加断点；条件断点可在下方输入表达式
+      {{ t('在编辑器左侧点击行号槽位添加断点；条件断点可在下方输入表达式') }}
     </div>
     <ul v-else class="bp-list">
       <li
@@ -45,14 +46,14 @@ async function applyCondition(id: string): Promise<void> {
         class="bp-row"
         :data-testid="`debug-breakpoint-${bp.id}`"
       >
-        <span class="bp-dot" :class="{ verified: bp.verified }" title="断点"></span>
+        <span class="bp-dot" :class="{ verified: bp.verified }" :title="t('断点')"></span>
         <span class="bp-path" :title="bp.relativePath">
           {{ baseName(bp.relativePath) }}:{{ bp.line }}
         </span>
         <input
           type="text"
           class="bp-condition"
-          placeholder="条件"
+          :placeholder="t('条件')"
           :value="conditionOf(bp.id, bp.condition)"
           :data-testid="`debug-breakpoint-condition-${bp.id}`"
           @input="updateCondition(bp.id, ($event.target as HTMLInputElement).value)"
@@ -62,7 +63,7 @@ async function applyCondition(id: string): Promise<void> {
         <button
           type="button"
           class="remove"
-          title="删除断点"
+          :title="t('删除断点')"
           :data-testid="`debug-breakpoint-remove-${bp.id}`"
           @click="debug.removeBreakpoint(bp.id)"
         >

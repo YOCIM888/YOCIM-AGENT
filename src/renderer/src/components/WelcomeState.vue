@@ -1,7 +1,11 @@
+<script setup lang="ts">
+import { t } from '../i18n'
+</script>
+
 <template>
   <section class="welcome" data-testid="welcome-state">
     <img class="welcome-logo" src="/image/yocim.png" alt="YOCIM" />
-    <h1>YOCIM AGENT 让想法落地</h1>
+    <h1>{{ t('YOCIM AGENT 让想法落地') }}</h1>
   </section>
 </template>
 

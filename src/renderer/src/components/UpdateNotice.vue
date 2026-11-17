@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { onUnmounted, watch } from 'vue'
 import { useUpdateStore } from '../stores/update'
 
@@ -21,22 +22,24 @@ onUnmounted(() => {
 <template>
   <div v-if="store.info" class="overlay">
     <section class="notice" data-testid="update-notice">
-      <h2>发现新版本</h2>
+      <h2>{{ t('发现新版本') }}</h2>
       <p class="version" data-testid="update-version">
         v{{ store.info.version }}
         <span v-if="store.info.assetName" class="asset">{{ store.info.assetName }}</span>
       </p>
       <p v-if="store.info.notes" class="notes" data-testid="update-notes">{{ store.info.notes }}</p>
-      <p class="hint">点击「更新」会在浏览器中打开当前系统的安装包下载页。</p>
+      <p class="hint">{{ t('点击「更新」会在浏览器中打开当前系统的安装包下载页。') }}</p>
       <div class="actions">
-        <button type="button" data-testid="update-cancel" @click="store.dismiss()">取消</button>
+        <button type="button" data-testid="update-cancel" @click="store.dismiss()">
+          {{ t('取消') }}
+        </button>
         <button
           type="button"
           class="primary"
           data-testid="update-confirm"
           @click="store.openDownload()"
         >
-          更新
+          {{ t('更新') }}
         </button>
       </div>
     </section>

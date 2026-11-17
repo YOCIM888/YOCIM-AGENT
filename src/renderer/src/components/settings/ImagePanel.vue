@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../i18n'
 import { computed, onMounted, ref } from 'vue'
 import {
   IMAGE_PROVIDERS,
@@ -83,28 +84,30 @@ onMounted(async () => {
   <div class="sp-panel">
     <section class="sp-section">
       <div class="sp-section-head">
-        <h3 class="sp-section-title">AI 生图</h3>
+        <h3 class="sp-section-title">{{ t('AI 生图') }}</h3>
         <label class="sp-check">
           <input v-model="enabled" type="checkbox" data-testid="image-enabled" />
-          允许 Agent 生图
+          {{ t('允许 Agent 生图') }}
         </label>
       </div>
       <p class="sp-section-sub">
-        开启后 Agent 会多出一个
-        <code>generate_image</code> 工具，用来根据文字描述生成图片并在对话里展示。
-        默认使用智谱免费模型 <code>cogview-3-flash</code>（仍需在<a
+        {{ t('开启后 Agent 会多出一个') }}
+        <code>generate_image</code>
+        {{ t('工具，用来根据文字描述生成图片并在对话里展示。 默认使用智谱免费模型') }}
+        <code>cogview-3-flash</code>{{ t('（仍需在')
+        }}<a
           href="https://bigmodel.cn/usercenter/proj-mgmt/apikeys"
           target="_blank"
           rel="noreferrer"
-          >智谱开放平台</a
-        >申请 API Key）；也可用环境变量 <code>ZHIPU_API_KEY</code>。
+          >{{ t('智谱开放平台') }}</a
+        >{{ t('申请 API Key）；也可用环境变量') }} <code>ZHIPU_API_KEY</code>。
       </p>
 
       <label class="sp-field">
-        <span>服务来源</span>
+        <span>{{ t('服务来源') }}</span>
         <select :value="provider" data-testid="image-provider" @change="onProviderChange">
           <option v-for="item in IMAGE_PROVIDERS" :key="item" :value="item">
-            {{ IMAGE_PROVIDER_LABELS[item] }}
+            {{ t(IMAGE_PROVIDER_LABELS[item]) }}
           </option>
         </select>
       </label>
@@ -115,29 +118,29 @@ onMounted(async () => {
           v-model="apiKey"
           type="password"
           data-testid="image-api-key"
-          :placeholder="hasKey ? '已保存（留空不修改）' : '填入智谱 API Key'"
+          :placeholder="hasKey ? t('已保存（留空不修改）') : t('填入智谱 API Key')"
         />
       </label>
 
       <div class="sp-row">
         <label class="sp-check">
           <input v-model="clearKey" type="checkbox" data-testid="image-clear-key" />
-          清除已保存的 Key
+          {{ t('清除已保存的 Key') }}
         </label>
         <span class="key-state" :class="{ ok: hasKey }">
-          {{ hasKey ? '已配置' : '未配置' }}
+          {{ hasKey ? t('已配置') : t('未配置') }}
         </span>
       </div>
     </section>
 
     <section v-if="isCustom" class="sp-section">
-      <h3 class="sp-section-title">自定义生图 API</h3>
+      <h3 class="sp-section-title">{{ t('自定义生图 API') }}</h3>
       <p class="sp-section-sub">
-        兼容 OpenAI 图像生成格式（<code>POST</code> + <code>Bearer</code> 认证，响应含
-        <code>data[].url</code>）的服务可在此接入。
+        {{ t('兼容 OpenAI 图像生成格式（') }}<code>POST</code> + <code>Bearer</code>
+        {{ t('认证，响应含') }} <code>data[].url</code>{{ t('）的服务可在此接入。') }}
       </p>
       <label class="sp-field">
-        <span>请求地址</span>
+        <span>{{ t('请求地址') }}</span>
         <input
           v-model="baseUrl"
           type="text"
@@ -146,24 +149,26 @@ onMounted(async () => {
         />
       </label>
       <label class="sp-field">
-        <span>模型名</span>
-        <input v-model="model" type="text" data-testid="image-model" placeholder="模型编码" />
+        <span>{{ t('模型名') }}</span>
+        <input v-model="model" type="text" data-testid="image-model" :placeholder="t('模型编码')" />
       </label>
     </section>
 
     <section class="sp-section">
-      <h3 class="sp-section-title">生图参数</h3>
+      <h3 class="sp-section-title">{{ t('生图参数') }}</h3>
       <label class="sp-field">
-        <span>默认分辨率</span>
+        <span>{{ t('默认分辨率') }}</span>
         <select v-model="size" data-testid="image-size">
           <option v-for="item in IMAGE_SIZES" :key="item" :value="item">{{ item }}</option>
         </select>
       </label>
-      <p class="sp-hint">分辨率也可由 Agent 在单次生成时指定；自定义 API 同样支持上述枚举值。</p>
+      <p class="sp-hint">
+        {{ t('分辨率也可由 Agent 在单次生成时指定；自定义 API 同样支持上述枚举值。') }}
+      </p>
     </section>
 
-    <p v-if="store.error" class="sp-error">{{ store.error }}</p>
-    <p v-if="saved" class="sp-notice">已保存</p>
+    <p v-if="store.error" class="sp-error">{{ t(store.error) }}</p>
+    <p v-if="saved" class="sp-notice">{{ t('已保存') }}</p>
 
     <div class="sp-actions">
       <button
@@ -173,7 +178,7 @@ onMounted(async () => {
         data-testid="image-save"
         @click="save"
       >
-        保存生图设置
+        {{ t('保存生图设置') }}
       </button>
     </div>
   </div>

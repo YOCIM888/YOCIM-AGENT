@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 withDefaults(
   defineProps<{
     title: string
@@ -7,7 +8,7 @@ withDefaults(
     danger?: boolean
     testid?: string
   }>(),
-  { confirmLabel: '确定', danger: false, testid: 'confirm-dialog' }
+  { confirmLabel: t('确定'), danger: false, testid: 'confirm-dialog' }
 )
 
 const emit = defineEmits<{
@@ -22,7 +23,9 @@ const emit = defineEmits<{
       <h2>{{ title }}</h2>
       <p class="message">{{ message }}</p>
       <div class="actions">
-        <button type="button" data-testid="confirm-cancel" @click="emit('close')">取消</button>
+        <button type="button" data-testid="confirm-cancel" @click="emit('close')">
+          {{ t('取消') }}
+        </button>
         <button
           type="button"
           class="primary"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import type { ProviderBalance } from '@shared/billing'
 import { PRICING_CURRENCIES, type ModelPricing } from '@shared/settings'
@@ -62,7 +63,7 @@ function addRow(): void {
     (row) => row.providerId === newProviderId.value && row.model === newModel.value
   )
   if (exists) {
-    localError.value = '该模型已经在价格表里了'
+    localError.value = t('该模型已经在价格表里了')
     return
   }
   localError.value = ''
@@ -122,12 +123,15 @@ onMounted(async () => {
   <div class="sp-panel">
     <section class="sp-section">
       <div class="sp-section-head">
-        <h3 class="sp-section-title">账户余额</h3>
-        <span class="muted">DeepSeek 官方接口</span>
+        <h3 class="sp-section-title">{{ t('账户余额') }}</h3>
+        <span class="muted">{{ t('DeepSeek 官方接口') }}</span>
       </div>
       <p class="sp-section-sub">
-        DeepSeek 提供官方的余额查询接口；其他 Provider
-        暂不支持自动查询，可在下面填写单价自行估算花费。
+        {{
+          t(
+            'DeepSeek 提供官方的余额查询接口；其他 Provider 暂不支持自动查询，可在下面填写单价自行估算花费。'
+          )
+        }}
       </p>
 
       <div v-if="billableProviders.length" class="sp-row align-end">
@@ -146,37 +150,41 @@ onMounted(async () => {
           data-testid="billing-balance-refresh"
           @click="queryBalance"
         >
-          {{ balanceLoading ? '查询中…' : '查询余额' }}
+          {{ balanceLoading ? t('查询中…') : t('查询余额') }}
         </button>
       </div>
       <p v-else class="sp-hint">
-        目前只有内置的 Mock 模型。先到「模型」页添加一个真实 Provider，才能查询余额并统计花费。
+        {{
+          t(
+            '目前只有内置的 Mock 模型。先到「模型」页添加一个真实 Provider，才能查询余额并统计花费。'
+          )
+        }}
       </p>
 
       <div v-if="balance" class="balance-card" data-testid="billing-balance">
         <template v-if="balance.error">
-          <p class="sp-error">{{ balance.error }}</p>
+          <p class="sp-error">{{ t(balance.error) }}</p>
         </template>
         <template v-else-if="!balance.supported">
-          <p class="sp-hint">「{{ balance.providerName }}」暂未接入余额查询接口。</p>
+          <p class="sp-hint">「{{ balance.providerName }}{{ t('」暂未接入余额查询接口。') }}</p>
         </template>
         <template v-else>
           <div class="balance-main">
-            <span class="balance-label">总余额</span>
+            <span class="balance-label">{{ t('总余额') }}</span>
             <span class="balance-value" data-testid="billing-balance-total">
               {{ balance.currency === 'CNY' ? '¥' : '$' }}
               {{ balance.totalBalance?.toFixed(2) ?? '—' }}
               <em>{{ balance.currency }}</em>
             </span>
             <span class="balance-state" :class="{ low: balance.isAvailable === false }">
-              {{ balance.isAvailable === false ? '余额不足' : '可用' }}
+              {{ balance.isAvailable === false ? t('余额不足') : t('可用') }}
             </span>
           </div>
           <div class="balance-detail">
-            <span>赠金 {{ balance.grantedBalance?.toFixed(2) ?? '—' }}</span>
-            <span>充值 {{ balance.toppedUpBalance?.toFixed(2) ?? '—' }}</span>
+            <span>{{ t('赠金') }} {{ balance.grantedBalance?.toFixed(2) ?? '—' }}</span>
+            <span>{{ t('充值') }} {{ balance.toppedUpBalance?.toFixed(2) ?? '—' }}</span>
             <span v-if="balance.balances.length > 1">
-              共 {{ balance.balances.length }} 个币种账户
+              {{ t('共') }} {{ balance.balances.length }} {{ t('个币种账户') }}
             </span>
           </div>
         </template>
@@ -185,35 +193,35 @@ onMounted(async () => {
 
     <section class="sp-section">
       <div class="sp-section-head">
-        <h3 class="sp-section-title">用量与费用</h3>
+        <h3 class="sp-section-title">{{ t('用量与费用') }}</h3>
         <label class="sp-field inline">
-          <span>统计范围</span>
+          <span>{{ t('统计范围') }}</span>
           <select v-model.number="rangeDays" data-testid="billing-range">
-            <option :value="0">全部</option>
-            <option :value="7">最近 7 天</option>
-            <option :value="30">最近 30 天</option>
-            <option :value="90">最近 90 天</option>
+            <option :value="0">{{ t('全部') }}</option>
+            <option :value="7">{{ t('最近 7 天') }}</option>
+            <option :value="30">{{ t('最近 30 天') }}</option>
+            <option :value="90">{{ t('最近 90 天') }}</option>
           </select>
         </label>
       </div>
 
       <div class="stat-grid">
         <div class="stat">
-          <span class="stat-label">输入 token</span>
+          <span class="stat-label">{{ t('输入 token') }}</span>
           <span class="stat-value">{{ formatTokens(summary?.totalInputTokens ?? 0) }}</span>
         </div>
         <div class="stat">
-          <span class="stat-label">输出 token</span>
+          <span class="stat-label">{{ t('输出 token') }}</span>
           <span class="stat-value">{{ formatTokens(summary?.totalOutputTokens ?? 0) }}</span>
         </div>
         <div class="stat">
-          <span class="stat-label">模型调用</span>
+          <span class="stat-label">{{ t('模型调用') }}</span>
           <span class="stat-value">{{ formatNumber(summary?.totalCalls ?? 0) }}</span>
         </div>
         <div class="stat">
-          <span class="stat-label">预估费用</span>
+          <span class="stat-label">{{ t('预估费用') }}</span>
           <span class="stat-value" data-testid="billing-total-cost">
-            {{ summary?.mixedCurrency ? '多币种' : formatMoney(summary?.totalCost ?? 0, 'USD') }}
+            {{ summary?.mixedCurrency ? t('多币种') : formatMoney(summary?.totalCost ?? 0, 'USD') }}
           </span>
         </div>
       </div>
@@ -221,11 +229,11 @@ onMounted(async () => {
       <table v-if="summary?.items.length" class="sp-table">
         <thead>
           <tr>
-            <th>Provider / 模型</th>
-            <th class="num">输入</th>
-            <th class="num">输出</th>
-            <th class="num">调用</th>
-            <th class="num">预估费用</th>
+            <th>{{ t('Provider / 模型') }}</th>
+            <th class="num">{{ t('输入') }}</th>
+            <th class="num">{{ t('输出') }}</th>
+            <th class="num">{{ t('调用') }}</th>
+            <th class="num">{{ t('预估费用') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -239,35 +247,39 @@ onMounted(async () => {
             <td class="num">{{ formatNumber(item.calls) }}</td>
             <td class="num">
               <span v-if="item.cost !== null">{{ formatMoney(item.cost, item.currency) }}</span>
-              <span v-else class="unpriced">未设单价</span>
+              <span v-else class="unpriced">{{ t('未设单价') }}</span>
             </td>
           </tr>
         </tbody>
       </table>
-      <p v-else class="sp-empty">还没有用量记录——发一次对话后这里就会出现统计。</p>
+      <p v-else class="sp-empty">{{ t('还没有用量记录——发一次对话后这里就会出现统计。') }}</p>
 
       <p v-if="summary?.unpricedItems" class="sp-hint">
-        有 {{ summary.unpricedItems }} 个模型还没设置单价，补上后这里会显示估算费用。
+        {{
+          t('有 {count} 个模型还没设置单价，补上后这里会显示估算费用。', {
+            count: summary.unpricedItems
+          })
+        }}
       </p>
     </section>
 
     <section class="sp-section">
       <div class="sp-section-head">
-        <h3 class="sp-section-title">模型价格</h3>
-        <span class="muted">每百万 token</span>
+        <h3 class="sp-section-title">{{ t('模型价格') }}</h3>
+        <span class="muted">{{ t('每百万 token') }}</span>
       </div>
       <p class="sp-section-sub">
-        手动填写各模型的输入 / 输出单价，费用估算就是「token 用量 × 单价」。
+        {{ t('手动填写各模型的输入 / 输出单价，费用估算就是「token 用量 × 单价」。') }}
       </p>
 
       <table v-if="rows.length" class="sp-table">
         <thead>
           <tr>
             <th>Provider</th>
-            <th>模型</th>
-            <th class="num">输入价</th>
-            <th class="num">输出价</th>
-            <th>币种</th>
+            <th>{{ t('模型') }}</th>
+            <th class="num">{{ t('输入价') }}</th>
+            <th class="num">{{ t('输出价') }}</th>
+            <th>{{ t('币种') }}</th>
             <th></th>
           </tr>
         </thead>
@@ -306,12 +318,14 @@ onMounted(async () => {
               </select>
             </td>
             <td>
-              <button type="button" class="sp-btn sm ghost" @click="removeRow(index)">移除</button>
+              <button type="button" class="sp-btn sm ghost" @click="removeRow(index)">
+                {{ t('移除') }}
+              </button>
             </td>
           </tr>
         </tbody>
       </table>
-      <p v-else class="sp-empty">还没有配置任何价格。</p>
+      <p v-else class="sp-empty">{{ t('还没有配置任何价格。') }}</p>
 
       <div v-if="billableProviders.length" class="sp-row align-end">
         <label class="sp-field">
@@ -323,19 +337,19 @@ onMounted(async () => {
           </select>
         </label>
         <label class="sp-field">
-          <span>模型</span>
+          <span>{{ t('模型') }}</span>
           <select v-model="newModel" data-testid="billing-new-model">
-            <option value="">选择模型…</option>
+            <option value="">{{ t('选择模型…') }}</option>
             <option v-for="model in newProvider?.models ?? []" :key="model" :value="model">
               {{ model }}
             </option>
           </select>
         </label>
         <button type="button" class="sp-btn" data-testid="billing-add-price" @click="addRow">
-          添加
+          {{ t('添加') }}
         </button>
       </div>
-      <p v-else class="sp-hint">添加真实 Provider 后即可为它的模型填写单价。</p>
+      <p v-else class="sp-hint">{{ t('添加真实 Provider 后即可为它的模型填写单价。') }}</p>
 
       <div class="sp-row">
         <button
@@ -345,14 +359,14 @@ onMounted(async () => {
           data-testid="billing-save-pricing"
           @click="savePricing"
         >
-          保存价格表
+          {{ t('保存价格表') }}
         </button>
-        <span v-if="saved" class="sp-notice">已保存</span>
+        <span v-if="saved" class="sp-notice">{{ t('已保存') }}</span>
       </div>
     </section>
 
     <p v-if="localError" class="sp-error">{{ localError }}</p>
-    <p v-if="store.error" class="sp-error">{{ store.error }}</p>
+    <p v-if="store.error" class="sp-error">{{ t(store.error) }}</p>
   </div>
 </template>
 

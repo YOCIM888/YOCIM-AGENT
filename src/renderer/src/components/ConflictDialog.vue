@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import type { FsConflictResolution } from '@shared/ipc'
 
 defineProps<{
@@ -14,8 +15,8 @@ const emit = defineEmits<{
 <template>
   <div class="overlay" @click.self="emit('close')">
     <section class="dialog" data-testid="conflict-dialog">
-      <h2>目标已存在</h2>
-      <p class="message">目标位置已存在「{{ name }}」。请选择处理方式：</p>
+      <h2>{{ t('目标已存在') }}</h2>
+      <p class="message">{{ t('目标位置已存在「') }}{{ name }}{{ t('」。请选择处理方式：') }}</p>
       <div class="options">
         <button
           type="button"
@@ -23,8 +24,8 @@ const emit = defineEmits<{
           data-testid="conflict-keep-both"
           @click="emit('resolve', 'keep-both')"
         >
-          <span class="option-title">保留两者</span>
-          <span class="option-desc">重命名新条目为「{{ name }} (2)」</span>
+          <span class="option-title">{{ t('保留两者') }}</span>
+          <span class="option-desc">{{ t('重命名新条目为「') }}{{ name }} (2)」</span>
         </button>
         <button
           type="button"
@@ -32,8 +33,8 @@ const emit = defineEmits<{
           data-testid="conflict-replace"
           @click="emit('resolve', 'replace')"
         >
-          <span class="option-title">替换</span>
-          <span class="option-desc">覆盖目标，源文件移入回收站</span>
+          <span class="option-title">{{ t('替换') }}</span>
+          <span class="option-desc">{{ t('覆盖目标，源文件移入回收站') }}</span>
         </button>
         <button
           type="button"
@@ -41,12 +42,14 @@ const emit = defineEmits<{
           data-testid="conflict-skip"
           @click="emit('resolve', 'skip')"
         >
-          <span class="option-title">跳过</span>
-          <span class="option-desc">不粘贴该条目</span>
+          <span class="option-title">{{ t('跳过') }}</span>
+          <span class="option-desc">{{ t('不粘贴该条目') }}</span>
         </button>
       </div>
       <div class="actions">
-        <button type="button" data-testid="conflict-cancel" @click="emit('close')">取消</button>
+        <button type="button" data-testid="conflict-cancel" @click="emit('close')">
+          {{ t('取消') }}
+        </button>
       </div>
     </section>
   </div>

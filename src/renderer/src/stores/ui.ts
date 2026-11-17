@@ -1,11 +1,18 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
+/** 设置弹窗页签 id，供外部指定初始页（首启引导直接进入模型页）。 */
+export type SettingsTabId =
+  'billing' | 'models' | 'search' | 'image' | 'appearance' | 'storage' | 'browser'
+
 /** 跨组件共享的纯 UI 状态：侧栏工具条与对应面板/弹窗 */
 export const useUiStore = defineStore('ui', () => {
   const terminalOpen = ref(false)
   const browserOpen = ref(false)
   const settingsOpen = ref(false)
+  const settingsInitialTab = ref<SettingsTabId>('models')
+  /** 首启引导打开模型页时，直接进入“添加提供商”，让 API Key 输入框可见。 */
+  const settingsGuideApiKey = ref(false)
   const conventionsOpen = ref(false)
   const commandsOpen = ref(false)
   const auditOpen = ref(false)
@@ -71,12 +78,15 @@ export const useUiStore = defineStore('ui', () => {
     terminalOpen.value = false
   }
 
-  function openSettings(): void {
+  function openSettings(tab: SettingsTabId = 'models', guideApiKey = false): void {
+    settingsInitialTab.value = tab
+    settingsGuideApiKey.value = guideApiKey
     settingsOpen.value = true
   }
 
   function closeSettings(): void {
     settingsOpen.value = false
+    settingsGuideApiKey.value = false
   }
 
   return {
@@ -84,6 +94,8 @@ export const useUiStore = defineStore('ui', () => {
     browserOpen,
     toolTab,
     settingsOpen,
+    settingsInitialTab,
+    settingsGuideApiKey,
     conventionsOpen,
     commandsOpen,
     auditOpen,

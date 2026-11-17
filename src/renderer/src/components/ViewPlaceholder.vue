@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import type { WorkspaceViewDef } from '../lib/workspaceViews'
 import WorkspaceViewIcon from './WorkspaceViewIcon.vue'
 
@@ -11,7 +12,7 @@ defineProps<{ view: WorkspaceViewDef }>()
       <WorkspaceViewIcon :name="view.key" />
     </div>
     <h2>{{ view.label }}</h2>
-    <span class="phase">{{ view.phase }} 阶段交付 · 尚未实现</span>
+    <span class="phase">{{ view.phase }} {{ t('阶段交付 · 尚未实现') }}</span>
     <ul v-if="view.summary?.length" class="summary">
       <li v-for="item in view.summary" :key="item">{{ item }}</li>
     </ul>

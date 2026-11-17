@@ -9,7 +9,7 @@ test('sidebar toolbar opens a themed workspace terminal and the settings dialog'
   const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-terminal-'))
   const workspaceDir = await mkdtemp(join(os.tmpdir(), 'yocim-terminal-ws-'))
   const app = await electron.launch({
-    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check']
+    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check', '--skip-language-onboarding']
   })
 
   try {

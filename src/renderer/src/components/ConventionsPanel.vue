@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { ConventionRecord } from '@shared/ipc'
 import { useProjectsStore } from '../stores/projects'
@@ -19,7 +20,7 @@ const projectId = computed(
     null
 )
 const projectName = computed(
-  () => projects.projects.find((project) => project.id === projectId.value)?.name ?? '当前项目'
+  () => projects.projects.find((project) => project.id === projectId.value)?.name ?? t('当前项目')
 )
 
 const record = ref<ConventionRecord | null>(null)
@@ -108,16 +109,19 @@ async function save(): Promise<void> {
     })
     if (stale(id, seq)) return
     if (!result.ok) {
-      showNotice('error', `保存失败：${result.error.message}`)
+      showNotice('error', t('保存失败：{error}', { error: result.error.message }))
       return
     }
     record.value = result.data
     draft.value = result.data.content
     generatedDraft.value = false
     mode.value = 'preview'
-    showNotice('success', '项目约定已保存')
+    showNotice('success', t('项目约定已保存'))
   } catch (error) {
-    showNotice('error', `保存失败：${error instanceof Error ? error.message : String(error)}`)
+    showNotice(
+      'error',
+      t('保存失败：{error}', { error: error instanceof Error ? error.message : String(error) })
+    )
   } finally {
     saving.value = false
   }
@@ -134,17 +138,20 @@ async function runGenerate(): Promise<void> {
     const result = await window.yocim.conventions.generate({ projectId: id })
     if (stale(id, seq)) return
     if (!result.ok) {
-      showNotice('error', `生成失败：${result.error.message}`)
+      showNotice('error', t('生成失败：{error}', { error: result.error.message }))
       return
     }
     draft.value = result.data.content
     generatedDraft.value = true
     mode.value = 'edit'
-    showNotice('success', '已生成草稿，请确认后保存')
+    showNotice('success', t('已生成草稿，请确认后保存'))
     await nextTick()
     editor.value?.focus()
   } catch (error) {
-    showNotice('error', `生成失败：${error instanceof Error ? error.message : String(error)}`)
+    showNotice(
+      'error',
+      t('生成失败：{error}', { error: error instanceof Error ? error.message : String(error) })
+    )
   } finally {
     generating.value = false
   }
@@ -169,15 +176,18 @@ async function remove(): Promise<void> {
     const result = await window.yocim.conventions.remove({ projectId: id })
     if (stale(id, seq)) return
     if (!result.ok) {
-      showNotice('error', `删除失败：${result.error.message}`)
+      showNotice('error', t('删除失败：{error}', { error: result.error.message }))
       return
     }
     record.value = null
     draft.value = ''
     mode.value = 'preview'
-    showNotice('success', '项目约定已删除')
+    showNotice('success', t('项目约定已删除'))
   } catch (error) {
-    showNotice('error', `删除失败：${error instanceof Error ? error.message : String(error)}`)
+    showNotice(
+      'error',
+      t('删除失败：{error}', { error: error instanceof Error ? error.message : String(error) })
+    )
   } finally {
     deleting.value = false
   }
@@ -190,10 +200,13 @@ async function copy(): Promise<void> {
     const result = await window.yocim.conventions.copy({ projectId: id })
     showNotice(
       result.ok ? 'success' : 'error',
-      result.ok ? '已复制项目约定' : `复制失败：${result.error.message}`
+      result.ok ? t('已复制项目约定') : t('复制失败：{error}', { error: result.error.message })
     )
   } catch (error) {
-    showNotice('error', `复制失败：${error instanceof Error ? error.message : String(error)}`)
+    showNotice(
+      'error',
+      t('复制失败：{error}', { error: error instanceof Error ? error.message : String(error) })
+    )
   }
 }
 
@@ -216,18 +229,18 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <div class="overlay" data-testid="conventions-panel" @click.self="emit('close')">
-      <section class="dialog" role="dialog" aria-label="项目约定">
+      <section class="dialog" role="dialog" :aria-label="t('项目约定')">
         <header class="dialog-head">
           <div class="head-title">
-            <h2>项目约定</h2>
+            <h2>{{ t('项目约定') }}</h2>
             <span class="project-chip" data-testid="conventions-project">{{ projectName }}</span>
           </div>
           <button
             type="button"
             class="icon-button"
             data-testid="conventions-close"
-            title="关闭"
-            aria-label="关闭项目约定"
+            :title="t('关闭')"
+            :aria-label="t('关闭项目约定')"
             @click="emit('close')"
           >
             ✕
@@ -235,34 +248,40 @@ onBeforeUnmount(() => {
         </header>
 
         <div v-if="record" class="meta">
-          <span class="source-chip">{{ record.source === 'ai' ? 'AI 生成' : '手动编辑' }}</span>
-          <span>更新于 {{ updatedLabel(record.updatedAt) }}</span>
+          <span class="source-chip">{{
+            record.source === 'ai' ? t('AI 生成') : t('手动编辑')
+          }}</span>
+          <span>{{ t('更新于') }} {{ updatedLabel(record.updatedAt) }}</span>
         </div>
 
         <p v-if="notice" class="notice" :class="notice.kind" data-testid="conventions-notice">
-          {{ notice.text }}
+          {{ t(notice.text) }}
         </p>
 
         <div class="dialog-body">
           <div v-if="!projectId" class="empty" data-testid="conventions-empty">
-            <p>请先打开一个项目，再为它创建项目约定。</p>
+            <p>{{ t('请先打开一个项目，再为它创建项目约定。') }}</p>
           </div>
           <div v-else-if="loading" class="empty" data-testid="conventions-loading">
-            正在加载项目约定…
+            {{ t('正在加载项目约定…') }}
           </div>
           <div v-else-if="loadError" class="empty error-state" data-testid="conventions-error">
-            <p>加载失败：{{ loadError }}</p>
-            <button type="button" data-testid="conventions-retry" @click="load()">重试</button>
+            <p>{{ t('加载失败：') }}{{ loadError }}</p>
+            <button type="button" data-testid="conventions-retry" @click="load()">
+              {{ t('重试') }}
+            </button>
           </div>
           <template v-else-if="mode === 'edit'">
-            <p v-if="generatedDraft" class="draft-banner">AI 草稿待确认，保存后才会替换原内容。</p>
+            <p v-if="generatedDraft" class="draft-banner">
+              {{ t('AI 草稿待确认，保存后才会替换原内容。') }}
+            </p>
             <textarea
               ref="editor"
               v-model="draft"
               class="editor"
               data-testid="conventions-editor"
               spellcheck="false"
-              placeholder="用 Markdown 写这个项目的约定…"
+              :placeholder="t('用 Markdown 写这个项目的约定…')"
             ></textarea>
           </template>
           <MarkdownMessage
@@ -271,8 +290,10 @@ onBeforeUnmount(() => {
             data-testid="conventions-preview"
           />
           <div v-else class="empty" data-testid="conventions-empty">
-            <p>这个项目还没有项目约定。</p>
-            <p class="empty-hint">生成一份结构化说明，或直接手动编写，方便其他 AI 快速接手。</p>
+            <p>{{ t('这个项目还没有项目约定。') }}</p>
+            <p class="empty-hint">
+              {{ t('生成一份结构化说明，或直接手动编写，方便其他 AI 快速接手。') }}
+            </p>
             <div class="empty-actions">
               <button
                 type="button"
@@ -281,10 +302,10 @@ onBeforeUnmount(() => {
                 :disabled="generating"
                 @click="requestGenerate()"
               >
-                {{ generating ? '生成中…' : 'AI 生成' }}
+                {{ generating ? t('生成中…') : t('AI 生成') }}
               </button>
               <button type="button" data-testid="conventions-edit-empty" @click="startEdit()">
-                手动编辑
+                {{ t('手动编辑') }}
               </button>
             </div>
           </div>
@@ -293,7 +314,7 @@ onBeforeUnmount(() => {
         <footer class="dialog-foot">
           <template v-if="mode === 'edit'">
             <button type="button" data-testid="conventions-cancel" @click="cancelEdit()">
-              取消编辑
+              {{ t('取消编辑') }}
             </button>
             <button
               type="button"
@@ -302,7 +323,7 @@ onBeforeUnmount(() => {
               :disabled="saving || !draft.trim() || !projectId"
               @click="save()"
             >
-              {{ saving ? '保存中…' : '保存' }}
+              {{ saving ? t('保存中…') : t('保存') }}
             </button>
           </template>
           <template v-else>
@@ -312,7 +333,7 @@ onBeforeUnmount(() => {
               :disabled="!projectId || !!loadError || loading"
               @click="startEdit()"
             >
-              编辑
+              {{ t('编辑') }}
             </button>
             <button
               type="button"
@@ -321,7 +342,7 @@ onBeforeUnmount(() => {
               :disabled="!projectId || generating || !!loadError || loading"
               @click="requestGenerate()"
             >
-              {{ generating ? '生成中…' : record?.content ? 'AI 更新约定' : 'AI 生成' }}
+              {{ generating ? t('生成中…') : record?.content ? t('AI 更新约定') : t('AI 生成') }}
             </button>
             <button
               type="button"
@@ -329,7 +350,7 @@ onBeforeUnmount(() => {
               :disabled="!record?.content"
               @click="copy()"
             >
-              复制
+              {{ t('复制') }}
             </button>
             <button
               type="button"
@@ -338,7 +359,7 @@ onBeforeUnmount(() => {
               :disabled="!record || deleting"
               @click="confirmKind = 'delete'"
             >
-              {{ deleting ? '删除中…' : '删除' }}
+              {{ deleting ? t('删除中…') : t('删除') }}
             </button>
           </template>
         </footer>
@@ -346,18 +367,22 @@ onBeforeUnmount(() => {
 
       <ConfirmDialog
         v-if="confirmKind === 'overwrite'"
-        title="覆盖现有项目约定"
-        message="AI 将基于当前项目上下文重新生成约定，保存后会覆盖现有内容。未保存的人工修改不会被保留。"
-        confirm-label="继续生成"
+        :title="t('覆盖现有项目约定')"
+        :message="
+          t(
+            'AI 将基于当前项目上下文重新生成约定，保存后会覆盖现有内容。未保存的人工修改不会被保留。'
+          )
+        "
+        :confirm-label="t('继续生成')"
         testid="conventions-overwrite-confirm"
         @close="confirmKind = null"
         @confirm="runGenerate()"
       />
       <ConfirmDialog
         v-if="confirmKind === 'delete'"
-        title="删除项目约定"
-        message="删除后当前项目的约定将进入空状态，且不可恢复；其他项目不受影响。"
-        confirm-label="删除约定"
+        :title="t('删除项目约定')"
+        :message="t('删除后当前项目的约定将进入空状态，且不可恢复；其他项目不受影响。')"
+        :confirm-label="t('删除约定')"
         danger
         testid="conventions-delete-confirm"
         @close="confirmKind = null"

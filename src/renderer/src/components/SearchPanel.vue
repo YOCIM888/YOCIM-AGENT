@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { watch } from 'vue'
 import type { SearchFileResult, SearchMatch } from '@shared/ipc'
 import { useSearchStore } from '../stores/search'
@@ -40,11 +41,11 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
 <template>
   <section class="search-panel" data-testid="search-panel">
     <div class="search-head">
-      <span class="title">搜索</span>
+      <span class="title">{{ t('搜索') }}</span>
       <button
         type="button"
         class="icon"
-        title="显示替换"
+        :title="t('显示替换')"
         data-testid="search-toggle-replace"
         :class="{ on: search.options.showReplace }"
         @click="search.setOption('showReplace', !search.options.showReplace)"
@@ -54,7 +55,7 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
       <button
         type="button"
         class="icon"
-        title="筛选选项"
+        :title="t('筛选选项')"
         data-testid="search-toggle-filters"
         :class="{ on: search.options.showFilters }"
         @click="search.setOption('showFilters', !search.options.showFilters)"
@@ -64,7 +65,7 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
       <button
         type="button"
         class="icon"
-        title="刷新搜索"
+        :title="t('刷新搜索')"
         data-testid="search-refresh"
         :disabled="!workspace.info"
         @click="search.startSearch()"
@@ -78,15 +79,15 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
         v-model="search.query"
         type="text"
         class="query-input"
-        placeholder="搜索工作区…"
+        :placeholder="t('搜索工作区…')"
         data-testid="search-input"
-        aria-label="搜索内容"
+        :aria-label="t('搜索内容')"
       />
       <button
         v-if="search.loading"
         type="button"
         class="cancel"
-        title="取消搜索"
+        :title="t('取消搜索')"
         data-testid="search-cancel"
         @click="search.cancelSearch()"
       >
@@ -99,7 +100,7 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
         type="button"
         class="toggle"
         :class="{ on: search.options.caseSensitive }"
-        title="区分大小写"
+        :title="t('区分大小写')"
         data-testid="search-option-case"
         @click="search.setOption('caseSensitive', !search.options.caseSensitive)"
       >
@@ -109,7 +110,7 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
         type="button"
         class="toggle"
         :class="{ on: search.options.wholeWord }"
-        title="全词匹配"
+        :title="t('全词匹配')"
         data-testid="search-option-word"
         @click="search.setOption('wholeWord', !search.options.wholeWord)"
       >
@@ -119,7 +120,7 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
         type="button"
         class="toggle"
         :class="{ on: search.options.useRegex }"
-        title="使用正则表达式"
+        :title="t('使用正则表达式')"
         data-testid="search-option-regex"
         @click="search.setOption('useRegex', !search.options.useRegex)"
       >
@@ -132,15 +133,15 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
         v-model="search.replaceText"
         type="text"
         class="query-input"
-        placeholder="替换为…"
+        :placeholder="t('替换为…')"
         data-testid="search-replace-input"
-        aria-label="替换内容"
+        :aria-label="t('替换内容')"
       />
       <button
         type="button"
         class="toggle"
         :class="{ on: search.options.preserveCase }"
-        title="保留大小写"
+        :title="t('保留大小写')"
         data-testid="search-option-preserve-case"
         @click="search.setOption('preserveCase', !search.options.preserveCase)"
       >
@@ -149,18 +150,18 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
       <button
         type="button"
         class="replace-all"
-        title="全局替换（先预览）"
+        :title="t('全局替换（先预览）')"
         data-testid="search-replace-all"
         :disabled="!search.results.length || search.loading"
         @click="replaceAll"
       >
-        全部替换
+        {{ t('全部替换') }}
       </button>
     </div>
 
     <div v-if="search.options.showFilters" class="filters">
       <label>
-        包含
+        {{ t('包含') }}
         <input
           v-model="search.include"
           type="text"
@@ -169,7 +170,7 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
         />
       </label>
       <label>
-        排除
+        {{ t('排除') }}
         <input
           v-model="search.exclude"
           type="text"
@@ -184,7 +185,7 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
           data-testid="search-option-ignored"
           @change="search.setOption('includeIgnored', !search.options.includeIgnored)"
         />
-        包含忽略文件
+        {{ t('包含忽略文件') }}
       </label>
       <label class="check">
         <input
@@ -193,35 +194,35 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
           data-testid="search-option-open"
           @change="search.setOption('onlyOpenEditors', !search.options.onlyOpenEditors)"
         />
-        仅在打开文件中搜索
+        {{ t('仅在打开文件中搜索') }}
       </label>
     </div>
 
     <div class="status" data-testid="search-status">
-      <span v-if="search.loading">搜索中…</span>
+      <span v-if="search.loading">{{ t('搜索中…') }}</span>
       <span v-else-if="search.hasQuery">
-        {{ search.totalFiles }} 个文件 · {{ search.matchCount }} 处命中
+        {{ search.totalFiles }} {{ t('个文件 ·') }} {{ search.matchCount }} {{ t('处命中') }}
       </span>
-      <span v-else>输入关键字开始搜索</span>
+      <span v-else>{{ t('输入关键字开始搜索') }}</span>
     </div>
     <p v-if="search.truncated" class="warning" data-testid="search-truncated">
-      达到结果上限（5000 条），请收窄搜索条件
+      {{ t('达到结果上限（5000 条），请收窄搜索条件') }}
     </p>
     <p
       v-if="search.engine === 'builtin' && search.hasQuery"
       class="engine"
       data-testid="search-engine-notice"
     >
-      未检测到 ripgrep，已使用内置搜索；把 rg 放入 resources/ripgrep 可加速
+      {{ t('未检测到 ripgrep，已使用内置搜索；把 rg 放入 resources/ripgrep 可加速') }}
     </p>
-    <p v-if="search.notice" class="engine" data-testid="search-notice">{{ search.notice }}</p>
-    <p v-if="search.error" class="error" data-testid="search-error">{{ search.error }}</p>
+    <p v-if="search.notice" class="engine" data-testid="search-notice">{{ t(search.notice) }}</p>
+    <p v-if="search.error" class="error" data-testid="search-error">{{ t(search.error) }}</p>
     <p
       v-if="!search.results.length && !search.loading && search.hasQuery"
       class="empty"
       data-testid="search-empty"
     >
-      没有匹配结果
+      {{ t('没有匹配结果') }}
     </p>
 
     <div class="results">
@@ -246,7 +247,7 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
             v-if="search.options.showReplace"
             type="button"
             class="file-replace"
-            title="替换该文件内全部命中"
+            :title="t('替换该文件内全部命中')"
             :data-testid="`search-file-replace-${file.relativePath}`"
             @click="replaceFile(file)"
           >
@@ -271,7 +272,7 @@ function replaceMatch(file: SearchFileResult, match: SearchMatch): void {
               v-if="search.options.showReplace"
               type="button"
               class="match-replace"
-              title="仅替换这一处"
+              :title="t('仅替换这一处')"
               :data-testid="`search-result-replace-${match.line}-${match.column}`"
               @click="replaceMatch(file, match)"
             >

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { t } from '../i18n'
+import { computed, ref, watch } from 'vue'
 import type { TimelineEntry, TimelineSource } from '@shared/ipc'
 import { languageForPath } from '../lib/language'
 import { useWorkspaceStore } from '../stores/workspace'
@@ -12,11 +13,11 @@ const loading = ref(false)
 const error = ref('')
 const pendingRestore = ref<TimelineEntry | null>(null)
 
-const SOURCE_LABEL: Record<TimelineSource, string> = {
-  user: '用户',
+const SOURCE_LABEL = computed<Record<TimelineSource, string>>(() => ({
+  user: t('用户'),
   agent: 'Agent',
-  external: '外部'
-}
+  external: t('外部')
+}))
 
 async function load(): Promise<void> {
   const file = workspace.activeFile
@@ -87,17 +88,19 @@ async function confirmRestore(): Promise<void> {
 <template>
   <div class="timeline-wrap">
     <CollapsibleSection
-      title="时间线"
+      :title="t('时间线')"
       section="timeline"
       testid="timeline-section"
       :count="entries.length"
     >
       <p v-if="!workspace.activeFile" class="empty" data-testid="timeline-empty-file">
-        打开文件后显示历史
+        {{ t('打开文件后显示历史') }}
       </p>
-      <p v-else-if="loading" class="empty">加载中…</p>
-      <p v-else-if="error" class="empty error" data-testid="timeline-error">{{ error }}</p>
-      <p v-else-if="!entries.length" class="empty" data-testid="timeline-empty">暂无本地历史</p>
+      <p v-else-if="loading" class="empty">{{ t('加载中…') }}</p>
+      <p v-else-if="error" class="empty error" data-testid="timeline-error">{{ t(error) }}</p>
+      <p v-else-if="!entries.length" class="empty" data-testid="timeline-empty">
+        {{ t('暂无本地历史') }}
+      </p>
       <ul v-else class="entries">
         <li
           v-for="entry in entries"
@@ -108,7 +111,7 @@ async function confirmRestore(): Promise<void> {
           <button
             type="button"
             class="entry-main"
-            :title="`与当前文件对比 · ${formatTime(entry.createdAt)}`"
+            :title="t('与当前文件对比 · {time}', { time: formatTime(entry.createdAt) })"
             @click="openDiff(entry)"
           >
             <span class="source" :data-source="entry.source">{{ SOURCE_LABEL[entry.source] }}</span>
@@ -118,7 +121,7 @@ async function confirmRestore(): Promise<void> {
           <button
             type="button"
             class="restore"
-            title="恢复此版本"
+            :title="t('恢复此版本')"
             :data-testid="`timeline-restore-${entry.id}`"
             @click="pendingRestore = entry"
           >
@@ -129,9 +132,9 @@ async function confirmRestore(): Promise<void> {
     </CollapsibleSection>
     <ConfirmDialog
       v-if="pendingRestore"
-      title="恢复此版本"
-      message="恢复将覆盖当前文件内容，并自动生成新的快照。确定恢复吗？"
-      confirm-label="恢复此版本"
+      :title="t('恢复此版本')"
+      :message="t('恢复将覆盖当前文件内容，并自动生成新的快照。确定恢复吗？')"
+      :confirm-label="t('恢复此版本')"
       testid="restore-dialog"
       @confirm="confirmRestore"
       @close="pendingRestore = null"

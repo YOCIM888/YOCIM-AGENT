@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import type { ProjectSummary, SessionSummary } from '@shared/session'
 import { useSessionStore } from '../stores/session'
 
@@ -26,8 +27,8 @@ async function moveTo(projectId: string): Promise<void> {
 <template>
   <div class="overlay" @click.self="emit('close')">
     <section class="dialog" data-testid="move-dialog">
-      <h2>移动会话</h2>
-      <p class="subtitle">将「{{ session.title }}」移动到其他项目：</p>
+      <h2>{{ t('移动会话') }}</h2>
+      <p class="subtitle">{{ t('将「') }}{{ session.title }}{{ t('」移动到其他项目：') }}</p>
       <div class="project-list">
         <button
           v-for="project in projects.filter((item) => item.id !== session.projectId)"
@@ -44,11 +45,11 @@ async function moveTo(projectId: string): Promise<void> {
           v-if="projects.filter((item) => item.id !== session.projectId).length === 0"
           class="empty"
         >
-          暂无可迁移的其他项目。请先在顶部切换/添加工作区。
+          {{ t('暂无可迁移的其他项目。请先在顶部切换/添加工作区。') }}
         </p>
       </div>
       <div class="actions">
-        <button type="button" @click="emit('close')">取消</button>
+        <button type="button" @click="emit('close')">{{ t('取消') }}</button>
       </div>
     </section>
   </div>

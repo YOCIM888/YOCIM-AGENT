@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, ref } from 'vue'
 import { useDebugStore } from '../stores/debug'
 import { useWorkspaceStore } from '../stores/workspace'
@@ -35,13 +36,13 @@ function baseName(path: string): string {
 <template>
   <div class="inspector" data-testid="debug-inspector">
     <CollapsibleSection
-      title="变量"
+      :title="t('变量')"
       section="debugVariables"
       testid="debug-variables"
       :count="debug.scopes.length"
     >
       <div v-if="!debug.isPaused" class="hint" data-testid="debug-variables-idle">
-        命中断点后显示作用域与变量
+        {{ t('命中断点后显示作用域与变量') }}
       </div>
       <div v-else class="scope-list">
         <div v-for="scope in debug.scopes" :key="scope.variablesReference" class="scope">
@@ -52,7 +53,7 @@ function baseName(path: string): string {
     </CollapsibleSection>
 
     <CollapsibleSection
-      title="监视"
+      :title="t('监视')"
       section="debugWatches"
       testid="debug-watches"
       :count="debug.watchExpressions.length"
@@ -61,13 +62,15 @@ function baseName(path: string): string {
         <input
           v-model="watchInput"
           type="text"
-          placeholder="表达式，如 total + 1"
+          :placeholder="t('表达式，如 total + 1')"
           data-testid="debug-watch-input"
           @keydown.enter.prevent="addWatch"
         />
         <button type="button" data-testid="debug-watch-add" @click="addWatch">+</button>
       </div>
-      <div v-if="!debug.watchExpressions.length" class="hint">添加表达式后在暂停时求值</div>
+      <div v-if="!debug.watchExpressions.length" class="hint">
+        {{ t('添加表达式后在暂停时求值') }}
+      </div>
       <ul v-else class="watch-list">
         <li
           v-for="(result, index) in debug.watchResults"
@@ -82,7 +85,7 @@ function baseName(path: string): string {
           <button
             type="button"
             class="remove"
-            title="移除监视"
+            :title="t('移除监视')"
             :data-testid="`debug-watch-remove-${index}`"
             @click="debug.removeWatch(result.expression)"
           >
@@ -93,12 +96,12 @@ function baseName(path: string): string {
     </CollapsibleSection>
 
     <CollapsibleSection
-      title="调用堆栈"
+      :title="t('调用堆栈')"
       section="debugCallstack"
       testid="debug-callstack"
       :count="frameCount"
     >
-      <div v-if="!frameCount" class="hint">暂停后显示调用堆栈</div>
+      <div v-if="!frameCount" class="hint">{{ t('暂停后显示调用堆栈') }}</div>
       <ul v-else class="stack-list">
         <li
           v-for="(frame, index) in debug.frames"
@@ -110,7 +113,7 @@ function baseName(path: string): string {
         >
           <span class="stack-name">{{ frame.name }}</span>
           <span class="stack-location">
-            {{ frame.relativePath ? `${baseName(frame.relativePath)}:${frame.line}` : '内部帧' }}
+            {{ frame.relativePath ? `${baseName(frame.relativePath)}:${frame.line}` : t('内部帧') }}
           </span>
         </li>
       </ul>

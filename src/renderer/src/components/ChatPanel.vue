@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, nextTick, ref, watch } from 'vue'
 import type { ChatMessage } from '../stores/chat'
 import { useChatStore } from '../stores/chat'
@@ -26,9 +27,9 @@ const projectName = computed(() => {
 })
 
 const runState = computed(() => {
-  if (chat.pendingApprovals.length) return '等待审批'
-  if (chat.sending) return '生成中'
-  return '就绪'
+  if (chat.pendingApprovals.length) return t('等待审批')
+  if (chat.sending) return t('生成中')
+  return t('就绪')
 })
 
 const runTone = computed(() => {
@@ -53,9 +54,9 @@ function scrollToBottom(force = false): void {
 }
 
 function roleLabel(role: ChatMessage['role']): string {
-  if (role === 'user') return '我'
-  if (role === 'assistant') return '助手'
-  return '系统'
+  if (role === 'user') return t('我')
+  if (role === 'assistant') return t('助手')
+  return t('系统')
 }
 
 watch(
@@ -80,7 +81,7 @@ watch(
   <section class="chat" data-testid="chat-panel">
     <header class="chat-header">
       <div class="session-block">
-        <span class="session-title">{{ sessions.activeSession?.title ?? '新会话' }}</span>
+        <span class="session-title">{{ sessions.activeSession?.title ?? t('新会话') }}</span>
         <span v-if="projectName" class="project-chip">{{ projectName }}</span>
       </div>
       <div class="header-actions">
@@ -94,9 +95,11 @@ watch(
           :class="{ active: !settings.workspaceCollapsed }"
           data-testid="workspace-toggle"
           :title="
-            settings.workspaceCollapsed ? '展开工作区 (Ctrl+Shift+B)' : '折叠工作区 (Ctrl+Shift+B)'
+            settings.workspaceCollapsed
+              ? t('展开工作区 (Ctrl+Shift+B)')
+              : t('折叠工作区 (Ctrl+Shift+B)')
           "
-          :aria-label="settings.workspaceCollapsed ? '展开工作区' : '折叠工作区'"
+          :aria-label="settings.workspaceCollapsed ? t('展开工作区') : t('折叠工作区')"
           :aria-pressed="!settings.workspaceCollapsed"
           @click="settings.setWorkspaceCollapsed(!settings.workspaceCollapsed)"
         >
@@ -168,7 +171,7 @@ watch(
             <div v-if="message.error" class="error-card" data-testid="error-card">
               <div class="error-head">
                 <span class="error-icon">!</span>
-                <span>请求失败</span>
+                <span>{{ t('请求失败') }}</span>
               </div>
               <p class="error-message">{{ message.error.message }}</p>
               <button
@@ -178,7 +181,7 @@ watch(
                 data-testid="error-retry"
                 @click="chat.retry()"
               >
-                重试
+                {{ t('重试') }}
               </button>
             </div>
           </div>

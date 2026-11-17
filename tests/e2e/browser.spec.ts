@@ -10,7 +10,7 @@ test('lower tool deck switches terminal/browser with keep-alive and a shared hei
   const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-browser-'))
   const workspaceDir = await mkdtemp(join(os.tmpdir(), 'yocim-browser-ws-'))
   const app = await electron.launch({
-    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check']
+    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check', '--skip-language-onboarding']
   })
 
   try {
@@ -103,7 +103,7 @@ fetch('/api-probe').then(r => r.text());
   const port = typeof address === 'object' && address ? address.port : 0
 
   const app = await electron.launch({
-    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check']
+    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check', '--skip-language-onboarding']
   })
 
   try {

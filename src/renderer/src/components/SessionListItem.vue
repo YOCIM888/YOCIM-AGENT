@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, ref } from 'vue'
 import type { SessionSummary } from '@shared/session'
 import type { ContextMenuItem } from '../lib/menu'
@@ -25,27 +26,27 @@ const confirmingDelete = ref(false)
 const menu = ref<{ x: number; y: number } | null>(null)
 
 const menuItems = computed<ContextMenuItem[]>(() => [
-  { id: 'rename', label: '重命名', testid: 'session-rename' },
-  { id: 'export', label: '导出 Markdown', testid: 'session-export' },
+  { id: 'rename', label: t('重命名'), testid: 'session-rename' },
+  { id: 'export', label: t('导出 Markdown'), testid: 'session-export' },
   {
     id: 'pin',
-    label: props.session.pinnedAt ? '取消置顶' : '置顶',
+    label: props.session.pinnedAt ? t('取消置顶') : t('置顶'),
     testid: 'session-pin'
   },
   {
     id: 'archive',
-    label: props.session.archivedAt ? '取消归档' : '归档',
+    label: props.session.archivedAt ? t('取消归档') : t('归档'),
     testid: 'session-archive'
   },
   {
     id: 'move',
-    label: '移动到项目…',
+    label: t('移动到项目…'),
     testid: 'session-move',
     separatorBefore: true
   },
   {
     id: 'delete',
-    label: confirmingDelete.value ? '再次点击确认删除' : '删除会话',
+    label: confirmingDelete.value ? t('再次点击确认删除') : t('删除会话'),
     testid: 'session-delete',
     danger: true,
     separatorBefore: true
@@ -82,11 +83,11 @@ async function commitRename(): Promise<void> {
 async function exportSession(): Promise<void> {
   const result = await window.yocim.sessions.exportToFile({ sessionId: props.session.id })
   if (!result.ok) {
-    chat.appendSystem(`导出失败：${result.error.message}`, props.session.id)
+    chat.appendSystem(t('导出失败：{error}', { error: result.error.message }), props.session.id)
     return
   }
   if (result.data.path) {
-    chat.appendSystem(`已导出会话到：${result.data.path}`, props.session.id)
+    chat.appendSystem(t('已导出会话到：{path}', { path: result.data.path }), props.session.id)
   }
 }
 
@@ -150,14 +151,14 @@ async function selectMenu(id: string): Promise<void> {
         type="button"
         class="main"
         data-testid="session-item"
-        title="右键查看更多操作"
+        :title="t('右键查看更多操作')"
         @click="emit('select')"
       >
         <span v-if="session.pinnedAt" class="pin-mark">★</span>
         <span class="title">{{ session.title }}</span>
         <span class="meta">
           {{ formatTime(session.updatedAt) }}
-          <template v-if="session.archivedAt"> · 已归档</template>
+          <template v-if="session.archivedAt"> {{ t('· 已归档') }}</template>
         </span>
       </button>
 

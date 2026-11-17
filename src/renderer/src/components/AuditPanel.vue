@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { AuditEntry } from '@shared/audit'
 import { useAuditStore } from '../stores/audit'
@@ -32,9 +33,9 @@ function formatTime(ts: number): string {
 }
 
 function approvalLabel(value: AuditEntry['approval']): string {
-  if (value === 'approved') return '已批准'
-  if (value === 'denied') return '已拒绝'
-  return '免审批'
+  if (value === 'approved') return t('已批准')
+  if (value === 'denied') return t('已拒绝')
+  return t('免审批')
 }
 
 function scheduleKeyword(value: string): void {
@@ -104,7 +105,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="audit" data-testid="audit-panel">
     <div class="audit-head">
-      <span class="title">审计</span>
+      <span class="title">{{ t('审计') }}</span>
       <div class="scope">
         <button
           type="button"
@@ -113,7 +114,7 @@ onBeforeUnmount(() => {
           data-testid="audit-scope-session"
           @click="setScope('session')"
         >
-          当前会话
+          {{ t('当前会话') }}
         </button>
         <button
           type="button"
@@ -121,14 +122,14 @@ onBeforeUnmount(() => {
           data-testid="audit-scope-all"
           @click="setScope('all')"
         >
-          全部
+          {{ t('全部') }}
         </button>
       </div>
       <button
         type="button"
         class="icon"
         :class="{ on: audit.live }"
-        :title="audit.live ? '实时刷新中（点击暂停）' : '开启实时刷新'"
+        :title="audit.live ? t('实时刷新中（点击暂停）') : t('开启实时刷新')"
         data-testid="audit-live"
         @click="toggleLive"
       >
@@ -137,7 +138,7 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="icon"
-        title="刷新"
+        :title="t('刷新')"
         :disabled="audit.loading"
         data-testid="audit-refresh"
         @click="audit.refresh()"
@@ -149,19 +150,19 @@ onBeforeUnmount(() => {
     <div class="stats" data-testid="audit-stats">
       <div class="stat">
         <b data-testid="audit-stat-total">{{ audit.stats?.total ?? 0 }}</b>
-        <span>总调用</span>
+        <span>{{ t('总调用') }}</span>
       </div>
       <div class="stat danger">
         <b data-testid="audit-stat-failed">{{ audit.stats?.failed ?? 0 }}</b>
-        <span>失败</span>
+        <span>{{ t('失败') }}</span>
       </div>
       <div class="stat">
         <b data-testid="audit-stat-approved">{{ audit.stats?.approved ?? 0 }}</b>
-        <span>批准</span>
+        <span>{{ t('批准') }}</span>
       </div>
       <div class="stat danger">
         <b data-testid="audit-stat-denied">{{ audit.stats?.denied ?? 0 }}</b>
-        <span>拒绝</span>
+        <span>{{ t('拒绝') }}</span>
       </div>
     </div>
 
@@ -170,16 +171,16 @@ onBeforeUnmount(() => {
         :value="keywordInput"
         type="text"
         class="keyword"
-        placeholder="搜索工具 / 参数 / 结果"
+        :placeholder="t('搜索工具 / 参数 / 结果')"
         data-testid="audit-keyword"
-        aria-label="审计关键字"
+        :aria-label="t('审计关键字')"
         @input="scheduleKeyword(($event.target as HTMLInputElement).value)"
       />
       <button
         type="button"
         class="icon"
         :class="{ on: showFilters || audit.hasFilters }"
-        title="筛选"
+        :title="t('筛选')"
         data-testid="audit-filters-toggle"
         @click="showFilters = !showFilters"
       >
@@ -189,18 +190,18 @@ onBeforeUnmount(() => {
 
     <div v-if="showFilters" class="filters" data-testid="audit-filters">
       <label>
-        工具
+        {{ t('工具') }}
         <select
           :value="audit.tool"
           data-testid="audit-filter-tool"
           @change="audit.setFilter({ tool: ($event.target as HTMLSelectElement).value })"
         >
-          <option value="">全部</option>
+          <option value="">{{ t('全部') }}</option>
           <option v-for="name in audit.tools" :key="name" :value="name">{{ name }}</option>
         </select>
       </label>
       <label>
-        结果
+        {{ t('结果') }}
         <select
           :value="audit.result"
           data-testid="audit-filter-result"
@@ -210,13 +211,13 @@ onBeforeUnmount(() => {
             })
           "
         >
-          <option value="">全部</option>
-          <option value="ok">成功</option>
-          <option value="failed">失败</option>
+          <option value="">{{ t('全部') }}</option>
+          <option value="ok">{{ t('成功') }}</option>
+          <option value="failed">{{ t('失败') }}</option>
         </select>
       </label>
       <label>
-        审批
+        {{ t('审批') }}
         <select
           :value="audit.approval"
           data-testid="audit-filter-approval"
@@ -227,14 +228,14 @@ onBeforeUnmount(() => {
             })
           "
         >
-          <option value="">全部</option>
-          <option value="not_required">免审批</option>
-          <option value="approved">已批准</option>
-          <option value="denied">已拒绝</option>
+          <option value="">{{ t('全部') }}</option>
+          <option value="not_required">{{ t('免审批') }}</option>
+          <option value="approved">{{ t('已批准') }}</option>
+          <option value="denied">{{ t('已拒绝') }}</option>
         </select>
       </label>
       <label>
-        时间
+        {{ t('时间') }}
         <select
           :value="audit.range"
           data-testid="audit-filter-range"
@@ -244,9 +245,9 @@ onBeforeUnmount(() => {
             })
           "
         >
-          <option value="all">全部</option>
-          <option value="today">今天</option>
-          <option value="week">最近 7 天</option>
+          <option value="all">{{ t('全部') }}</option>
+          <option value="today">{{ t('今天') }}</option>
+          <option value="week">{{ t('最近 7 天') }}</option>
         </select>
       </label>
       <button
@@ -261,7 +262,7 @@ onBeforeUnmount(() => {
           }
         "
       >
-        重置筛选
+        {{ t('重置筛选') }}
       </button>
     </div>
 
@@ -289,11 +290,13 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <p v-if="audit.error" class="error" data-testid="audit-error">{{ audit.error }}</p>
-    <p v-else-if="audit.notice" class="notice" data-testid="audit-notice">{{ audit.notice }}</p>
+    <p v-if="audit.error" class="error" data-testid="audit-error">{{ t(audit.error) }}</p>
+    <p v-else-if="audit.notice" class="notice" data-testid="audit-notice">{{ t(audit.notice) }}</p>
 
-    <p v-if="audit.loading" class="empty">加载中…</p>
-    <p v-else-if="!audit.entries.length" class="empty" data-testid="audit-empty">暂无审计记录。</p>
+    <p v-if="audit.loading" class="empty">{{ t('加载中…') }}</p>
+    <p v-else-if="!audit.entries.length" class="empty" data-testid="audit-empty">
+      {{ t('暂无审计记录。') }}
+    </p>
     <ul v-else class="list">
       <li
         v-for="entry in audit.entries"
@@ -322,7 +325,7 @@ onBeforeUnmount(() => {
     >
       {{
         audit.loadingMore
-          ? '加载中…'
+          ? t('加载中…')
           : `加载更多（已显示 ${audit.entries.length} / ${audit.total}）`
       }}
     </button>
