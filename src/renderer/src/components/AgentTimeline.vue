@@ -4,7 +4,7 @@ import type { ApprovalDecision } from '@shared/approval'
 import type { AgentStep } from '../lib/agentSteps'
 import { hasPendingApproval } from '../lib/agentSteps'
 import {
-  approvalStatusLabel,
+  approvalDecisionLabel,
   formatDuration,
   stepDuration,
   stepStatusLabel,
@@ -108,6 +108,10 @@ function detailOf(step: AgentStep): string {
 
 function riskLabel(risk: 'medium' | 'high'): string {
   return risk === 'high' ? '高风险' : '中风险'
+}
+
+function isBlocked(step: AgentStep): boolean {
+  return (requestOf(step)?.kind ?? step.approval?.kind) === 'blocked'
 }
 
 function respond(step: AgentStep, decision: ApprovalDecision): void {
@@ -233,7 +237,9 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
           >
             <div class="approval-title">
               <span class="approval-mark" aria-hidden="true">!</span>
-              <span class="approval-name">需要审批 · {{ step.name }}</span>
+              <span class="approval-name"
+                >{{ isBlocked(step) ? '命令被拦截 · ' : '需要审批 · ' }}{{ step.name }}</span
+              >
               <span class="risk">{{ riskLabel(step.approval.risk) }}</span>
             </div>
             <p class="approval-args">{{ step.argsSummary }}</p>
@@ -261,34 +267,56 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
             </div>
 
             <div v-if="step.approval.status === 'pending'" class="approval-actions">
-              <button
-                type="button"
-                class="approve"
-                data-testid="approval-approve"
-                @click="respond(step, 'approve')"
-              >
-                批准
-              </button>
-              <button
-                v-if="requestOf(step)?.canAllowAlways"
-                type="button"
-                class="allow"
-                data-testid="approval-allow-session"
-                title="本会话内同类操作不再询问（白名单与危险命令拦截仍然生效）"
-                @click="respond(step, 'approve_session')"
-              >
-                会话内允许
-              </button>
-              <button
-                v-if="requestOf(step)?.canAllowAlways"
-                type="button"
-                class="allow"
-                data-testid="approval-allow-project"
-                title="本项目内同类操作不再询问（持久化，白名单与危险命令拦截仍然生效）"
-                @click="respond(step, 'approve_project')"
-              >
-                项目内允许
-              </button>
+              <template v-if="isBlocked(step)">
+                <button
+                  type="button"
+                  class="approve"
+                  data-testid="approval-allow-once"
+                  title="只放行这一次命令，不写入白名单"
+                  @click="respond(step, 'allow_once')"
+                >
+                  允许一次
+                </button>
+                <button
+                  type="button"
+                  class="allow"
+                  data-testid="approval-allow-whitelist"
+                  title="把这条命令加入白名单，并放行本次执行"
+                  @click="respond(step, 'allow_whitelist')"
+                >
+                  加入白名单
+                </button>
+              </template>
+              <template v-else>
+                <button
+                  type="button"
+                  class="approve"
+                  data-testid="approval-approve"
+                  @click="respond(step, 'approve')"
+                >
+                  批准
+                </button>
+                <button
+                  v-if="requestOf(step)?.canAllowAlways"
+                  type="button"
+                  class="allow"
+                  data-testid="approval-allow-session"
+                  title="本会话内同类操作不再询问（白名单与危险命令拦截仍然生效）"
+                  @click="respond(step, 'approve_session')"
+                >
+                  会话内允许
+                </button>
+                <button
+                  v-if="requestOf(step)?.canAllowAlways"
+                  type="button"
+                  class="allow"
+                  data-testid="approval-allow-project"
+                  title="本项目内同类操作不再询问（持久化，白名单与危险命令拦截仍然生效）"
+                  @click="respond(step, 'approve_project')"
+                >
+                  项目内允许
+                </button>
+              </template>
               <button
                 type="button"
                 class="deny"
@@ -299,7 +327,7 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
               </button>
             </div>
             <p v-else class="decision" :class="step.approval.status">
-              {{ approvalStatusLabel(step.approval.status) }}
+              {{ approvalDecisionLabel(step.approval.status, step.approval.decision) }}
             </p>
           </div>
         </div>

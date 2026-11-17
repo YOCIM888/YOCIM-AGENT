@@ -1,3 +1,4 @@
+import type { ApprovalDecision } from '@shared/approval'
 import type { AgentStep } from './agentSteps'
 
 /**
@@ -72,4 +73,18 @@ export function approvalStatusLabel(status: 'pending' | 'approved' | 'denied'): 
   if (status === 'approved') return '已批准'
   if (status === 'denied') return '已拒绝'
   return '待审批'
+}
+
+/** 审批卡收口文案：区分「仅本次」与「已记住」的决定。 */
+export function approvalDecisionLabel(
+  status: 'pending' | 'approved' | 'denied',
+  decision?: ApprovalDecision
+): string {
+  if (status === 'pending') return approvalStatusLabel(status)
+  if (status === 'denied') return '已拒绝，未执行'
+  if (decision === 'allow_once') return '已允许一次，仅本次放行'
+  if (decision === 'allow_whitelist') return '已加入白名单并放行'
+  if (decision === 'approve_session') return '已在会话内允许'
+  if (decision === 'approve_project') return '已在项目内允许'
+  return approvalStatusLabel(status)
 }

@@ -6,6 +6,7 @@ import type { ApprovalMode, ApprovalRequest } from '../../shared/approval'
 import type { AuditApproval } from '../../shared/audit'
 import { AppError } from '../../shared/errors'
 import { isWriteTool, summarizeToolArgs, TOOL_DEFINITIONS } from '../../shared/tools'
+import { isCommandWhitelisted, normalizeCommandWhitelist } from '../../shared/settings'
 import type { AllowRuleStore } from '../approval/allowRules'
 import type { ApprovalManager } from '../approval/approvalManager'
 import type { AuditStore } from '../audit/auditStore'
@@ -62,6 +63,10 @@ export interface ToolServiceDeps {
   audit: AuditStore
   requireGuard: () => WorkspacePathGuard
   getApprovalMode?: () => ApprovalMode
+  /** 开放模式下免拦截的命令白名单；每次执行都重新读取，配置改动即时生效 */
+  getCommandWhitelist?: () => readonly string[]
+  /** 「加入白名单」决策的落盘回调；缺省时本次仍放行但不持久化 */
+  addCommandToWhitelist?: (command: string) => void
   toolCalls?: ToolCallRepository
   timeline?: TimelineService
   /** 文件访问实现：默认本地 fs；接入 SSH 远程工作区时替换为 SFTP 实现 */
@@ -132,20 +137,10 @@ export class ToolService {
     let approval: AuditApproval = 'not_required'
     let parsed: ParsedToolArguments
 
+    const mode = this.deps.getApprovalMode?.() ?? 'manual'
+
     try {
       parsed = parseToolArguments(call.name, call.argumentsJson)
-      if (parsed.tool === 'run_command') {
-        const project =
-          (await this.deps.projectCommands?.()) ??
-          (await loadProjectCommands(this.deps.requireGuard().root))
-        assertCommandAllowed(
-          parsed.args.command,
-          new Set([...DEFAULT_ALLOWED_COMMANDS, ...project])
-        )
-      }
-      if (parsed.tool === 'write_file' || parsed.tool === 'edit_file') {
-        assertWritableRelativePath(parsed.args.relativePath)
-      }
     } catch (error) {
       const message = describeError(error)
       const outcome: ToolExecutionOutcome = {
@@ -157,8 +152,89 @@ export class ToolService {
       return outcome
     }
 
+    try {
+      if (parsed.tool === 'run_command') {
+        const whitelist = normalizeCommandWhitelist(this.deps.getCommandWhitelist?.() ?? [])
+        const whitelisted = mode === 'open' && isCommandWhitelisted(parsed.args.command, whitelist)
+        if (!whitelisted) {
+          let blocked: unknown = null
+          try {
+            const project =
+              (await this.deps.projectCommands?.()) ??
+              (await loadProjectCommands(this.deps.requireGuard().root))
+            assertCommandAllowed(
+              parsed.args.command,
+              new Set([...DEFAULT_ALLOWED_COMMANDS, ...project])
+            )
+          } catch (error) {
+            blocked = error
+          }
+
+          if (blocked) {
+            const message = describeError(blocked)
+            if (mode !== 'open') {
+              const outcome: ToolExecutionOutcome = {
+                ok: false,
+                content: `工具调用被拒绝：${message}`,
+                summary: message
+              }
+              this.record(context, call, argsSummary, approval, outcome, Date.now() - startedAt)
+              return outcome
+            }
+
+            // 开放模式：硬拦截不再直接终止，给用户「允许一次 / 加入白名单」的机会
+            const decision = await this.deps.approvals.request(
+              {
+                callId: call.id,
+                tool: parsed.tool,
+                risk: 'high',
+                reason: message,
+                argsSummary,
+                kind: 'blocked',
+                blockedCommand: parsed.args.command
+              },
+              context.signal
+            )
+            // 只有新决策能解禁硬拦截；旧的 approve / approve_session 等一律按拒绝处理
+            if (decision !== 'allow_once' && decision !== 'allow_whitelist') {
+              const outcome: ToolExecutionOutcome = {
+                ok: false,
+                content: `用户拒绝了该操作，未执行。${message}`,
+                summary: message
+              }
+              this.record(context, call, argsSummary, 'denied', outcome, Date.now() - startedAt)
+              return outcome
+            }
+            if (decision === 'allow_whitelist') {
+              try {
+                this.deps.addCommandToWhitelist?.(parsed.args.command)
+                argsSummary = `${argsSummary}（已加入白名单）`
+              } catch {
+                argsSummary = `${argsSummary}（本次放行，白名单写入失败）`
+              }
+            } else {
+              argsSummary = `${argsSummary}（本次放行）`
+            }
+            approval = 'approved'
+          }
+        }
+      }
+      if (parsed.tool === 'write_file' || parsed.tool === 'edit_file') {
+        assertWritableRelativePath(parsed.args.relativePath)
+      }
+    } catch (error) {
+      // 路径守卫等策略错误保持「直接拒绝」；命令策略的开放模式分支已在上面处理
+      const message = describeError(error)
+      const outcome: ToolExecutionOutcome = {
+        ok: false,
+        content: `工具调用被拒绝：${message}`,
+        summary: message
+      }
+      this.record(context, call, argsSummary, approval, outcome, Date.now() - startedAt)
+      return outcome
+    }
+
     if (isWriteTool(parsed.tool)) {
-      const mode = this.deps.getApprovalMode?.() ?? 'manual'
       /** 审批卡解释「为什么这一步需要确认」 */
       let approvalReason: string | undefined
       /** 外部操作才标高风险；本地操作在 manual 档询问时标中风险 */

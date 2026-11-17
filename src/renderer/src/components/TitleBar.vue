@@ -3,7 +3,8 @@ import { computed, ref } from 'vue'
 import { useAppCommands } from '../composables/useAppCommands'
 import type { ContextMenuItem } from '../lib/menu'
 import { useSettingsStore } from '../stores/settings'
-import { useUpdateStore } from '../stores/update'
+import AboutDialog from './AboutDialog.vue'
+import CommandsDialog from './CommandsDialog.vue'
 import ContextMenu from './ContextMenu.vue'
 import SettingsDialog from './SettingsDialog.vue'
 
@@ -11,10 +12,11 @@ type MenuKind = 'app' | 'edit'
 type WindowAction = 'minimize' | 'maximize' | 'close'
 
 const settings = useSettingsStore()
-const update = useUpdateStore()
 const commands = useAppCommands()
 const menu = ref<{ kind: MenuKind; x: number; y: number } | null>(null)
 const showSettings = ref(false)
+const showAbout = ref(false)
+const showCommands = ref(false)
 
 const appItems = computed<ContextMenuItem[]>(() => [
   {
@@ -23,9 +25,9 @@ const appItems = computed<ContextMenuItem[]>(() => [
     testid: 'theme-toggle'
   },
   {
-    id: 'check-update',
-    label: '检查更新',
-    testid: 'menu-check-update',
+    id: 'commands',
+    label: '命令管理…',
+    testid: 'commands-open',
     separatorBefore: true
   },
   { id: 'settings', label: '设置…', testid: 'settings-open' }
@@ -68,8 +70,8 @@ function selectMenu(id: string): void {
     settings.toggleTheme()
   } else if (id === 'settings') {
     showSettings.value = true
-  } else if (id === 'check-update') {
-    void update.check()
+  } else if (id === 'commands') {
+    showCommands.value = true
   } else if (id === 'new-session') {
     void commands.createSession()
   } else if (id === 'search-session') {
@@ -79,6 +81,11 @@ function selectMenu(id: string): void {
   } else if (id === 'toggle-status') {
     commands.toggleStatus()
   }
+}
+
+function openAbout(): void {
+  menu.value = null
+  showAbout.value = true
 }
 
 function controlWindow(action: WindowAction): void {
@@ -120,6 +127,9 @@ function toggleMaximize(): void {
         @click="toggleMenu('edit', $event)"
       >
         编辑
+      </button>
+      <button type="button" class="title-button" data-testid="menu-about" @click="openAbout">
+        关于
       </button>
     </div>
 
@@ -170,6 +180,8 @@ function toggleMaximize(): void {
 
   <!-- 必须放在标题栏拖动区之外，否则真实鼠标事件会被 -webkit-app-region: drag 吞掉 -->
   <SettingsDialog v-if="showSettings" @close="showSettings = false" />
+  <AboutDialog v-if="showAbout" @close="showAbout = false" />
+  <CommandsDialog v-if="showCommands" @close="showCommands = false" />
 </template>
 
 <style scoped>

@@ -15,12 +15,12 @@ const fakeInfo = {
   assetName: 'setup.exe'
 }
 
-async function openAppMenu(page: Page): Promise<void> {
-  await page.getByTestId('menu-app').click()
+async function openAboutAndCheck(page: Page): Promise<void> {
+  await page.getByTestId('menu-about').click()
   await page.getByTestId('menu-check-update').click()
 }
 
-test('checks for updates from the app menu and respects cancel/update', async () => {
+test('checks for updates from the about dialog and respects cancel/update', async () => {
   const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-update-e2e-'))
   const app = await electron.launch({
     args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check']
@@ -28,7 +28,7 @@ test('checks for updates from the app menu and respects cancel/update', async ()
 
   try {
     const page = await app.firstWindow()
-    await expect(page.getByTestId('menu-app')).toBeVisible()
+    await expect(page.getByTestId('menu-about')).toBeVisible()
 
     // 用假结果替代真实 GitHub 请求，避免网络影响用例
     await app.evaluate(({ ipcMain }, info) => {
@@ -44,7 +44,7 @@ test('checks for updates from the app menu and respects cancel/update', async ()
       }
     })
 
-    await openAppMenu(page)
+    await openAboutAndCheck(page)
     await expect(page.getByTestId('update-notice')).toBeVisible()
     await expect(page.getByTestId('update-version')).toContainText('9.9.9')
     await expect(page.getByTestId('update-notes')).toContainText('这是一条测试更新说明')
@@ -59,7 +59,7 @@ test('checks for updates from the app menu and respects cancel/update', async ()
     await expect(page.getByTestId('update-notice')).toBeHidden()
 
     // 用户主动检查时即使忽略过也要展示
-    await openAppMenu(page)
+    await openAboutAndCheck(page)
     await expect(page.getByTestId('update-notice')).toBeVisible()
     await page.getByTestId('update-confirm').click()
     await expect(page.getByTestId('update-notice')).toBeHidden()

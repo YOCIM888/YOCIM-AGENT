@@ -90,6 +90,7 @@ import type {
   SettingsResult,
   SettingsSetActiveInput,
   SettingsSetApprovalModeInput,
+  SettingsSetCommandWhitelistInput,
   SettingsSetContextWindowInput,
   SettingsSetImageInput,
   SettingsSetPricingInput,
@@ -368,6 +369,8 @@ const api: YocimApi = {
       invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetActive, input),
     setApprovalMode: (input: SettingsSetApprovalModeInput) =>
       invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetApprovalMode, input),
+    setCommandWhitelist: (input: SettingsSetCommandWhitelistInput) =>
+      invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetCommandWhitelist, input),
     setContextWindow: (input: SettingsSetContextWindowInput) =>
       invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsSetContextWindow, input),
     setReasoningEffort: (input: SettingsSetReasoningEffortInput) =>

@@ -97,6 +97,7 @@ import {
   sessionRenameInputSchema,
   settingsSetActiveInputSchema,
   settingsSetApprovalModeInputSchema,
+  settingsSetCommandWhitelistInputSchema,
   settingsSetContextWindowInputSchema,
   settingsSetImageInputSchema,
   settingsSetPricingInputSchema,
@@ -207,6 +208,7 @@ import {
   type SettingsResult,
   type SettingsSetActiveRequest,
   type SettingsSetApprovalModeRequest,
+  type SettingsSetCommandWhitelistRequest,
   type TimelineListResult,
   type TimelineReadRequest,
   type TimelineReadResult,
@@ -445,6 +447,8 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     accessGuard: () => workspaceService.accessGuard(),
     search: createSearchServiceRunner(searchService),
     getApprovalMode: () => settingsService.getApprovalMode(),
+    getCommandWhitelist: () => settingsService.getCommandWhitelist(),
+    addCommandToWhitelist: (command) => settingsService.addCommandToWhitelist(command),
     // git pull 的条件确认：工作区不干净（或无法查询）时仍需人工确认
     isWorktreeDirty: async () => {
       const result = await runGit(['status', '--porcelain'], {
@@ -1271,6 +1275,12 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     IPC_CHANNELS.settingsSetApprovalMode,
     settingsSetApprovalModeInputSchema,
     async (input) => settingsService.setApprovalMode(input)
+  )
+
+  handleIpc<SettingsSetCommandWhitelistRequest, SettingsResult>(
+    IPC_CHANNELS.settingsSetCommandWhitelist,
+    settingsSetCommandWhitelistInputSchema,
+    async (input) => settingsService.setCommandWhitelist(input)
   )
 
   handleIpc<SettingsSetContextWindowRequest, SettingsResult>(

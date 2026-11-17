@@ -38,14 +38,15 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #000000;
-  --bg-subtle: #0a0a0a;
-  --bg-elevated: #111111;
-  --bg-hover: #1a1a1a;
-  --border: #262626;
-  --border-strong: #3a3a3a;
-  --text: #ededed;
-  --text-muted: #9a9a9a;
+  /* 柔和深灰阶梯：避免纯黑高对比带来的刺眼感 */
+  --bg: #1c1c1f;
+  --bg-subtle: #242428;
+  --bg-elevated: #2b2b31;
+  --bg-hover: #35353c;
+  --border: #37373d;
+  --border-strong: #4a4a53;
+  --text: #ededf0;
+  --text-muted: #a1a1ab;
   --accent: #7c92ff;
   --accent-soft: #141a33;
   --accent-contrast: #0a0a0a;

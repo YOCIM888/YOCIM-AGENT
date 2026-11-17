@@ -96,6 +96,7 @@ export const IPC_CHANNELS = {
   settingsDeleteProvider: 'settings:deleteProvider',
   settingsSetActive: 'settings:setActive',
   settingsSetApprovalMode: 'settings:setApprovalMode',
+  settingsSetCommandWhitelist: 'settings:setCommandWhitelist',
   settingsSetContextWindow: 'settings:setContextWindow',
   settingsSetReasoningEffort: 'settings:setReasoningEffort',
   settingsSetSearch: 'settings:setSearch',
