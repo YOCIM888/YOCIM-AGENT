@@ -52,6 +52,10 @@ export const IPC_CHANNELS = {
   tasksStart: 'tasks:start',
   tasksStop: 'tasks:stop',
   tasksEvent: 'tasks:event',
+  terminalState: 'terminal:state',
+  terminalRun: 'terminal:run',
+  terminalCancel: 'terminal:cancel',
+  terminalEvent: 'terminal:event',
   debugConfigs: 'debug:configs',
   debugStart: 'debug:start',
   debugStop: 'debug:stop',
@@ -90,6 +94,11 @@ export const IPC_CHANNELS = {
   projectRename: 'project:rename',
   projectOpen: 'project:open',
   projectRemove: 'project:remove',
+  conventionsGet: 'conventions:get',
+  conventionsSave: 'conventions:save',
+  conventionsDelete: 'conventions:delete',
+  conventionsGenerate: 'conventions:generate',
+  conventionsCopy: 'conventions:copy',
   workspaceOpenProject: 'workspace:openProject',
   settingsGet: 'settings:get',
   settingsSaveProvider: 'settings:saveProvider',
@@ -168,6 +177,19 @@ export const TASK_LIMITS = {
   maxCommandLength: 4000,
   /** 停止任务时等待进程退出的时间 */
   stopTimeoutMs: 5000
+} as const
+
+export const CONVENTION_LIMITS = {
+  maxContentChars: 20000,
+  maxContextChars: 6000,
+  maxOutputChars: 20000,
+  generateTimeoutMs: 60000
+} as const
+
+export const TERMINAL_LIMITS = {
+  maxCommandLength: 4000,
+  maxOutputBytes: 512 * 1024,
+  maxInputChars: 4000
 } as const
 
 export const DEBUG_LIMITS = {

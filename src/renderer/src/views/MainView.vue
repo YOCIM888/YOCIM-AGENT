@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import ChatPanel from '../components/ChatPanel.vue'
+import ConventionsPanel from '../components/ConventionsPanel.vue'
 import ResizeHandle from '../components/ResizeHandle.vue'
 import SessionSidebar from '../components/SessionSidebar.vue'
 import StatusBar from '../components/StatusBar.vue'
+import TerminalPanel from '../components/TerminalPanel.vue'
 import TitleBar from '../components/TitleBar.vue'
 import WorkspacePanel from '../components/WorkspacePanel.vue'
 import { useAppCommands } from '../composables/useAppCommands'
@@ -21,6 +23,7 @@ import {
   useSettingsStore,
   workspaceWidthMax
 } from '../stores/settings'
+import { useUiStore } from '../stores/ui'
 import { useWorkspaceStore } from '../stores/workspace'
 
 const workspace = useWorkspaceStore()
@@ -30,6 +33,7 @@ const chat = useChatStore()
 const providers = useProvidersStore()
 const preferences = usePreferencesStore()
 const settings = useSettingsStore()
+const ui = useUiStore()
 const commands = useAppCommands()
 
 const NARROW_WIDTH = 1024
@@ -129,6 +133,7 @@ onBeforeUnmount(() => {
 
       <main class="conversation">
         <ChatPanel />
+        <TerminalPanel v-if="ui.terminalOpen" @close="ui.closeTerminal()" />
       </main>
 
       <ResizeHandle
@@ -144,6 +149,8 @@ onBeforeUnmount(() => {
     </div>
 
     <StatusBar />
+
+    <ConventionsPanel v-if="ui.conventionsOpen" @close="ui.closeConventions()" />
   </div>
 </template>
 
@@ -165,6 +172,7 @@ onBeforeUnmount(() => {
 .conversation {
   display: flex;
   flex: 1;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   background: var(--bg);

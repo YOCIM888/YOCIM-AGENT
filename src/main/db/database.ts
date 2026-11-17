@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const SCHEMA_VERSION = 12
+export const SCHEMA_VERSION = 13
 
 export const MIGRATION_V1 = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -200,6 +200,20 @@ ALTER TABLE messages ADD COLUMN run_started_at INTEGER;
 ALTER TABLE messages ADD COLUMN run_ended_at INTEGER;
 `
 
+/**
+ * 项目约定：一个项目一份 Markdown，按 projectId 隔离。
+ * 删除项目时由外键级联清理，避免留下孤儿约定。
+ */
+const MIGRATION_V13 = `
+CREATE TABLE IF NOT EXISTS project_conventions (
+  project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'manual',
+  updated_at INTEGER NOT NULL,
+  updated_by TEXT
+);
+`
+
 function getUserVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as { user_version?: number } | undefined
   return Number(row?.user_version ?? 0)
@@ -371,6 +385,18 @@ export function migrate(db: DatabaseSync): void {
     try {
       db.exec(MIGRATION_V12)
       db.exec('PRAGMA user_version = 12')
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  if (version < 13) {
+    db.exec('BEGIN')
+    try {
+      db.exec(MIGRATION_V13)
+      db.exec('PRAGMA user_version = 13')
       db.exec('COMMIT')
     } catch (error) {
       db.exec('ROLLBACK')

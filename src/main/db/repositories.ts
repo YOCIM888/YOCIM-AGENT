@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type { AgentStep } from '../../shared/agent'
+import type { ConventionSource, ProjectConvention } from '../../shared/conventions'
 import type { AuditEntry, AuditFilter, AuditPage, AuditStats } from '../../shared/audit'
 import type { TimelineSource } from '../../shared/ipc'
 import type {
@@ -30,6 +31,14 @@ interface ProjectRow {
   updated_at: number
   session_count: number
   last_session_at: number | null
+}
+
+interface ConventionRow {
+  project_id: string
+  content: string
+  source: ConventionSource
+  updated_at: number
+  updated_by: string | null
 }
 
 interface MessageRow {
@@ -365,6 +374,56 @@ export class ProjectRepository {
       this.db.exec('ROLLBACK')
       throw error
     }
+  }
+}
+
+function mapConvention(row: ConventionRow): ProjectConvention {
+  return {
+    projectId: row.project_id,
+    content: row.content,
+    source: row.source === 'ai' ? 'ai' : 'manual',
+    updatedAt: Number(row.updated_at),
+    updatedBy: row.updated_by ?? 'user'
+  }
+}
+
+/** 项目约定按 projectId 一行存储；projects 删除时由外键级联清理。 */
+export class ProjectConventionRepository {
+  constructor(private readonly db: DatabaseSync) {}
+
+  get(projectId: string): ProjectConvention | null {
+    const row = this.db
+      .prepare('SELECT * FROM project_conventions WHERE project_id = ?')
+      .get(projectId) as ConventionRow | undefined
+    return row ? mapConvention(row) : null
+  }
+
+  save(
+    projectId: string,
+    content: string,
+    source: ConventionSource = 'manual',
+    updatedBy = 'user'
+  ): ProjectConvention {
+    const now = Date.now()
+    this.db
+      .prepare(
+        `INSERT INTO project_conventions (project_id, content, source, updated_at, updated_by)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(project_id) DO UPDATE SET
+           content = excluded.content,
+           source = excluded.source,
+           updated_at = excluded.updated_at,
+           updated_by = excluded.updated_by`
+      )
+      .run(projectId, content, source, now, updatedBy)
+    return this.get(projectId) as ProjectConvention
+  }
+
+  remove(projectId: string): boolean {
+    const result = this.db
+      .prepare('DELETE FROM project_conventions WHERE project_id = ?')
+      .run(projectId)
+    return Number(result.changes) > 0
   }
 }
 

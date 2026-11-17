@@ -78,6 +78,9 @@ import type {
   SessionArchiveInput,
   SessionMoveInput,
   ProjectIdInput,
+  ConventionGenerateResult,
+  ConventionRecord,
+  ConventionSaveInput,
   ProjectRemoveResult,
   ProjectRenameInput,
   ProjectListResult,
@@ -107,6 +110,7 @@ import type {
   TaskStartResult,
   TaskStopInput,
   TaskStopResult,
+  TerminalRunInput,
   VscodeScanResponse,
   UpdateDownloadInput,
   WindowControlInput,
@@ -127,6 +131,7 @@ import type {
 } from './ipc'
 import type { RemoteConnectionState } from './remote'
 import type { TaskEvent } from './tasks'
+import type { TerminalEvent, TerminalRunResult, TerminalState } from './terminal'
 import type { ProjectSummary, SessionSummary } from './session'
 import type {
   GitBranches,
@@ -226,6 +231,13 @@ export interface YocimTasksApi {
   onEvent(listener: (event: TaskEvent) => void): () => void
 }
 
+export interface YocimTerminalApi {
+  state(): Promise<IpcResult<TerminalState>>
+  run(input: TerminalRunInput): Promise<IpcResult<TerminalRunResult>>
+  cancel(): Promise<IpcResult<{ stopped: boolean }>>
+  onEvent(listener: (event: TerminalEvent) => void): () => void
+}
+
 export interface YocimDebugApi {
   configs(): Promise<IpcResult<DebugConfigFile>>
   start(input: DebugStartInput): Promise<IpcResult<DebugStartResult>>
@@ -281,6 +293,14 @@ export interface YocimProjectApi {
   remove(input: ProjectIdInput): Promise<IpcResult<ProjectRemoveResult>>
 }
 
+export interface YocimConventionsApi {
+  get(input: ProjectIdInput): Promise<IpcResult<ConventionRecord | null>>
+  save(input: ConventionSaveInput): Promise<IpcResult<ConventionRecord>>
+  remove(input: ProjectIdInput): Promise<IpcResult<{ removed: boolean }>>
+  generate(input: ProjectIdInput): Promise<IpcResult<ConventionGenerateResult>>
+  copy(input: ProjectIdInput): Promise<IpcResult<null>>
+}
+
 export interface YocimSettingsApi {
   get(): Promise<IpcResult<SettingsResult>>
   saveProvider(input: ProviderSaveInput): Promise<IpcResult<SettingsResult>>
@@ -332,11 +352,13 @@ export interface YocimApi {
   audit: YocimAuditApi
   git: YocimGitApi
   tasks: YocimTasksApi
+  terminal: YocimTerminalApi
   debug: YocimDebugApi
   extensions: YocimExtensionsApi
   remote: YocimRemoteApi
   sessions: YocimSessionApi
   projects: YocimProjectApi
+  conventions: YocimConventionsApi
   settings: YocimSettingsApi
   billing: YocimBillingApi
   storage: YocimStorageApi

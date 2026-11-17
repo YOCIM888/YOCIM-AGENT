@@ -11,6 +11,7 @@ import ConfirmDialog from './ConfirmDialog.vue'
 import ContextMenu from './ContextMenu.vue'
 import MoveSessionDialog from './MoveSessionDialog.vue'
 import SessionListItem from './SessionListItem.vue'
+import SidebarToolBar from './SidebarToolBar.vue'
 
 const sessions = useSessionStore()
 const projects = useProjectsStore()
@@ -347,6 +348,8 @@ function selectProjectMenu(id: string): void {
         {{ query ? '没有匹配的会话。' : '暂无会话，点击“新建”开始。' }}
       </p>
     </div>
+
+    <SidebarToolBar />
 
     <ContextMenu
       v-if="projectMenu"
