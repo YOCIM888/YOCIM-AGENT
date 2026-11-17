@@ -46,6 +46,7 @@ import {
   billingBalanceInputSchema,
   billingSummaryInputSchema,
   chatCancelInputSchema,
+  chatPersistStepsInputSchema,
   chatSendInputSchema,
   debugBreakpointsInputSchema,
   debugCommandInputSchema,
@@ -122,6 +123,8 @@ import {
   type ChatCancelRequest,
   type ChatCompressInput,
   type ChatCompressResult,
+  type ChatPersistStepsRequest,
+  type ChatPersistStepsResult,
   type ChatPlanResult,
   type SettingsSetContextWindowRequest,
   type SettingsSetImageRequest,
@@ -808,6 +811,22 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     IPC_CHANNELS.chatSend,
     chatSendInputSchema,
     async (input) => agentService.start(input)
+  )
+
+  handleIpc<ChatPersistStepsRequest, ChatPersistStepsResult>(
+    IPC_CHANNELS.chatPersistSteps,
+    chatPersistStepsInputSchema,
+    async (input) => {
+      if (!sessionRepo.get(input.sessionId)) {
+        throw new AppError('E_NOT_FOUND', '会话不存在，无法保存执行步骤')
+      }
+      return {
+        saved: messageRepo.upsertRunMessages(
+          input.sessionId,
+          input.messages.map((message) => ({ ...message, role: 'assistant' as const }))
+        )
+      }
+    }
   )
 
   handleIpc<ChatCancelRequest, ChatCancelResult>(

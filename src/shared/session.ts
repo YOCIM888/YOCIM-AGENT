@@ -1,4 +1,5 @@
 import type { ApprovalMode } from './approval'
+import type { AgentStep } from './agent'
 import type { PublicProvider } from './providers'
 import type { ImageSettings, ModelPricing, SearchSettings, StorageSettings } from './settings'
 
@@ -32,6 +33,11 @@ export interface StoredMessage {
   createdAt: number
   /** 助手消息对应的思考内容（可展开查看） */
   reasoningContent?: string
+  /** 消息对应的工具执行步骤（切会话/重启后仍要展示时间线） */
+  steps?: AgentStep[]
+  /** run 起止时间：时间线的折叠标题与时长显示 */
+  runStartedAt?: number
+  runEndedAt?: number
 }
 
 export interface PublicSettings {

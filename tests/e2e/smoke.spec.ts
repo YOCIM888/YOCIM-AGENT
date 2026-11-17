@@ -389,6 +389,11 @@ test('selects a workspace, runs tools with approvals and persists across restart
     await expect(page.getByTestId('session-sidebar')).toContainText('E2E 会话')
     await expect(page.getByTestId('chat-panel')).toContainText('/tool read hello.txt')
     await expect(page.getByTestId('chat-panel')).toContainText('工具执行完成：hello.txt（共 1 行')
+    // 执行步骤必须随消息持久化：重启后时间线仍可展开
+    const restoredTimeline = page.getByTestId('timeline').first()
+    await expect(restoredTimeline).toContainText('已执行 1 个步骤')
+    await restoredTimeline.getByTestId('timeline-toggle').click()
+    await expect(restoredTimeline.getByTestId('timeline-step')).toContainText('read_file')
     await page.getByTestId('audit-toggle').click()
     await expect(page.getByTestId('audit-panel')).toContainText('write_file')
     await expect(page.getByTestId('audit-panel')).toContainText('已批准')
@@ -824,6 +829,10 @@ test('covers the project workflow end to end', async () => {
     await expect(page.getByTestId('project-group').filter({ hasText: projectName })).toBeVisible()
     await expect(page.getByTestId('pinned-section')).toContainText('流程会话')
     await expect(page.getByTestId('chat-panel')).toContainText('工具执行完成：hello.txt（共 1 行')
+    const restoredTimeline = page.getByTestId('timeline').first()
+    await expect(restoredTimeline).toContainText('已执行 1 个步骤')
+    await restoredTimeline.getByTestId('timeline-toggle').click()
+    await expect(restoredTimeline.getByTestId('timeline-step')).toContainText('read_file')
   } finally {
     await restarted.close()
     await rm(userDataDir, { recursive: true, force: true })
@@ -879,5 +888,38 @@ test('image settings panel is placed after search and persists the key state', a
   } finally {
     await app.close()
     await rm(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('keeps executed steps when switching sessions away and back', async () => {
+  const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-steps-switch-'))
+  const workspaceDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-steps-ws-'))
+  await writeFile(join(workspaceDir, 'hello.txt'), 'hello from e2e')
+  const app = await launch(userDataDir)
+
+  try {
+    const page = await app.firstWindow()
+    await patchOpenDialog(app, workspaceDir)
+    await openFolder(page)
+    await expect(page.getByTestId('tree-node-hello.txt')).toBeVisible()
+
+    await page.getByTestId('chat-input').fill('/tool read hello.txt')
+    await page.getByTestId('chat-send').click()
+    await expect(page.getByTestId('timeline').last()).toContainText('已执行 1 个步骤')
+
+    // 切到别的会话再切回来：loadSession 不能把已产生的执行步骤抹掉
+    await page.getByTestId('new-session').click()
+    const previous = page.getByTestId('session-item').filter({ hasText: '/tool read hello.txt' })
+    await expect(previous).toBeVisible()
+    await previous.click()
+
+    const restored = page.getByTestId('timeline').last()
+    await expect(restored).toContainText('已执行 1 个步骤')
+    await restored.getByTestId('timeline-toggle').click()
+    await expect(restored.getByTestId('timeline-step')).toContainText('read_file')
+  } finally {
+    await app.close()
+    await rm(userDataDir, { recursive: true, force: true })
+    await rm(workspaceDir, { recursive: true, force: true })
   }
 })

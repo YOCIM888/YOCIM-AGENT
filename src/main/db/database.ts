@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const SCHEMA_VERSION = 11
+export const SCHEMA_VERSION = 12
 
 export const MIGRATION_V1 = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -190,6 +190,16 @@ const MIGRATION_V11 = `
 ALTER TABLE messages ADD COLUMN reasoning_content TEXT;
 `
 
+/**
+ * 消息时间线：执行步骤与 run 起止时间随消息一起持久化，
+ * 切会话/重启后仍能复原聊天里的执行步骤流。
+ */
+const MIGRATION_V12 = `
+ALTER TABLE messages ADD COLUMN steps_json TEXT;
+ALTER TABLE messages ADD COLUMN run_started_at INTEGER;
+ALTER TABLE messages ADD COLUMN run_ended_at INTEGER;
+`
+
 function getUserVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as { user_version?: number } | undefined
   return Number(row?.user_version ?? 0)
@@ -349,6 +359,18 @@ export function migrate(db: DatabaseSync): void {
     try {
       db.exec(MIGRATION_V11)
       db.exec('PRAGMA user_version = 11')
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  if (version < 12) {
+    db.exec('BEGIN')
+    try {
+      db.exec(MIGRATION_V12)
+      db.exec('PRAGMA user_version = 12')
       db.exec('COMMIT')
     } catch (error) {
       db.exec('ROLLBACK')

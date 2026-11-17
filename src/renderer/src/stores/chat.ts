@@ -8,6 +8,7 @@ import {
   type ContextAttachmentRange
 } from '@shared/attachment'
 import { type ContextHint, type ContextUsage } from '@shared/context'
+import type { ChatPersistStepsInput } from '@shared/ipc'
 import {
   attachStepApproval,
   appendStepOutput,
@@ -70,6 +71,8 @@ export const useChatStore = defineStore('chat', () => {
   let activeSessionId: string | null = null
   let cancelRequested = false
   let activeRunStartedAt = 0
+  // 步骤快照回写串行化，避免多个事件并发时旧快照后写覆盖新快照
+  let persistChain: Promise<void> = Promise.resolve()
 
   /** 当前会话的上下文用量（圆环数据源） */
   const contextUsage = computed<ContextUsage | null>(() => {
@@ -161,6 +164,34 @@ export const useChatStore = defineStore('chat', () => {
     )
   }
 
+  /**
+   * 步骤只由渲染层维护，主进程落库时拿不到。每次步骤变化后把本次 run 的
+   * assistant 消息快照回写，切会话/重启时 loadSession 才能还原时间线。
+   */
+  function persistRunMessages(sessionId: string, runId: string): void {
+    const snapshot = (messagesBySession.value[sessionId] ?? [])
+      .filter((message) => message.role === 'assistant' && message.runId === runId)
+      .map((message) => ({
+        id: message.id,
+        content: message.content,
+        createdAt: message.createdAt,
+        ...(message.reasoningContent ? { reasoningContent: message.reasoningContent } : {}),
+        ...(message.steps?.length ? { steps: message.steps } : {}),
+        ...(message.runStartedAt ? { runStartedAt: message.runStartedAt } : {}),
+        ...(message.runEndedAt ? { runEndedAt: message.runEndedAt } : {})
+      }))
+    if (!snapshot.length) return
+    // IPC 不能传 Vue 的响应式 Proxy，JSON 往返同时完成深拷贝与纯数据化
+    const messages = JSON.parse(JSON.stringify(snapshot)) as ChatPersistStepsInput['messages']
+    persistChain = persistChain.then(async () => {
+      try {
+        await window.yocim.chat.persistSteps({ sessionId, messages })
+      } catch {
+        // 持久化失败不打断生成，后续事件会带回最新快照重试
+      }
+    })
+  }
+
   function appendError(sessionId: string, message: string, code?: string): void {
     ensureMessages(sessionId).push({
       id: createId(),
@@ -234,6 +265,7 @@ export const useChatStore = defineStore('chat', () => {
           argsSummary: event.argsSummary,
           startedAt: event.ts
         })
+        persistRunMessages(activeSessionId, event.runId)
         break
       }
       case 'tool:output': {
@@ -252,6 +284,7 @@ export const useChatStore = defineStore('chat', () => {
             images: event.images
           })
         }
+        persistRunMessages(activeSessionId, event.runId)
         break
       }
       case 'run:error': {
@@ -262,6 +295,7 @@ export const useChatStore = defineStore('chat', () => {
           closePendingApprovals(target.steps)
           settleRunningSteps(target.steps, '运行失败', event.ts)
         }
+        persistRunMessages(activeSessionId, event.runId)
         sending.value = false
         break
       }
@@ -286,6 +320,7 @@ export const useChatStore = defineStore('chat', () => {
             )
           }
         }
+        persistRunMessages(activeSessionId, event.runId)
         sending.value = false
         activeRunId.value = null
         activeSessionId = null
@@ -338,9 +373,13 @@ export const useChatStore = defineStore('chat', () => {
   })
 
   async function respondApproval(approvalId: string, decision: ApprovalDecision): Promise<void> {
+    const runId = activeRunId.value
     if (activeSessionId) {
       const message = findApprovalMessage(activeSessionId, approvalId)
-      if (message?.steps) resolveStepApproval(message.steps, approvalId, decision)
+      if (message?.steps) {
+        resolveStepApproval(message.steps, approvalId, decision)
+        if (runId) persistRunMessages(activeSessionId, runId)
+      }
     }
     pendingApprovals.value = pendingApprovals.value.filter((item) => item.approvalId !== approvalId)
     await window.yocim.approval.respond({ approvalId, decision })
@@ -349,13 +388,27 @@ export const useChatStore = defineStore('chat', () => {
   async function loadSession(sessionId: string): Promise<void> {
     const result = await window.yocim.sessions.messages({ sessionId })
     if (!result.ok) return
-    messagesBySession.value[sessionId] = result.data.map((message) => ({
+    const fromDb = result.data.map((message) => ({
       id: message.id,
       role: message.role,
       content: message.content,
       createdAt: message.createdAt,
-      ...(message.reasoningContent ? { reasoningContent: message.reasoningContent } : {})
+      ...(message.reasoningContent ? { reasoningContent: message.reasoningContent } : {}),
+      ...(message.steps?.length ? { steps: message.steps } : {}),
+      ...(message.runStartedAt ? { runStartedAt: message.runStartedAt } : {}),
+      ...(message.runEndedAt ? { runEndedAt: message.runEndedAt } : {})
     }))
+    const cached = messagesBySession.value[sessionId] ?? []
+    // 流式输出中途切走再切回：内存里的步骤/流式状态比数据库新，不能被 DB 结果覆盖
+    if (activeSessionId === sessionId && activeRunId.value && cached.length) {
+      const cachedIds = new Set(cached.map((item) => item.id))
+      messagesBySession.value[sessionId] = [
+        ...fromDb.filter((item) => !cachedIds.has(item.id)),
+        ...cached
+      ].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+    } else {
+      messagesBySession.value[sessionId] = fromDb
+    }
     void refreshUsage(sessionId)
     // 计划卡跨重启恢复
     const planResult = await window.yocim.chat.getPlan({ sessionId })

@@ -1,29 +1,8 @@
 import type { ApprovalDecision } from '@shared/approval'
+import type { AgentStep, StepApprovalStatus } from '@shared/agent'
 
-export type ToolStepStatus = 'running' | 'done' | 'failed'
-export type ApprovalStatus = 'pending' | 'approved' | 'denied'
-
-export interface StepApproval {
-  approvalId: string
-  risk: 'medium' | 'high'
-  status: ApprovalStatus
-}
-
-export interface AgentStep {
-  id: string
-  callId: string
-  name: string
-  argsSummary: string
-  status: ToolStepStatus
-  startedAt: number
-  endedAt?: number
-  summary?: string
-  approval?: StepApproval
-  /** 命令等长任务的增量输出（tool:output 事件追加，保留尾部） */
-  output?: string
-  /** 生图等工具产出的图片 URL，供时间线渲染缩略图 */
-  images?: string[]
-}
+export type { AgentStep, StepApproval, ToolStepStatus } from '@shared/agent'
+export type ApprovalStatus = StepApprovalStatus
 
 /** 单步输出在 UI 里保留的最大长度：只展示尾部，避免长时间运行撑爆内存 */
 const STEP_OUTPUT_MAX_CHARS = 8000
