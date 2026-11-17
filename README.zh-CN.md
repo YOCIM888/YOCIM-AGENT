@@ -4,6 +4,8 @@
 
 本地优先的桌面 AI 编程助手（Electron + Vue 3 + TypeScript）。可选择本地工作区，与模型对话，在审批后读取/修改文件并执行受控命令。
 
+![YOCIM AGENT 三栏工作台](public/image/yocim-agent.png)
+
 ## 功能
 
 - **多模型接入**：DeepSeek、Qwen、BigModel、Kimi、MiniMax、腾讯云、阿里云、硅基流动、火山引擎、ChatGPT、Claude、Gemini、Grok、本地 Ollama 与自定义端点；设置中添加，输入卡右下角切换（按服务商分组，只显示模型名，选中项右侧为绿色实心圆）
@@ -146,7 +148,11 @@ $env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-bu
 npm run package
 ```
 
-- Windows 产物：`release/0.1.2/YOCIM AGENT-0.1.2-setup.exe` 与 `release/0.1.2/win-unpacked/`
+- Windows 产物：`release/0.1.6/YOCIM AGENT-0.1.6-setup.exe` 与 `release/0.1.6/win-unpacked/`
 - 内置 ripgrep：`resources/ripgrep/rg.exe`（14.1.1）经 `extraResources` 放入，缺失时回退 PATH 的 `rg` 与内置 JS 搜索
 - 运行依赖：`zod` 与 `ssh2`（含 `asn1` / `bcrypt-pbkdf` / `tweetnacl` / `safer-buffer`）外置并打进 asar；`cpu-features` 为可选原生加速依赖，未编译也不打包；`npmRebuild: false` 规避路径含空格时 node-gyp 失败
 - 应用图标：`build/icon.png`（由 `public/image/yocim.png` 复制）；当前未配置代码签名，安装时可能出现 SmartScreen 提示
+
+## 许可证
+
+本项目采用 Apache License 2.0，详见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。

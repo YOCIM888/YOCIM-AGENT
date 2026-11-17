@@ -1,0 +1,23 @@
+PackageIdentifier: YOCIM.YOCIMAGENT
+PackageVersion: 0.1.6
+PackageLocale: en-US
+Publisher: YOCIM
+PublisherUrl: https://github.com/YOCIM888
+PackageName: YOCIM AGENT
+PackageUrl: https://agent.yocim.top/
+License: Apache-2.0
+LicenseUrl: https://github.com/YOCIM888/YOCIM-AGENT/blob/main/LICENSE
+Copyright: Copyright © 2026 YOCIM
+ShortDescription: Local-first desktop AI coding assistant with tool approvals and a built-in workspace
+ReleaseNotesUrl: https://agent.yocim.top/changelog.html
+Installers:
+  - Architecture: x64
+    InstallerType: nullsoft
+    Scope: user
+    InstallerUrl: https://github.com/YOCIM888/YOCIM-AGENT/releases/download/v0.1.6/YOCIM.AGENT-0.1.6-setup.exe
+    InstallerSha256: d7a4947ba14f2dec7ca5f44aaf4198abc60e8d3710beb1df3372328730976dfb
+    InstallerSwitches:
+      Silent: /S
+      SilentWithProgress: /S
+ManifestType: singleton
+ManifestVersion: 1.12.0
