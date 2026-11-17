@@ -90,6 +90,35 @@ export type BrowserEvent =
   | { type: 'exception'; entry: BrowserExceptionEntry }
   | { type: 'audit'; entry: BrowserAuditEntry }
 
+/** 独立 profile 的 Electron partition 前缀；重置浏览器数据只针对这些分区 */
+export const BROWSER_PARTITION_PREFIX = 'yocim-browser-'
+
+/** Electron 分区名白名单：只接受本应用生成的隔离 profile，避免误删其他数据 */
+export function isYocimPartitionName(name: string): boolean {
+  return (
+    name.startsWith(BROWSER_PARTITION_PREFIX) &&
+    /^[a-zA-Z0-9_-]+$/.test(name.slice(BROWSER_PARTITION_PREFIX.length))
+  )
+}
+
+/** 浏览器重置结果：count 为已清理的独立 profile 数量 */
+export interface BrowserResetResult {
+  cleared: number
+}
+
+/** Electron session.clearStorageData 支持的存储类型（按官方 API 取值） */
+export const BROWSER_STORAGE_TYPES = [
+  'cookies',
+  'filesystem',
+  'indexdb',
+  'localstorage',
+  'shadercache',
+  'serviceworkers',
+  'cachestorage'
+] as const
+
+export type BrowserStorageType = (typeof BROWSER_STORAGE_TYPES)[number]
+
 export const BROWSER_LIMITS = {
   maxUrlLength: 2048,
   maxParamsChars: 4000,

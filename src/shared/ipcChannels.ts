@@ -62,6 +62,7 @@ export const IPC_CHANNELS = {
   browserControl: 'browser:control',
   browserRetry: 'browser:retry',
   browserAudit: 'browser:audit',
+  browserReset: 'browser:reset',
   browserEvent: 'browser:event',
   debugConfigs: 'debug:configs',
   debugStart: 'debug:start',

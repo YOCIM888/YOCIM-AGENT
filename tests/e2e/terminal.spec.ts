@@ -19,6 +19,7 @@ test('sidebar toolbar opens a themed workspace terminal and the settings dialog'
     for (const id of [
       'sidebar-tool-terminal',
       'sidebar-tool-conventions',
+      'sidebar-tool-commands',
       'sidebar-tool-browser',
       'sidebar-tool-settings'
     ]) {

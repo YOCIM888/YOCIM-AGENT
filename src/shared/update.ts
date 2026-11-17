@@ -4,11 +4,43 @@ import { APP_VERSION } from './app'
 
 export const UPDATE_REPO = 'YOCIM888/YOCIM-AGENT'
 export const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`
+/**
+ * 国内可直连的 GitHub REST API 镜像（已验证支持 releases/latest）。
+ * 国内默认走镜像，避免 api.github.com 直接 fetch failed；官方地址保留兜底。
+ */
+export const UPDATE_API_MIRROR_URLS = [
+  `https://gh-proxy.com/${UPDATE_API_URL}`,
+  `https://gh-proxy.org/${UPDATE_API_URL}`
+]
 export const UPDATE_RELEASES_URL = `https://github.com/${UPDATE_REPO}/releases`
 /** 单次检查的网络超时，避免离线或限流时卡住启动流程 */
 export const UPDATE_TIMEOUT_MS = 10_000
+/** 多端点轮询时单个端点的超时，避免多个 10s 叠加拖慢检查 */
+export const UPDATE_ENDPOINT_TIMEOUT_MS = 5_000
 /** 更新说明展示上限，防止超长 Release Notes 撑爆通知卡 */
 export const UPDATE_NOTES_MAX = 600
+
+/**
+ * 用系统时区/语言粗判是否国内网络。参数可注入，便于单测与调用方覆盖。
+ * 判断只是排序依据，失败后仍会尝试另一侧，因此误判不会导致检查失败。
+ */
+export function isDomesticNetwork(
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone ?? '',
+  locale: string = Intl.DateTimeFormat().resolvedOptions().locale ?? ''
+): boolean {
+  return (
+    /^Asia\/(Shanghai|Chongqing|Urumqi|Harbin|Beijing|Tianjin|Nanjing|Lhasa|Kashgar)$/i.test(
+      timeZone.trim()
+    ) || /^zh(?:[-_]Hans)?[-_]CN$/i.test(locale.trim())
+  )
+}
+
+/** 国内镜像优先，海外官方优先；另一侧始终保留以便自动回退 */
+export function updateApiUrls(domestic: boolean): string[] {
+  return domestic
+    ? [...UPDATE_API_MIRROR_URLS, UPDATE_API_URL]
+    : [UPDATE_API_URL, ...UPDATE_API_MIRROR_URLS]
+}
 
 export interface UpdateInfo {
   /** 去掉 v 前缀后的版本号，例如 0.2.0 */

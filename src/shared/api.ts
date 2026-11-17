@@ -138,7 +138,7 @@ import type {
 import type { RemoteConnectionState } from './remote'
 import type { TaskEvent } from './tasks'
 import type { TerminalEvent, TerminalRunResult, TerminalState } from './terminal'
-import type { BrowserAuditEntry, BrowserEvent, BrowserState } from './browser'
+import type { BrowserAuditEntry, BrowserEvent, BrowserResetResult, BrowserState } from './browser'
 import type { ProjectSummary, SessionSummary } from './session'
 import type {
   GitBranches,
@@ -363,6 +363,8 @@ export interface YocimBrowserApi {
   retry(input: BrowserSessionInput): Promise<IpcResult<BrowserState>>
   /** 查询最近 N 条 append-only 操作审计（时间倒序） */
   audit(input: BrowserAuditInput): Promise<IpcResult<BrowserAuditEntry[]>>
+  /** 清除独立 profile 数据并关闭所有浏览器上下文 */
+  reset(): Promise<IpcResult<BrowserResetResult>>
   onEvent(listener: (event: BrowserEvent) => void): () => void
 }
 

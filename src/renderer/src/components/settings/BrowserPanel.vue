@@ -2,9 +2,11 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import ConfirmDialog from '../ConfirmDialog.vue'
 import { useAppSettingsStore } from '../../stores/appSettings'
+import { useBrowserStore } from '../../stores/browser'
 import type { BrowserSettings } from '@shared/settings'
 
 const appSettings = useAppSettingsStore()
+const browserStore = useBrowserStore()
 
 const form = ref<BrowserSettings>({
   enabled: true,
@@ -16,6 +18,9 @@ const form = ref<BrowserSettings>({
 const saving = ref(false)
 const notice = ref('')
 const confirmInherit = ref(false)
+const confirmReset = ref(false)
+const resetting = ref(false)
+const resetNotice = ref('')
 
 watch(
   () => appSettings.browser,
@@ -56,6 +61,23 @@ function onInheritChange(event: Event): void {
 function confirmInheritProfile(): void {
   form.value.inheritProfile = true
   confirmInherit.value = false
+}
+
+async function resetBrowser(): Promise<void> {
+  confirmReset.value = false
+  resetting.value = true
+  resetNotice.value = ''
+  try {
+    const response = await window.yocim.browser.reset()
+    if (!response.ok) {
+      resetNotice.value = `重置失败：${response.error.message}`
+      return
+    }
+    browserStore.reset(browserStore.state?.sessionId ?? null)
+    resetNotice.value = `已清理 ${response.data.cleared} 个独立浏览器配置；下次打开浏览器 tab 会重新创建。`
+  } finally {
+    resetting.value = false
+  }
 }
 </script>
 
@@ -118,6 +140,26 @@ function confirmInheritProfile(): void {
       <span v-if="notice" class="sp-hint">{{ notice }}</span>
     </div>
 
+    <section class="sp-section danger-zone">
+      <h3 class="sp-section-title">清除浏览器数据</h3>
+      <p class="sp-section-sub">
+        关闭所有浏览器页面，清除独立 profile 的 Cookie、本地存储、缓存与浏览审计记录。
+        日常浏览器的登录态不会被删除（即使启用了 profile 复用）。此操作不可撤销。
+      </p>
+      <div class="sp-row">
+        <button
+          type="button"
+          class="sp-btn"
+          data-testid="browser-reset"
+          :disabled="resetting"
+          @click="confirmReset = true"
+        >
+          {{ resetting ? '清理中…' : '清除数据并重置浏览器' }}
+        </button>
+        <span v-if="resetNotice" class="sp-hint">{{ resetNotice }}</span>
+      </div>
+    </section>
+
     <ConfirmDialog
       v-if="confirmInherit"
       title="确认复用日常登录态？"
@@ -127,6 +169,17 @@ function confirmInheritProfile(): void {
       testid="browser-inherit-confirm"
       @confirm="confirmInheritProfile"
       @close="confirmInherit = false"
+    />
+
+    <ConfirmDialog
+      v-if="confirmReset"
+      title="清除浏览器数据？"
+      message="将关闭所有浏览器页面，删除本应用为会话创建的独立浏览器 profile（Cookie、本地存储、缓存）并清空浏览审计。日常浏览器的登录态不会被删除。此操作不可撤销。"
+      confirm-label="清除并重置"
+      danger
+      testid="browser-reset-confirm"
+      @confirm="resetBrowser"
+      @close="confirmReset = false"
     />
   </div>
 </template>
@@ -145,5 +198,11 @@ function confirmInheritProfile(): void {
   align-items: center;
   gap: 8px;
   padding-top: 8px;
+}
+.danger-zone {
+  border-top: 1px solid var(--border);
+}
+.danger-zone .sp-btn {
+  color: var(--danger);
 }
 </style>

@@ -1,7 +1,16 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  safeStorage,
+  session,
+  shell
+} from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { access, writeFile } from 'node:fs/promises'
+import { access, readdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type { AgentEvent } from '../../shared/agent'
@@ -25,7 +34,12 @@ import type {
 } from '../../shared/extensions'
 import type { TaskDiscovery, TaskEvent, TaskRun } from '../../shared/tasks'
 import type { TerminalEvent, TerminalRunResult, TerminalState } from '../../shared/terminal'
-import type { BrowserAuditEntry, BrowserEvent, BrowserState } from '../../shared/browser'
+import type {
+  BrowserAuditEntry,
+  BrowserEvent,
+  BrowserResetResult,
+  BrowserState
+} from '../../shared/browser'
 import type { RemoteConnectionState } from '../../shared/remote'
 import { AppError } from '../../shared/errors'
 import type {
@@ -265,6 +279,7 @@ import { ExtensionService } from '../extensions/extensionService'
 import { TaskService } from '../tasks/taskService'
 import { TerminalService } from '../terminal/terminalService'
 import { BrowserService } from '../browser/browserService'
+import { BrowserDataService } from '../browser/browserDataService'
 import { SessionService } from '../sessions/sessionService'
 import { GitService } from '../git/gitService'
 import { runGit } from '../git/gitRunner'
@@ -474,6 +489,7 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     getRoot: () => workspaceService.current()?.root ?? null,
     emit: broadcastDebugEvent
   })
+  const browserAuditFile = join(dataDir ?? userData, 'browser-audit.jsonl')
   const browserService = new BrowserService({
     getWindow: () => BrowserWindow.getAllWindows()[0] ?? null,
     resolveScope: (sessionId) => {
@@ -486,10 +502,30 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
       }
     },
     getSettings: () => settingsService.getBrowserSettings(),
-    auditFilePath: join(dataDir ?? userData, 'browser-audit.jsonl'),
+    auditFilePath: browserAuditFile,
     emit: broadcastBrowserEvent
   })
   browserService.start()
+  // Electron 的 session 分区始终落在 userData，与自定义的存储目录无关
+  const browserPartitionsRoot = join(userData, 'Partitions')
+  const browserDataService = new BrowserDataService({
+    getSession: (name) => session.fromPartition(`persist:${name}`),
+    listPartitions: async () => {
+      try {
+        const entries = await readdir(browserPartitionsRoot, { withFileTypes: true })
+        return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+      } catch {
+        return []
+      }
+    },
+    removePartition: (name) =>
+      rm(join(browserPartitionsRoot, name), { recursive: true, force: true }),
+    clearAuditFile: async () => {
+      await writeFile(browserAuditFile, '', 'utf8')
+    },
+    disposeAll: () => browserService.disposeAll(),
+    activePartitions: () => browserService.activePartitions()
+  })
   const extensionService = new ExtensionService({
     repo: extensionRepo,
     userData: storageRoot
@@ -1100,6 +1136,10 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     IPC_CHANNELS.browserAudit,
     browserAuditInputSchema,
     async (input) => browserService.audit(input.sessionId, input.limit)
+  )
+
+  handleIpc<undefined, BrowserResetResult>(IPC_CHANNELS.browserReset, null, async () =>
+    browserDataService.reset()
   )
 
   handleIpc<undefined, DebugConfigFile>(IPC_CHANNELS.debugConfigs, null, async () =>

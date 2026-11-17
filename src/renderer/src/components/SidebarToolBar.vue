@@ -93,6 +93,33 @@ const browserTitle = computed(() => {
     <button
       type="button"
       class="tool-button"
+      :class="{ active: ui.commandsOpen }"
+      data-testid="sidebar-tool-commands"
+      title="命令管理"
+      aria-label="命令管理"
+      :aria-pressed="ui.commandsOpen"
+      @click="ui.openCommands()"
+    >
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true">
+        <path
+          d="M5.5 4h7M5.5 8h7M5.5 12h7"
+          stroke="currentColor"
+          stroke-width="1.3"
+          stroke-linecap="round"
+        />
+        <path
+          d="m2.2 3.9 1 1 1.9-2.1M2.2 11.9l1 1 1.9-2.1"
+          stroke="currentColor"
+          stroke-width="1.3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </button>
+
+    <button
+      type="button"
+      class="tool-button"
       :class="{ active: ui.browserOpen }"
       data-testid="sidebar-tool-browser"
       :title="browserTitle"
