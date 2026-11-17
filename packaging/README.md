@@ -10,13 +10,13 @@
 | Homebrew Cask | `homebrew/Casks/yocim-agent.rb` | 本地 cask：`brew install --cask ./yocim-agent.rb`                                                                      | `Homebrew/homebrew-cask` 尚无条目；需提交 PR          |
 | Scoop         | `scoop/yocim-agent.json`        | 直接 URL：`scoop install https://raw.githubusercontent.com/YOCIM888/YOCIM-AGENT/main/packaging/scoop/yocim-agent.json` | 可由用户直接按 URL 安装；也可再向 bucket 提交 PR      |
 
-清单对应版本：**0.1.6**。
+清单对应版本：**0.1.7**。
 
-## v0.1.6 资产校验值
+## v0.1.7 资产校验值
 
 | 资产                                | SHA-256                                                            |
 | ----------------------------------- | ------------------------------------------------------------------ |
-| `YOCIM.AGENT-0.1.6-setup.exe`       | `d7a4947ba14f2dec7ca5f44aaf4198abc60e8d3710beb1df3372328730976dfb` |
+| `YOCIM.AGENT-0.1.7-setup.exe`       | `11fe0fc71fbd9cbf32291df9ab91b48b08f98f3b71351237cc45668141d5a6ea` |
 | `YOCIM.AGENT-0.1.6-arm64.dmg`       | `1f1fa061dfb57e4d17ca6a6cdd302045a3f2738431f2eda3ca92c348bda69925` |
 | `YOCIM.AGENT-0.1.6-x64.dmg`         | `fb2d7706d0bfa2d87afa0e19bebde7b64799fb2216faef31bb1c454d5ad0cfa1` |
 | `YOCIM.AGENT-0.1.6-x86_64.AppImage` | `736c23ec62cc8a36046d008dbbae74e419d23358dc5b6a85cdffdeb3364a0b20` |

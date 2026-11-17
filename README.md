@@ -149,7 +149,7 @@ $env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-bu
 npm run package
 ```
 
-- Windows artifacts: `release/0.1.6/YOCIM AGENT-0.1.6-setup.exe` and `release/0.1.6/win-unpacked/`
+- Windows artifacts: `release/0.1.7/YOCIM AGENT-0.1.7-setup.exe` and `release/0.1.7/win-unpacked/`
 - Bundled ripgrep: `resources/ripgrep/rg.exe` (14.1.1) placed there via `extraResources`; falls back to `rg` on PATH and the built-in JS search when missing
 - Runtime dependencies: `zod` and `ssh2` (with `asn1` / `bcrypt-pbkdf` / `tweetnacl` / `safer-buffer`) are externalized and packed into the asar; `cpu-features` is an optional native accelerator that is neither compiled nor packaged; `npmRebuild: false` avoids node-gyp failures when the project path contains spaces
 - App icon: `build/icon.png` (copied from `public/image/yocim.png`). Code signing is not configured yet, so SmartScreen may warn during installation.
