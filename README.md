@@ -4,6 +4,8 @@
 
 A local-first desktop AI coding assistant (Electron + Vue 3 + TypeScript). Pick a local workspace, chat with a model, and let it read/modify files and run controlled commands after your approval.
 
+![YOCIM AGENT three-pane workspace](public/image/yocim-agent.png)
+
 ## Features
 
 - **Multi-model support**: DeepSeek, Qwen, BigModel, Kimi, MiniMax, Tencent Cloud, Alibaba Cloud, SiliconFlow, Volcano Engine, ChatGPT, Claude, Gemini, Grok, local Ollama, and custom endpoints. Add them in Settings and switch from the bottom-right of the composer (grouped by provider, model name only, selected item marked with a green filled circle).
@@ -146,7 +148,11 @@ $env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-bu
 npm run package
 ```
 
-- Windows artifacts: `release/0.1.2/YOCIM AGENT-0.1.2-setup.exe` and `release/0.1.2/win-unpacked/`
+- Windows artifacts: `release/0.1.6/YOCIM AGENT-0.1.6-setup.exe` and `release/0.1.6/win-unpacked/`
 - Bundled ripgrep: `resources/ripgrep/rg.exe` (14.1.1) placed there via `extraResources`; falls back to `rg` on PATH and the built-in JS search when missing
 - Runtime dependencies: `zod` and `ssh2` (with `asn1` / `bcrypt-pbkdf` / `tweetnacl` / `safer-buffer`) are externalized and packed into the asar; `cpu-features` is an optional native accelerator that is neither compiled nor packaged; `npmRebuild: false` avoids node-gyp failures when the project path contains spaces
 - App icon: `build/icon.png` (copied from `public/image/yocim.png`). Code signing is not configured yet, so SmartScreen may warn during installation.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

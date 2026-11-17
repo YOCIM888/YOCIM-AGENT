@@ -1,0 +1,25 @@
+{
+  "version": "0.1.6",
+  "description": "Local-first desktop AI coding assistant",
+  "homepage": "https://agent.yocim.top/",
+  "license": "Apache-2.0",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/YOCIM888/YOCIM-AGENT/releases/download/v0.1.6/YOCIM.AGENT-0.1.6-setup.exe#/dl.7z",
+      "hash": "d7a4947ba14f2dec7ca5f44aaf4198abc60e8d3710beb1df3372328730976dfb"
+    }
+  },
+  "bin": "YOCIM AGENT.exe",
+  "shortcuts": [["YOCIM AGENT.exe", "YOCIM AGENT"]],
+  "post_install": "Remove-Item \"$dir\\`$PLUGINSDIR\", \"$dir\\uninstall.exe\", \"$dir\\Uninst*\" -Recurse -Force -ErrorAction SilentlyContinue",
+  "checkver": {
+    "github": "https://github.com/YOCIM888/YOCIM-AGENT"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/YOCIM888/YOCIM-AGENT/releases/download/v$version/YOCIM.AGENT-$version-setup.exe#/dl.7z"
+      }
+    }
+  }
+}

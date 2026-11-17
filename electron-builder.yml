@@ -7,6 +7,8 @@ directories:
 files:
   - out/**/*
   - package.json
+  - LICENSE
+  - NOTICE
   - node_modules/zod/**/*
   # ssh2 及其运行时依赖（main 由 externalizeDepsPlugin 保持 external）
   - node_modules/ssh2/**/*
