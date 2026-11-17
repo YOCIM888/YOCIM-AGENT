@@ -17,6 +17,7 @@ export type ToolName =
   | 'generate_image'
   | 'browser_cdp'
   | 'browser_wait'
+  | 'delegate_task'
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
@@ -326,6 +327,31 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       required: ['kind'],
       additionalProperties: false
     }
+  },
+  {
+    name: 'delegate_task',
+    description:
+      '把一个聚焦的子任务交给子代理执行（仅在长任务进行到一定轮次后可用）。角色 explore 只读调研、implement 负责实现改动、verify 负责跑测试与检查；子代理共享当前工作区，其写操作同样需要审批。适合把「大范围定位」「独立文件改造」「专项验证」拆出去，避免主任务被细节拖累。子代理的最终结论会作为工具结果返回。',
+    parameters: {
+      type: 'object',
+      properties: {
+        role: {
+          type: 'string',
+          enum: ['explore', 'implement', 'verify'],
+          description: '子代理角色'
+        },
+        task: {
+          type: 'string',
+          description: '交给子代理的聚焦子任务，描述要具体、可独立验收'
+        },
+        context: {
+          type: 'string',
+          description: '可选的补充上下文：已知结论、约束、相关文件路径'
+        }
+      },
+      required: ['role', 'task'],
+      additionalProperties: false
+    }
   }
 ]
 
@@ -462,6 +488,11 @@ export function summarizeToolArgs(name: string, argsJson: string): string {
       const kind = typeof args['kind'] === 'string' ? args['kind'] : '?'
       const value = typeof args['value'] === 'string' && args['value'] ? `「${clip(args['value'], 60)}」` : ''
       return `browser_wait ${kind}${value}`
+    }
+    case 'delegate_task': {
+      const role = typeof args['role'] === 'string' ? args['role'] : '?'
+      const task = typeof args['task'] === 'string' ? args['task'] : ''
+      return `delegate_task ${role}${task ? `「${clip(task, 80)}」` : ''}`
     }
     default:
       return clip(`${name} ${argsJson}`)

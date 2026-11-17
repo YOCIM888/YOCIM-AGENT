@@ -47,6 +47,7 @@ import {
   type BrowserToolDeps
 } from './browserCdpTools'
 import { allowRuleValue, classifyCommand, needsApproval } from './commandRisk'
+import type { SubagentRole } from '../agent/subagent'
 
 function describeError(error: unknown): string {
   if (error instanceof AppError) return error.message
@@ -61,6 +62,15 @@ export interface ToolExecutionContext {
   sessionId: string
   runId: string
   signal: AbortSignal
+}
+
+/** 子代理调用入口：由装配层提供，复用当前 Provider 与工具执行器 */
+export interface SubagentInvoker {
+  (
+    input: { role: SubagentRole; task: string; context: string },
+    ctx: ToolExecutionContext,
+    onProgress: (text: string) => void
+  ): Promise<ToolExecutionOutcome>
 }
 
 export interface ToolServiceDeps {
@@ -106,6 +116,8 @@ export interface ToolServiceDeps {
    * 缺省或查询失败时按「有改动」保守处理。
    */
   isWorktreeDirty?: () => Promise<boolean>
+  /** 子代理调用器；缺省时 delegate_task 工具不暴露给模型 */
+  subagent?: SubagentInvoker
 }
 
 export class ToolService {
@@ -126,6 +138,14 @@ export class ToolService {
       )
   }
 
+  /**
+   * 装配期注入子代理调用器（与 tools 执行器互相依赖，故不用构造参数）。
+   * getDefinitions 每次现读此值，注入后 delegate_task 才对模型可见。
+   */
+  setSubagent(invoker: SubagentInvoker | undefined): void {
+    this.deps.subagent = invoker
+  }
+
   getDefinitions(): typeof TOOL_DEFINITIONS {
     // 没配好的工具不对模型暴露：暴露了模型就会反复调用一个必然失败的工具
     return TOOL_DEFINITIONS.filter((definition) => {
@@ -137,6 +157,9 @@ export class ToolService {
       }
       if (definition.name === 'browser_cdp' || definition.name === 'browser_wait') {
         return Boolean(this.deps.browser && this.deps.browserEnabled?.() !== false)
+      }
+      if (definition.name === 'delegate_task') {
+        return Boolean(this.deps.subagent)
       }
       return true
     })
@@ -481,6 +504,14 @@ export class ToolService {
           throw new AppError('E_UNSUPPORTED', '浏览器能力未启用')
         }
         return runBrowserWait(parsed.args, context, this.deps.browser)
+      }
+      case 'delegate_task': {
+        if (!this.deps.subagent) {
+          throw new AppError('E_UNSUPPORTED', '子代理未启用')
+        }
+        return this.deps.subagent(parsed.args, context, (text) => {
+          this.deps.onToolOutput?.(callId, context.runId, text)
+        })
       }
     }
   }

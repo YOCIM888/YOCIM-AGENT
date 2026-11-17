@@ -121,23 +121,6 @@ function toggle(): void {
 
       <span class="label">{{ label }}</span>
       <span class="hint">推理过程</span>
-
-      <span class="tail">
-        <span class="chevron" :class="{ open: isOpen }" aria-hidden="true">
-          <svg
-            viewBox="0 0 16 16"
-            width="12"
-            height="12"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="m4.5 6.5 3.5 3.5 3.5-3.5" />
-          </svg>
-        </span>
-      </span>
     </button>
 
     <div v-if="isOpen" ref="bodyRef" class="reasoning-body" data-testid="reasoning-content">
@@ -161,28 +144,23 @@ function toggle(): void {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-subtle);
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
   color: var(--text-muted);
   font: inherit;
   font-size: 11.5px;
   text-align: left;
   cursor: pointer;
-  transition:
-    border-color 140ms ease,
-    background-color 140ms ease;
+  transition: color 140ms ease;
 }
 
 .reasoning-toggle:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .reasoning.running .reasoning-toggle {
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
-  background: color-mix(in srgb, var(--accent) 6%, var(--bg-subtle));
+  color: var(--text);
 }
 
 .lead {
@@ -230,31 +208,10 @@ function toggle(): void {
   white-space: nowrap;
 }
 
-.tail {
-  flex: none;
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-}
-
-.chevron {
-  display: inline-flex;
-  color: var(--text-muted);
-  transition: transform 160ms ease;
-}
-
-.chevron.open {
-  transform: rotate(180deg);
-}
-
 .reasoning-body {
   max-height: 220px;
-  margin-top: 6px;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-left: 2px solid color-mix(in srgb, var(--accent) 55%, var(--border));
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
+  margin-top: 2px;
+  padding: 2px 0 4px 24px;
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.65;

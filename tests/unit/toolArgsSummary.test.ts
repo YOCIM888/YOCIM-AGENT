@@ -22,7 +22,8 @@ describe('tool definitions', () => {
       'web_search',
       'generate_image',
       'browser_cdp',
-      'browser_wait'
+      'browser_wait',
+      'delegate_task'
     ])
   })
 
@@ -94,6 +95,17 @@ describe('summarizeToolArgs', () => {
     )
     expect(summary).toContain('一只猫')
     expect(summary).toContain('1024x1024')
+  })
+
+  it('describes delegate_task by role and a clipped task', () => {
+    const summary = summarizeToolArgs(
+      'delegate_task',
+      JSON.stringify({ role: 'explore', task: '定位所有调用点的定义与引用', context: '很长' })
+    )
+    expect(summary).toContain('delegate_task')
+    expect(summary).toContain('explore')
+    expect(summary).toContain('定位所有调用点')
+    expect(summary).not.toContain('很长')
   })
 
   it('clips long commands and falls back to raw text on bad JSON', () => {

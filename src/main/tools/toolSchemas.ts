@@ -128,6 +128,12 @@ export const browserWaitArgsSchema = z.object({
     .default(BROWSER_LIMITS.commandTimeoutMs)
 })
 
+export const delegateTaskArgsSchema = z.object({
+  role: z.enum(['explore', 'implement', 'verify']),
+  task: z.string().min(1).max(2000),
+  context: z.string().max(8000).optional().default('')
+})
+
 export type ListDirArgs = z.output<typeof listDirArgsSchema>
 export type ReadFileArgs = z.output<typeof readFileArgsSchema>
 export type SearchFilesArgs = z.output<typeof searchFilesArgsSchema>
@@ -143,6 +149,7 @@ export type WebSearchArgs = z.output<typeof webSearchArgsSchema>
 export type GenerateImageArgs = z.output<typeof generateImageArgsSchema>
 export type BrowserCdpArgs = z.output<typeof browserCdpArgsSchema>
 export type BrowserWaitArgs = z.output<typeof browserWaitArgsSchema>
+export type DelegateTaskArgs = z.output<typeof delegateTaskArgsSchema>
 
 export type ParsedToolArguments =
   | { tool: 'list_dir'; args: ListDirArgs }
@@ -160,6 +167,7 @@ export type ParsedToolArguments =
   | { tool: 'generate_image'; args: GenerateImageArgs }
   | { tool: 'browser_cdp'; args: BrowserCdpArgs }
   | { tool: 'browser_wait'; args: BrowserWaitArgs }
+  | { tool: 'delegate_task'; args: DelegateTaskArgs }
 
 export function parseToolArguments(name: string, raw: string): ParsedToolArguments {
   let json: unknown
@@ -200,6 +208,8 @@ export function parseToolArguments(name: string, raw: string): ParsedToolArgumen
       return { tool: 'browser_cdp', args: browserCdpArgsSchema.parse(json) }
     case 'browser_wait':
       return { tool: 'browser_wait', args: browserWaitArgsSchema.parse(json) }
+    case 'delegate_task':
+      return { tool: 'delegate_task', args: delegateTaskArgsSchema.parse(json) }
     default:
       throw new AppError('E_TOOL_DENIED', `未知工具：${name}`)
   }

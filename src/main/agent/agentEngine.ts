@@ -8,6 +8,7 @@ import type {
   ProviderFinishReason,
   ProviderUsage,
   ToolCall,
+  ToolDefinition,
   ToolExecutionOutcome
 } from '../../shared/agent'
 import type { ContextAttachment } from '../../shared/attachment'
@@ -33,6 +34,15 @@ export interface AgentEngineConfig {
    * 即使随后被取消，已经产生的用量也会被上报。
    */
   onUsage?: (usage: ProviderUsage) => void
+  /**
+   * 每轮请求前决定暴露给模型的工具定义（只影响声明，不影响执行）。
+   * 典型用途：长任务到一定轮次后才暴露 delegate_task。返回 undefined 用默认定义。
+   */
+  toolsForRound?: (round: number) => ToolDefinition[] | undefined
+  /**
+   * 固定轮次上限；提供时覆盖基于工作量的自适应上限（子代理用，限制嵌套任务规模）。
+   */
+  roundLimit?: number
 }
 
 /** 轮次上限分级：按本次 run 内的实际工作量自适应，而不是预先分类 */
@@ -144,7 +154,8 @@ export async function runAgentTurn(
   emit({ type: 'run:start', ...nextMeta(), sessionId: input.sessionId })
 
   for (let round = 0; ; round += 1) {
-    if (round >= roundLimit()) {
+    const currentRoundLimit = config.roundLimit ?? roundLimit()
+    if (round >= currentRoundLimit) {
       emit({
         type: 'run:paused',
         ...nextMeta(),
@@ -184,8 +195,9 @@ export async function runAgentTurn(
     const roundUsage: ProviderUsage = { inputTokens: 0, outputTokens: 0 }
 
     try {
+      const roundDefinitions = config.toolsForRound?.(round) ?? config.tools?.definitions
       for await (const chunk of config.provider.stream(
-        { messages, tools: config.tools?.definitions },
+        { messages, tools: roundDefinitions },
         signal
       )) {
         if (signal.aborted) break
