@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { formatDuration } from '../lib/timeline'
 
@@ -54,7 +55,9 @@ const elapsed = computed(() => {
   return formatDuration(end - startedAt)
 })
 
-const label = computed(() => (props.streaming ? '正在思考…' : `已思考 · ${elapsed.value}`))
+const label = computed(() =>
+  props.streaming ? t('正在思考…') : t('已思考 · {elapsed}', { elapsed: elapsed.value })
+)
 
 async function scrollToEnd(): Promise<void> {
   await nextTick()
@@ -120,7 +123,7 @@ function toggle(): void {
       </span>
 
       <span class="label">{{ label }}</span>
-      <span class="hint">推理过程</span>
+      <span class="hint">{{ t('推理过程') }}</span>
     </button>
 
     <div v-if="isOpen" ref="bodyRef" class="reasoning-body" data-testid="reasoning-content">

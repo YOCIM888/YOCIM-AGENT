@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { ref } from 'vue'
 import BrowserView from './BrowserView.vue'
 import TerminalPanel from './TerminalPanel.vue'
@@ -45,9 +46,7 @@ function onKeydown(event: KeyboardEvent): void {
   if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
   event.preventDefault()
   const step = event.shiftKey ? 5 : 2
-  settings.setToolPanelHeight(
-    settings.toolPanelHeight + (event.key === 'ArrowUp' ? step : -step)
-  )
+  settings.setToolPanelHeight(settings.toolPanelHeight + (event.key === 'ArrowUp' ? step : -step))
 }
 </script>
 
@@ -63,16 +62,16 @@ function onKeydown(event: KeyboardEvent): void {
       data-testid="tool-deck-resize"
       role="separator"
       aria-orientation="horizontal"
-      aria-label="调整工具区高度"
+      :aria-label="t('调整工具区高度')"
       :aria-valuenow="settings.toolPanelHeight"
       tabindex="0"
-      title="拖动调整高度，双击恢复默认"
+      :title="t('拖动调整高度，双击恢复默认')"
       @pointerdown="onPointerDown"
       @keydown="onKeydown"
       @dblclick="settings.setToolPanelHeight(settings.toolPanelHeightDefault)"
     ></div>
 
-    <nav class="deck-tabs" aria-label="下半屏工具">
+    <nav class="deck-tabs" :aria-label="t('下半屏工具')">
       <button
         type="button"
         class="deck-tab"
@@ -81,7 +80,7 @@ function onKeydown(event: KeyboardEvent): void {
         :aria-pressed="ui.toolTab === 'terminal'"
         @click="ui.activateTerminal()"
       >
-        终端
+        {{ t('终端') }}
       </button>
       <button
         type="button"
@@ -91,20 +90,14 @@ function onKeydown(event: KeyboardEvent): void {
         :aria-pressed="ui.toolTab === 'browser'"
         @click="ui.activateBrowser()"
       >
-        浏览器
+        {{ t('浏览器') }}
       </button>
     </nav>
 
     <div class="deck-body">
       <!-- v-show 保留两个面板实例：切回终端时 xterm 滚动缓冲与运行状态不丢失 -->
-      <TerminalPanel
-        v-show="ui.toolTab === 'terminal'"
-        @close="ui.closeTerminal()"
-      />
-      <BrowserView
-        v-show="ui.toolTab === 'browser'"
-        @close="ui.closeBrowser()"
-      />
+      <TerminalPanel v-show="ui.toolTab === 'terminal'" @close="ui.closeTerminal()" />
+      <BrowserView v-show="ui.toolTab === 'browser'" @close="ui.closeBrowser()" />
     </div>
   </section>
 </template>

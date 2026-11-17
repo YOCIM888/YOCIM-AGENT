@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import AuditPanel from './AuditPanel.vue'
 
 const emit = defineEmits<{ close: [] }>()
@@ -7,15 +8,20 @@ const emit = defineEmits<{ close: [] }>()
 <template>
   <Teleport to="body">
     <div class="overlay" data-testid="audit-dialog" @click.self="emit('close')">
-      <section class="dialog" role="dialog" aria-label="审计日志" data-testid="audit-dialog-card">
+      <section
+        class="dialog"
+        role="dialog"
+        :aria-label="t('审计日志')"
+        data-testid="audit-dialog-card"
+      >
         <header class="dialog-head">
-          <h2>审计日志</h2>
+          <h2>{{ t('审计日志') }}</h2>
           <button
             type="button"
             class="icon-button"
             data-testid="audit-dialog-close"
-            title="关闭"
-            aria-label="关闭审计日志"
+            :title="t('关闭')"
+            :aria-label="t('关闭审计日志')"
             @click="emit('close')"
           >
             ✕

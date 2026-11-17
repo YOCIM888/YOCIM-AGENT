@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, reactive, watch } from 'vue'
 import type { FsTreeNode } from '@shared/ipc'
 import { WORKSPACE_VIEWS, type WorkspaceView } from '../lib/workspaceViews'
@@ -76,7 +77,7 @@ watch(
         v-if="settings.workspaceView === 'files'"
         type="button"
         class="tab-action"
-        title="刷新文件树"
+        :title="t('刷新文件树')"
         :disabled="!workspace.info"
         @click="workspace.refreshTree()"
       >

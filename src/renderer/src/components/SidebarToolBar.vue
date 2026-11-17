@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed } from 'vue'
 import { useProjectsStore } from '../stores/projects'
 import { useSessionStore } from '../stores/session'
@@ -21,25 +22,23 @@ const currentProjectId = computed(
 )
 
 /** 无当前会话或浏览器被禁用时，占位按钮禁用并给出原因 */
-const browserDisabled = computed(
-  () => !sessions.activeSessionId || !appSettings.browser.enabled
-)
+const browserDisabled = computed(() => !sessions.activeSessionId || !appSettings.browser.enabled)
 const browserTitle = computed(() => {
-  if (!sessions.activeSessionId) return '请先选择一个会话'
-  if (!appSettings.browser.enabled) return '浏览器能力已在设置中关闭'
-  return ui.browserOpen ? '关闭浏览器视图' : '浏览器'
+  if (!sessions.activeSessionId) return t('请先选择一个会话')
+  if (!appSettings.browser.enabled) return t('浏览器能力已在设置中关闭')
+  return ui.browserOpen ? t('关闭浏览器视图') : t('浏览器')
 })
 </script>
 
 <template>
-  <nav class="sidebar-toolbar" aria-label="侧边栏工具条" data-testid="sidebar-toolbar">
+  <nav class="sidebar-toolbar" :aria-label="t('侧边栏工具条')" data-testid="sidebar-toolbar">
     <button
       type="button"
       class="tool-button"
       :class="{ active: ui.terminalOpen }"
       data-testid="sidebar-tool-terminal"
-      title="终端"
-      aria-label="终端"
+      :title="t('终端')"
+      :aria-label="t('终端')"
       :aria-pressed="ui.terminalOpen"
       @click="ui.toggleTerminal()"
     >
@@ -68,8 +67,8 @@ const browserTitle = computed(() => {
       class="tool-button"
       :class="{ active: ui.conventionsOpen }"
       data-testid="sidebar-tool-conventions"
-      :title="currentProjectId ? '项目约定' : '请先打开一个项目'"
-      aria-label="项目约定"
+      :title="currentProjectId ? t('项目约定') : t('请先打开一个项目')"
+      :aria-label="t('项目约定')"
       :aria-pressed="ui.conventionsOpen"
       :disabled="!currentProjectId"
       @click="ui.toggleConventions()"
@@ -95,8 +94,8 @@ const browserTitle = computed(() => {
       class="tool-button"
       :class="{ active: ui.commandsOpen }"
       data-testid="sidebar-tool-commands"
-      title="命令管理"
-      aria-label="命令管理"
+      :title="t('命令管理')"
+      :aria-label="t('命令管理')"
       :aria-pressed="ui.commandsOpen"
       @click="ui.openCommands()"
     >
@@ -122,8 +121,8 @@ const browserTitle = computed(() => {
       class="tool-button"
       :class="{ active: ui.auditOpen }"
       data-testid="sidebar-tool-audit"
-      title="审计日志"
-      aria-label="审计日志"
+      :title="t('审计日志')"
+      :aria-label="t('审计日志')"
       :aria-pressed="ui.auditOpen"
       @click="ui.toggleAudit()"
     >
@@ -169,8 +168,8 @@ const browserTitle = computed(() => {
       type="button"
       class="tool-button"
       data-testid="sidebar-tool-settings"
-      title="设置"
-      aria-label="设置"
+      :title="t('设置')"
+      :aria-label="t('设置')"
       @click="ui.openSettings()"
     >
       <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true">

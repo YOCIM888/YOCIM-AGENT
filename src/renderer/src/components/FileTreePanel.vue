@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, onMounted, provide, ref } from 'vue'
 import type { FsConflictResolution, FsTreeNode } from '@shared/ipc'
 import { FILE_TREE_KEY, type TreeEditing } from '../lib/fileTree'
@@ -88,30 +89,35 @@ function buildMenu(node: FsTreeNode | null): ContextMenuItem[] {
   const hasClipboard = workspace.clipboard !== null
   if (!node) {
     return [
-      { id: 'new-file', label: '新建文件', testid: 'menu-new-file' },
-      { id: 'new-folder', label: '新建文件夹', testid: 'menu-new-folder' },
+      { id: 'new-file', label: t('新建文件'), testid: 'menu-new-file' },
+      { id: 'new-folder', label: t('新建文件夹'), testid: 'menu-new-folder' },
       {
         id: 'paste',
-        label: '粘贴',
+        label: t('粘贴'),
         testid: 'menu-paste',
         disabled: !hasClipboard,
         separatorBefore: true
       },
-      { id: 'refresh', label: '刷新', testid: 'menu-refresh', separatorBefore: true },
-      { id: 'collapse-all', label: '全部折叠', testid: 'menu-collapse-all' }
+      { id: 'refresh', label: t('刷新'), testid: 'menu-refresh', separatorBefore: true },
+      { id: 'collapse-all', label: t('全部折叠'), testid: 'menu-collapse-all' }
     ]
   }
   const isFile = node.type === 'file'
   return [
-    { id: 'cut', label: '剪切', testid: 'menu-cut' },
-    { id: 'copy', label: '复制', testid: 'menu-copy' },
-    { id: 'paste', label: '粘贴', testid: 'menu-paste', disabled: !hasClipboard },
-    { id: 'rename', label: '重命名', testid: 'menu-rename', separatorBefore: true },
-    { id: 'attach', label: '添加到对话', testid: 'menu-attach', disabled: !isFile },
-    { id: 'reveal', label: '在文件资源管理器中显示', testid: 'menu-reveal', separatorBefore: true },
-    { id: 'copy-path', label: '复制路径', testid: 'menu-copy-path' },
-    { id: 'copy-relative-path', label: '复制相对路径', testid: 'menu-copy-relative-path' },
-    { id: 'delete', label: '删除', testid: 'menu-delete', danger: true, separatorBefore: true }
+    { id: 'cut', label: t('剪切'), testid: 'menu-cut' },
+    { id: 'copy', label: t('复制'), testid: 'menu-copy' },
+    { id: 'paste', label: t('粘贴'), testid: 'menu-paste', disabled: !hasClipboard },
+    { id: 'rename', label: t('重命名'), testid: 'menu-rename', separatorBefore: true },
+    { id: 'attach', label: t('添加到对话'), testid: 'menu-attach', disabled: !isFile },
+    {
+      id: 'reveal',
+      label: t('在文件资源管理器中显示'),
+      testid: 'menu-reveal',
+      separatorBefore: true
+    },
+    { id: 'copy-path', label: t('复制路径'), testid: 'menu-copy-path' },
+    { id: 'copy-relative-path', label: t('复制相对路径'), testid: 'menu-copy-relative-path' },
+    { id: 'delete', label: t('删除'), testid: 'menu-delete', danger: true, separatorBefore: true }
   ]
 }
 
@@ -208,7 +214,7 @@ onMounted(() => {
       <button
         type="button"
         class="tool"
-        title="新建文件"
+        :title="t('新建文件')"
         data-testid="tree-toolbar-new-file"
         :disabled="!workspace.info"
         @click="startCreate('', 'create-file')"
@@ -221,7 +227,7 @@ onMounted(() => {
       <button
         type="button"
         class="tool"
-        title="新建文件夹"
+        :title="t('新建文件夹')"
         data-testid="tree-toolbar-new-folder"
         :disabled="!workspace.info"
         @click="startCreate('', 'create-folder')"
@@ -239,7 +245,7 @@ onMounted(() => {
       <button
         type="button"
         class="tool"
-        title="刷新"
+        :title="t('刷新')"
         data-testid="tree-toolbar-refresh"
         :disabled="!workspace.info"
         @click="workspace.refreshTree()"
@@ -249,7 +255,7 @@ onMounted(() => {
       <button
         type="button"
         class="tool"
-        title="全部折叠"
+        :title="t('全部折叠')"
         data-testid="tree-toolbar-collapse"
         :disabled="!workspace.info"
         @click="workspace.collapseAll()"
@@ -261,7 +267,7 @@ onMounted(() => {
     </div>
 
     <p v-if="workspace.error" class="error" data-testid="tree-error">
-      {{ workspace.error }}
+      {{ t(workspace.error) }}
       <button type="button" class="dismiss" @click="workspace.clearError()">×</button>
     </p>
 
@@ -282,7 +288,7 @@ onMounted(() => {
         />
       </ul>
       <p v-else class="empty" data-testid="workspace-empty">
-        {{ workspace.info ? '工作区为空' : '选择工作区后可浏览文件' }}
+        {{ workspace.info ? t('工作区为空') : t('选择工作区后可浏览文件') }}
       </p>
     </div>
 
@@ -305,9 +311,9 @@ onMounted(() => {
     />
     <ConfirmDialog
       v-if="pendingDelete"
-      title="删除确认"
+      :title="t('删除确认')"
       :message="`确定将「${pendingDelete.name}」移入回收站吗？可从系统回收站恢复。`"
-      confirm-label="移入回收站"
+      :confirm-label="t('移入回收站')"
       danger
       testid="delete-dialog"
       @confirm="confirmDelete"

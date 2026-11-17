@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import type { GitFileChange } from '@shared/git'
 import { useScmStore, type ScmGroup } from '../stores/scm'
@@ -21,12 +22,12 @@ const creatingBranch = ref(false)
 const showOutput = ref(false)
 const pendingDiscard = ref<GitFileChange | null>(null)
 
-const GROUP_LABELS: Record<ScmGroup, string> = {
-  staged: '已暂存',
-  unstaged: '更改',
-  untracked: '未跟踪',
-  conflicted: '冲突'
-}
+const GROUP_LABELS = computed<Record<ScmGroup, string>>(() => ({
+  staged: t('已暂存'),
+  unstaged: t('更改'),
+  untracked: t('未跟踪'),
+  conflicted: t('冲突')
+}))
 
 const GROUPS: ScmGroup[] = ['conflicted', 'staged', 'unstaged', 'untracked']
 
@@ -111,7 +112,7 @@ onMounted(() => {
 <template>
   <aside class="scm" data-testid="scm-panel">
     <div class="scm-head">
-      <span class="title">源代码管理</span>
+      <span class="title">{{ t('源代码管理') }}</span>
       <span v-if="scm.changeCount" class="count" data-testid="scm-count">{{
         scm.changeCount
       }}</span>
@@ -125,7 +126,7 @@ onMounted(() => {
           data-testid="scm-view-changes"
           @click="view = 'changes'"
         >
-          变更
+          {{ t('变更') }}
         </button>
         <button
           type="button"
@@ -136,13 +137,13 @@ onMounted(() => {
           data-testid="scm-view-graph"
           @click="view = 'graph'"
         >
-          提交图
+          {{ t('提交图') }}
         </button>
       </div>
       <button
         type="button"
         class="icon"
-        title="刷新状态"
+        :title="t('刷新状态')"
         data-testid="scm-refresh"
         :disabled="scm.loading"
         @click="scm.refresh()"
@@ -153,7 +154,7 @@ onMounted(() => {
         type="button"
         class="icon"
         :class="{ on: showOutput }"
-        title="Git 输出"
+        :title="t('Git 输出')"
         data-testid="scm-toggle-output"
         @click="toggleOutput"
       >
@@ -162,24 +163,24 @@ onMounted(() => {
     </div>
 
     <p v-if="scm.error" class="error" data-testid="scm-error">
-      {{ scm.error }}
+      {{ t(scm.error) }}
       <button type="button" class="dismiss" @click="scm.clearError()">×</button>
     </p>
-    <p v-else-if="scm.notice" class="notice" data-testid="scm-notice">{{ scm.notice }}</p>
+    <p v-else-if="scm.notice" class="notice" data-testid="scm-notice">{{ t(scm.notice) }}</p>
 
     <div v-if="!workspace.info" class="hint" data-testid="scm-no-workspace">
-      请先打开工作区后使用源代码管理。
+      {{ t('请先打开工作区后使用源代码管理。') }}
     </div>
 
     <div v-else-if="scm.status && !scm.status.available" class="hint" data-testid="scm-git-missing">
       <p>{{ scm.status.message }}</p>
-      <p class="sub">安装 Git 后重启应用即可启用源代码管理。</p>
+      <p class="sub">{{ t('安装 Git 后重启应用即可启用源代码管理。') }}</p>
     </div>
 
     <div v-else-if="scm.status && !scm.status.isRepo" class="hint" data-testid="scm-not-repo">
-      <p>当前工作区不是 Git 仓库。</p>
+      <p>{{ t('当前工作区不是 Git 仓库。') }}</p>
       <button type="button" class="primary" data-testid="scm-init" @click="scm.initRepo()">
-        初始化仓库
+        {{ t('初始化仓库') }}
       </button>
     </div>
 
@@ -191,12 +192,12 @@ onMounted(() => {
             type="button"
             class="branch"
             data-testid="scm-branch"
-            :title="scm.status.detached ? '分离头指针' : scm.status.branch"
+            :title="scm.status.detached ? t('分离头指针') : scm.status.branch"
             @click="toggleBranchMenu"
           >
             <span class="branch-icon">⎇</span>
             <span class="branch-name">{{
-              scm.status.detached ? 'detached HEAD' : scm.status.branch || '未命名分支'
+              scm.status.detached ? 'detached HEAD' : scm.status.branch || t('未命名分支')
             }}</span>
             <span class="chevron">▾</span>
           </button>
@@ -217,7 +218,7 @@ onMounted(() => {
           >
             {{ branch }}
           </button>
-          <div v-if="remoteBranches.length" class="branch-sub">远程分支</div>
+          <div v-if="remoteBranches.length" class="branch-sub">{{ t('远程分支') }}</div>
           <button
             v-for="branch in remoteBranches"
             :key="branch"
@@ -234,7 +235,7 @@ onMounted(() => {
               v-model="newBranch"
               type="text"
               class="branch-input"
-              placeholder="新分支名"
+              :placeholder="t('新分支名')"
               data-testid="scm-branch-input"
               @keydown.enter="createBranch"
               @keydown.esc="creatingBranch = false"
@@ -246,7 +247,7 @@ onMounted(() => {
               data-testid="scm-branch-new"
               @click="creatingBranch = true"
             >
-              + 新建分支
+              {{ t('+ 新建分支') }}
             </button>
             <button
               v-if="creatingBranch"
@@ -255,7 +256,7 @@ onMounted(() => {
               data-testid="scm-branch-create"
               @click="createBranch"
             >
-              创建
+              {{ t('创建') }}
             </button>
           </div>
         </div>
@@ -264,7 +265,7 @@ onMounted(() => {
           v-model="scm.message"
           class="message"
           rows="2"
-          placeholder="提交信息（Ctrl+Enter 提交）"
+          :placeholder="t('提交信息（Ctrl+Enter 提交）')"
           data-testid="scm-message"
           @keydown.ctrl.enter.prevent="scm.commit(false)"
         ></textarea>
@@ -276,7 +277,7 @@ onMounted(() => {
             :disabled="!scm.canCommit || Boolean(scm.busy)"
             @click="scm.commit(false)"
           >
-            提交
+            {{ t('提交') }}
           </button>
           <button
             type="button"
@@ -285,12 +286,12 @@ onMounted(() => {
             :disabled="!scm.message.trim() || Boolean(scm.busy)"
             @click="scm.commit(true)"
           >
-            全部暂存并提交
+            {{ t('全部暂存并提交') }}
           </button>
         </div>
 
         <div class="groups">
-          <p v-if="!hasChanges" class="empty" data-testid="scm-empty">没有变更。</p>
+          <p v-if="!hasChanges" class="empty" data-testid="scm-empty">{{ t('没有变更。') }}</p>
           <section
             v-for="group in GROUPS"
             v-show="scm.groupsOf(group).length"
@@ -339,7 +340,7 @@ onMounted(() => {
                     v-if="group === 'staged'"
                     type="button"
                     class="action"
-                    title="取消暂存"
+                    :title="t('取消暂存')"
                     :data-testid="`scm-unstage-${change.path}`"
                     @click="scm.unstage([change.path])"
                   >
@@ -349,7 +350,7 @@ onMounted(() => {
                     v-else-if="group !== 'conflicted'"
                     type="button"
                     class="action"
-                    title="暂存"
+                    :title="t('暂存')"
                     :data-testid="`scm-stage-${change.path}`"
                     @click="scm.stage([change.path])"
                   >
@@ -359,7 +360,7 @@ onMounted(() => {
                     v-if="group === 'unstaged'"
                     type="button"
                     class="action danger"
-                    title="放弃更改"
+                    :title="t('放弃更改')"
                     :data-testid="`scm-discard-${change.path}`"
                     @click="pendingDiscard = change"
                   >
@@ -369,7 +370,7 @@ onMounted(() => {
                     v-if="group === 'conflicted'"
                     type="button"
                     class="action"
-                    title="打开文件查看冲突"
+                    :title="t('打开文件查看冲突')"
                     :data-testid="`scm-open-${change.path}`"
                     @click="scm.openFile(change)"
                   >
@@ -378,7 +379,7 @@ onMounted(() => {
                   <button
                     type="button"
                     class="action"
-                    title="在文件资源管理器中显示"
+                    :title="t('在文件资源管理器中显示')"
                     :data-testid="`scm-reveal-${change.path}`"
                     @click="scm.reveal(change)"
                   >
@@ -397,41 +398,41 @@ onMounted(() => {
           class="footer-action"
           data-testid="scm-pull"
           :disabled="Boolean(scm.busy)"
-          title="拉取（--ff-only）"
+          :title="t('拉取（--ff-only）')"
           @click="scm.network('pull')"
         >
-          拉取
+          {{ t('拉取') }}
         </button>
         <button
           type="button"
           class="footer-action"
           data-testid="scm-push"
           :disabled="Boolean(scm.busy)"
-          title="推送"
+          :title="t('推送')"
           @click="scm.network('push')"
         >
-          推送
+          {{ t('推送') }}
         </button>
         <button
           type="button"
           class="footer-action"
           data-testid="scm-publish"
           :disabled="Boolean(scm.busy)"
-          title="发布分支（push -u origin）"
+          :title="t('发布分支（push -u origin）')"
           @click="scm.network('publish')"
         >
-          发布分支
+          {{ t('发布分支') }}
         </button>
         <span class="spacer"></span>
-        <span v-if="scm.busy" class="busy" data-testid="scm-busy">执行中…</span>
+        <span v-if="scm.busy" class="busy" data-testid="scm-busy">{{ t('执行中…') }}</span>
       </div>
 
       <section v-if="showOutput" class="output" data-testid="scm-output">
         <header>
-          <span>Git 输出</span>
+          <span>{{ t('Git 输出') }}</span>
           <button type="button" class="icon" @click="scm.loadOutput()">↻</button>
         </header>
-        <p v-if="!scm.output.length" class="empty">暂无 Git 命令记录。</p>
+        <p v-if="!scm.output.length" class="empty">{{ t('暂无 Git 命令记录。') }}</p>
         <ul v-else>
           <li
             v-for="entry in scm.output"
@@ -449,9 +450,11 @@ onMounted(() => {
 
     <ConfirmDialog
       v-if="pendingDiscard"
-      title="放弃更改"
-      :message="`将丢弃「${pendingDiscard.path}」未暂存的修改，且无法撤销。确定继续吗？`"
-      confirm-label="放弃更改"
+      :title="t('放弃更改')"
+      :message="
+        t('将丢弃「{path}」未暂存的修改，且无法撤销。确定继续吗？', { path: pendingDiscard.path })
+      "
+      :confirm-label="t('放弃更改')"
       danger
       testid="scm-discard-dialog"
       @confirm="confirmDiscard"

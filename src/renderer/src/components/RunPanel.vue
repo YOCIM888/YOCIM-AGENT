@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import type { DebugConfig } from '@shared/debug'
 import type { TaskDefinition } from '@shared/tasks'
@@ -51,17 +52,17 @@ function persistConfirmed(): void {
 const statusLabel = computed(() => {
   switch (debug.status) {
     case 'starting':
-      return '启动中'
+      return t('启动中')
     case 'running':
-      return '运行中'
+      return t('运行中')
     case 'paused':
-      return '已暂停'
+      return t('已暂停')
     case 'error':
-      return '启动失败'
+      return t('启动失败')
     case 'stopped':
-      return '已结束'
+      return t('已结束')
     default:
-      return '未启动'
+      return t('未启动')
   }
 })
 
@@ -79,8 +80,8 @@ function requestStartConfig(config: DebugConfig): void {
   }
   pending.value = {
     kind: 'config',
-    title: '确认调试命令',
-    message: `将执行：${previewCommand(config)}（首次运行需确认完整命令）`,
+    title: t('确认调试命令'),
+    message: t('将执行：{command}（首次运行需确认完整命令）', { command: previewCommand(config) }),
     config
   }
 }
@@ -92,8 +93,8 @@ function requestStartTask(task: TaskDefinition): void {
   }
   pending.value = {
     kind: 'task',
-    title: '确认任务命令',
-    message: `将执行：${task.commandLine}（自定义任务首次运行需确认）`,
+    title: t('确认任务命令'),
+    message: t('将执行：{command}（自定义任务首次运行需确认）', { command: task.commandLine }),
     task
   }
 }
@@ -145,12 +146,12 @@ onMounted(refreshAll)
 <template>
   <aside class="run" data-testid="run-panel">
     <div class="run-head">
-      <span class="title">运行和调试</span>
+      <span class="title">{{ t('运行和调试') }}</span>
       <span v-if="debug.isActive" class="status" data-testid="debug-status">{{ statusLabel }}</span>
       <button
         type="button"
         class="icon"
-        title="刷新配置与任务"
+        :title="t('刷新配置与任务')"
         data-testid="run-refresh"
         :disabled="tasks.loading || debug.loading"
         @click="refreshAll"
@@ -159,19 +160,19 @@ onMounted(refreshAll)
       </button>
     </div>
 
-    <div v-if="tasks.error" class="error" data-testid="run-error">{{ tasks.error }}</div>
-    <div v-if="debug.error" class="error" data-testid="debug-error">{{ debug.error }}</div>
-    <div v-if="tasks.notice" class="notice" data-testid="run-notice">{{ tasks.notice }}</div>
+    <div v-if="tasks.error" class="error" data-testid="run-error">{{ t(tasks.error) }}</div>
+    <div v-if="debug.error" class="error" data-testid="debug-error">{{ t(debug.error) }}</div>
+    <div v-if="tasks.notice" class="notice" data-testid="run-notice">{{ t(tasks.notice) }}</div>
 
     <div v-if="!workspace.info" class="hint" data-testid="run-no-workspace">
-      打开工作区后可运行 npm scripts、自定义任务并调试 Node.js
+      {{ t('打开工作区后可运行 npm scripts、自定义任务并调试 Node.js') }}
     </div>
 
     <div v-else class="run-body">
       <div v-if="debug.isActive" class="toolbar" data-testid="debug-toolbar">
         <button
           type="button"
-          title="继续 (F5)"
+          :title="t('继续 (F5)')"
           data-testid="debug-continue"
           :disabled="!debug.isPaused"
           @click="debug.command('continue')"
@@ -180,7 +181,7 @@ onMounted(refreshAll)
         </button>
         <button
           type="button"
-          title="暂停"
+          :title="t('暂停')"
           data-testid="debug-pause"
           :disabled="debug.isPaused"
           @click="debug.command('pause')"
@@ -189,7 +190,7 @@ onMounted(refreshAll)
         </button>
         <button
           type="button"
-          title="单步跳过"
+          :title="t('单步跳过')"
           data-testid="debug-step-over"
           :disabled="!debug.isPaused"
           @click="debug.command('stepOver')"
@@ -198,7 +199,7 @@ onMounted(refreshAll)
         </button>
         <button
           type="button"
-          title="单步进入"
+          :title="t('单步进入')"
           data-testid="debug-step-into"
           :disabled="!debug.isPaused"
           @click="debug.command('stepInto')"
@@ -207,7 +208,7 @@ onMounted(refreshAll)
         </button>
         <button
           type="button"
-          title="单步跳出"
+          :title="t('单步跳出')"
           data-testid="debug-step-out"
           :disabled="!debug.isPaused"
           @click="debug.command('stepOut')"
@@ -216,7 +217,7 @@ onMounted(refreshAll)
         </button>
         <button
           type="button"
-          title="重启"
+          :title="t('重启')"
           data-testid="debug-restart"
           @click="debug.command('restart')"
         >
@@ -225,7 +226,7 @@ onMounted(refreshAll)
         <button
           type="button"
           class="stop"
-          title="停止"
+          :title="t('停止')"
           data-testid="debug-stop"
           @click="debug.stop()"
         >
@@ -237,13 +238,13 @@ onMounted(refreshAll)
       </div>
 
       <CollapsibleSection
-        title="运行配置"
+        :title="t('运行配置')"
         section="runConfigs"
         testid="run-configs"
         :count="debug.configs.length"
       >
         <div v-if="debug.configFile?.error" class="hint" data-testid="run-configs-empty">
-          {{ debug.configFile.error }}
+          {{ t(debug.configFile.error) }}
         </div>
         <ul v-else class="list">
           <li
@@ -259,7 +260,7 @@ onMounted(refreshAll)
             <button
               type="button"
               class="row-action"
-              title="启动调试"
+              :title="t('启动调试')"
               :data-testid="`run-config-start-${config.id}`"
               :disabled="debug.busy || debug.isActive"
               @click="startDebug(config)"
@@ -271,13 +272,13 @@ onMounted(refreshAll)
       </CollapsibleSection>
 
       <CollapsibleSection
-        title="任务"
+        :title="t('任务')"
         section="runTasks"
         testid="run-tasks"
         :count="tasks.tasks.length"
       >
         <div v-if="!tasks.tasks.length" class="hint" data-testid="run-tasks-empty">
-          未发现可运行任务：需要 package.json 的 scripts，或新建 .yocim/tasks.json
+          {{ t('未发现可运行任务：需要 package.json 的 scripts，或新建 .yocim/tasks.json') }}
         </div>
         <ul v-else class="list">
           <li
@@ -294,7 +295,7 @@ onMounted(refreshAll)
               v-if="!tasks.runningRuns.some((run) => run.taskId === task.id)"
               type="button"
               class="row-action"
-              title="运行任务"
+              :title="t('运行任务')"
               :data-testid="`run-task-start-${task.id}`"
               @click="requestStartTask(task)"
             >
@@ -304,7 +305,7 @@ onMounted(refreshAll)
               v-else
               type="button"
               class="row-action stop"
-              title="停止任务"
+              :title="t('停止任务')"
               :data-testid="`run-task-stop-${task.id}`"
               @click="
                 tasks.stop(tasks.runningRuns.find((run) => run.taskId === task.id)?.runId ?? '')
@@ -321,28 +322,28 @@ onMounted(refreshAll)
       <DebugInspector v-if="debug.session" />
 
       <CollapsibleSection
-        title="调试控制台"
+        :title="t('调试控制台')"
         section="debugConsole"
         testid="debug-console"
         :count="debug.consoleLines.length"
       >
         <div class="console-tools">
           <button type="button" data-testid="debug-console-clear" @click="debug.clearConsole()">
-            清空
+            {{ t('清空') }}
           </button>
         </div>
         <pre class="console" data-testid="debug-console-text">{{ debug.consoleText }}</pre>
       </CollapsibleSection>
 
       <CollapsibleSection
-        title="任务输出"
+        :title="t('任务输出')"
         section="runOutput"
         testid="run-output"
         :count="runningCount"
       >
         <div class="console-tools">
           <button type="button" data-testid="run-output-clear" @click="tasks.clearOutput()">
-            清空
+            {{ t('清空') }}
           </button>
         </div>
         <pre class="console" data-testid="run-output-text">{{ tasks.outputText }}</pre>
@@ -353,7 +354,7 @@ onMounted(refreshAll)
       v-if="pending"
       :title="pending.title"
       :message="pending.message"
-      confirm-label="运行"
+      :confirm-label="t('运行')"
       testid="run-confirm-dialog"
       @confirm="confirmPending"
       @close="dismissPending"

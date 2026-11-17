@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import type { GitCommitNode } from '@shared/git'
 import {
@@ -38,7 +39,7 @@ const localBranches = computed(() => scm.branches?.local ?? [])
 const currentBranch = computed(() => scm.graph?.branch || scm.status?.branch || '')
 
 function branchLabel(value: string): string {
-  if (value === 'all') return '全部分支'
+  if (value === 'all') return t('全部分支')
   return value
 }
 
@@ -139,17 +140,19 @@ onMounted(() => {
       </button>
 
       <span v-if="currentBranch && scm.graphBranch === 'all'" class="current-branch">
-        当前 {{ currentBranch }}
+        {{ t('当前') }} {{ currentBranch }}
       </span>
 
-      <span class="count" data-testid="git-graph-count"> {{ commits.length }} 个提交 </span>
+      <span class="count" data-testid="git-graph-count">
+        {{ commits.length }} {{ t('个提交') }}
+      </span>
 
       <span class="spacer"></span>
 
       <button
         type="button"
         class="icon"
-        title="刷新提交图"
+        :title="t('刷新提交图')"
         data-testid="git-graph-refresh"
         :disabled="scm.graphLoading"
         @click="refresh"
@@ -166,7 +169,7 @@ onMounted(() => {
         data-testid="git-graph-branch-all"
         @click="chooseBranch('all')"
       >
-        全部分支
+        {{ t('全部分支') }}
       </button>
       <button
         v-for="branch in localBranches"
@@ -190,7 +193,7 @@ onMounted(() => {
       class="graph-empty"
       data-testid="git-graph-empty"
     >
-      这个仓库还没有提交记录。
+      {{ t('这个仓库还没有提交记录。') }}
     </p>
 
     <div class="graph-list" :style="{ '--graph-width': `${graphWidth}px` }">
@@ -278,12 +281,12 @@ onMounted(() => {
           </div>
 
           <div class="detail-stats">
-            <span v-if="scm.detailLoading === commit.sha" class="loading">加载中…</span>
+            <span v-if="scm.detailLoading === commit.sha" class="loading">{{ t('加载中…') }}</span>
             <template v-else-if="scm.commitDetails[commit.sha]">
               <span class="added">+{{ scm.commitDetails[commit.sha].totalAdded }}</span>
               <span class="deleted">−{{ scm.commitDetails[commit.sha].totalDeleted }}</span>
               <span class="file-count">
-                {{ scm.commitDetails[commit.sha].files.length }} 个文件
+                {{ scm.commitDetails[commit.sha].files.length }} {{ t('个文件') }}
               </span>
             </template>
           </div>
@@ -303,13 +306,14 @@ onMounted(() => {
             </li>
           </ul>
           <p v-else-if="scm.detailLoading !== commit.sha" class="detail-empty">
-            这个提交没有文件改动。
+            {{ t('这个提交没有文件改动。') }}
           </p>
           <p
             v-if="(scm.commitDetails[commit.sha]?.files.length ?? 0) > MAX_DETAIL_FILES"
             class="more"
           >
-            还有 {{ scm.commitDetails[commit.sha].files.length - MAX_DETAIL_FILES }} 个文件未显示
+            {{ t('还有') }} {{ scm.commitDetails[commit.sha].files.length - MAX_DETAIL_FILES }}
+            {{ t('个文件未显示') }}
           </p>
         </div>
       </div>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useBrowserStore } from '../stores/browser'
 import { useSessionStore } from '../stores/session'
@@ -19,12 +20,15 @@ const observabilityOpen = ref(true)
 const auditLimit = ref(100)
 let observer: ResizeObserver | null = null
 
-const logTabs = [
-  { id: 'console', label: 'Console' },
-  { id: 'network', label: 'Network' },
-  { id: 'exception', label: '异常' },
-  { id: 'audit', label: '审计' }
-] as const
+const logTabs = computed(
+  () =>
+    [
+      { id: 'console', label: 'Console' },
+      { id: 'network', label: 'Network' },
+      { id: 'exception', label: t('异常') },
+      { id: 'audit', label: t('审计') }
+    ] as const
+)
 
 const canOperate = computed(
   () => Boolean(sessionId.value) && appSettings.browser.enabled && browser.connected
@@ -32,17 +36,17 @@ const canOperate = computed(
 const statusLabel = computed(() => {
   switch (browser.status) {
     case 'ready':
-      return browser.headless ? '已连接·无头' : '已连接'
+      return browser.headless ? t('已连接·无头') : t('已连接')
     case 'connecting':
-      return '连接中'
+      return t('连接中')
     case 'reconnecting':
-      return '重连中'
+      return t('重连中')
     case 'error':
-      return '错误'
+      return t('错误')
     case 'disposed':
-      return '已回收'
+      return t('已回收')
     default:
-      return '未启动'
+      return t('未启动')
   }
 })
 
@@ -136,13 +140,13 @@ watch(
         type="button"
         class="close-button"
         data-testid="browser-close"
-        title="关闭浏览器视图"
-        aria-label="关闭浏览器视图"
+        :title="t('关闭浏览器视图')"
+        :aria-label="t('关闭浏览器视图')"
         @click="emit('close')"
       >
         ✕
       </button>
-      <span class="browser-title">浏览器</span>
+      <span class="browser-title">{{ t('浏览器') }}</span>
       <span class="status-badge" :class="`status-${browser.status}`" data-testid="browser-status">
         {{ statusLabel }}
       </span>
@@ -151,11 +155,11 @@ watch(
           v-model="browser.urlDraft"
           type="text"
           data-testid="browser-url"
-          placeholder="输入 http/https 地址，回车导航（人类操作）"
+          :placeholder="t('输入 http/https 地址，回车导航（人类操作）')"
           :disabled="!canOperate"
         />
         <button type="submit" class="sp-btn sm" data-testid="browser-go" :disabled="!canOperate">
-          前往
+          {{ t('前往') }}
         </button>
       </form>
       <div class="control-group" data-testid="browser-controls">
@@ -167,7 +171,7 @@ watch(
           :disabled="!canOperate"
           @click="setMode('paused')"
         >
-          暂停 AI
+          {{ t('暂停 AI') }}
         </button>
         <button
           type="button"
@@ -177,7 +181,7 @@ watch(
           :disabled="!canOperate"
           @click="setMode('human')"
         >
-          接管
+          {{ t('接管') }}
         </button>
         <button
           type="button"
@@ -187,7 +191,7 @@ watch(
           :disabled="!canOperate"
           @click="setMode('ai')"
         >
-          恢复 AI
+          {{ t('恢复 AI') }}
         </button>
         <button
           type="button"
@@ -196,7 +200,7 @@ watch(
           :disabled="!sessionId || !appSettings.browser.enabled"
           @click="sessionId && browser.retry(sessionId)"
         >
-          重试
+          {{ t('重试') }}
         </button>
         <button
           type="button"
@@ -205,40 +209,38 @@ watch(
           :aria-expanded="observabilityOpen"
           @click="observabilityOpen = !observabilityOpen"
         >
-          {{ observabilityOpen ? '收起控制台' : '展开控制台' }}
+          {{ observabilityOpen ? t('收起控制台') : t('展开控制台') }}
         </button>
       </div>
     </header>
 
     <p v-if="browser.error" class="browser-error" data-testid="browser-error">
-      {{ browser.error }}
+      {{ t(browser.error) }}
     </p>
 
     <div class="browser-body">
       <div class="browser-viewport-wrap">
         <div ref="host" class="browser-host" data-testid="browser-host">
-          <div v-if="!sessionId" class="empty-state">请先选择一个会话，再打开浏览器。</div>
+          <div v-if="!sessionId" class="empty-state">
+            {{ t('请先选择一个会话，再打开浏览器。') }}
+          </div>
           <div v-else-if="!appSettings.browser.enabled" class="empty-state">
-            浏览器能力已在设置中关闭。
+            {{ t('浏览器能力已在设置中关闭。') }}
           </div>
           <div v-else-if="browser.status === 'error'" class="empty-state">
-            <span>浏览器启动或 CDP 连接失败。</span>
+            <span>{{ t('浏览器启动或 CDP 连接失败。') }}</span>
             <button type="button" class="sp-btn sm" @click="sessionId && browser.retry(sessionId)">
-              重新连接
+              {{ t('重新连接') }}
             </button>
           </div>
           <div v-else-if="browser.headless" class="empty-state">
-            无头模式：页面在后台运行，可通过控制台观察与 CDP 截图查看。
+            {{ t('无头模式：页面在后台运行，可通过控制台观察与 CDP 截图查看。') }}
           </div>
         </div>
       </div>
 
-      <aside
-        v-show="observabilityOpen"
-        class="observability"
-        data-testid="browser-observability"
-      >
-        <nav class="log-tabs" aria-label="可观测面板">
+      <aside v-show="observabilityOpen" class="observability" data-testid="browser-observability">
+        <nav class="log-tabs" :aria-label="t('可观测面板')">
           <button
             v-for="tab in logTabs"
             :key="tab.id"
@@ -249,15 +251,23 @@ watch(
             @click="activeLog = tab.id"
           >
             {{ tab.label }}
-            <span v-if="tab.id === 'console'" class="tab-count">{{ browser.consoleEntries.length }}</span>
-            <span v-else-if="tab.id === 'network'" class="tab-count">{{ browser.networkEntries.length }}</span>
-            <span v-else-if="tab.id === 'exception'" class="tab-count">{{ browser.exceptions.length }}</span>
+            <span v-if="tab.id === 'console'" class="tab-count">{{
+              browser.consoleEntries.length
+            }}</span>
+            <span v-else-if="tab.id === 'network'" class="tab-count">{{
+              browser.networkEntries.length
+            }}</span>
+            <span v-else-if="tab.id === 'exception'" class="tab-count">{{
+              browser.exceptions.length
+            }}</span>
           </button>
         </nav>
 
         <div class="log-body" data-testid="browser-log-body">
           <template v-if="activeLog === 'console'">
-            <p v-if="!browser.consoleEntries.length" class="sp-empty">暂无 Console 消息</p>
+            <p v-if="!browser.consoleEntries.length" class="sp-empty">
+              {{ t('暂无 Console 消息') }}
+            </p>
             <div v-for="entry in browser.consoleEntries" :key="entry.id" class="log-row">
               <span class="log-time">{{ formatTime(entry.ts) }}</span>
               <span class="log-level" :class="levelClass(entry.level)">{{ entry.level }}</span>
@@ -267,21 +277,21 @@ watch(
           </template>
 
           <template v-else-if="activeLog === 'network'">
-            <p v-if="!browser.networkEntries.length" class="sp-empty">暂无网络请求</p>
+            <p v-if="!browser.networkEntries.length" class="sp-empty">{{ t('暂无网络请求') }}</p>
             <div v-for="entry in browser.networkEntries" :key="entry.id" class="log-row net-row">
               <span class="log-time">{{ formatTime(entry.ts) }}</span>
               <span class="net-status" :class="statusClass(entry.status, entry.failure)">
-                {{ entry.failure ? 'FAIL' : entry.status ?? '…' }}
+                {{ entry.failure ? 'FAIL' : (entry.status ?? '…') }}
               </span>
               <span class="net-method">{{ entry.method }}</span>
               <span class="net-url" :title="entry.url">{{ entry.url }}</span>
               <span class="net-duration">{{ entry.durationMs ?? 0 }}ms</span>
             </div>
-            <p class="sp-hint">Authorization / Cookie 等敏感头已脱敏，不进入事件流。</p>
+            <p class="sp-hint">{{ t('Authorization / Cookie 等敏感头已脱敏，不进入事件流。') }}</p>
           </template>
 
           <template v-else-if="activeLog === 'exception'">
-            <p v-if="!browser.exceptions.length" class="sp-empty">暂无未处理异常</p>
+            <p v-if="!browser.exceptions.length" class="sp-empty">{{ t('暂无未处理异常') }}</p>
             <div v-for="entry in browser.exceptions" :key="entry.id" class="log-row exception-row">
               <span class="log-time">{{ formatTime(entry.ts) }}</span>
               <div class="exception-detail">
@@ -294,7 +304,7 @@ watch(
           <template v-else>
             <div class="audit-tools">
               <label>
-                最近
+                {{ t('最近') }}
                 <input
                   v-model.number="auditLimit"
                   type="number"
@@ -302,7 +312,7 @@ watch(
                   max="200"
                   class="audit-limit"
                 />
-                条
+                {{ t('条') }}
               </label>
               <button
                 type="button"
@@ -310,21 +320,28 @@ watch(
                 :disabled="!sessionId"
                 @click="sessionId && browser.loadAudit(sessionId, auditLimit)"
               >
-                查询审计日志
+                {{ t('查询审计日志') }}
               </button>
             </div>
-            <p v-if="!browser.auditEntries.length" class="sp-empty">暂无操作审计</p>
+            <p v-if="!browser.auditEntries.length" class="sp-empty">{{ t('暂无操作审计') }}</p>
             <div v-for="entry in browser.auditEntries" :key="entry.id" class="log-row audit-row">
               <span class="log-time">{{ formatTime(entry.ts) }}</span>
-              <span class="audit-source" :class="entry.source === 'ai' ? 'source-ai' : 'source-human'">
-                {{ entry.source === 'ai' ? 'AI' : '人' }}
+              <span
+                class="audit-source"
+                :class="entry.source === 'ai' ? 'source-ai' : 'source-human'"
+              >
+                {{ entry.source === 'ai' ? 'AI' : t('人') }}
               </span>
               <div class="audit-detail">
                 <strong :class="{ 'audit-failed': !entry.ok }">{{ entry.method }}</strong>
-                <span v-if="entry.intent" class="audit-intent">意图：{{ entry.intent }}</span>
+                <span v-if="entry.intent" class="audit-intent"
+                  >{{ t('意图：') }}{{ entry.intent }}</span
+                >
                 <span class="audit-params">{{ entry.params }}</span>
-                <span v-if="entry.stepId" class="audit-step">步骤 {{ entry.stepId }}</span>
-                <span v-if="entry.error" class="audit-error">{{ entry.error }}</span>
+                <span v-if="entry.stepId" class="audit-step"
+                  >{{ t('步骤') }} {{ entry.stepId }}</span
+                >
+                <span v-if="entry.error" class="audit-error">{{ t(entry.error) }}</span>
               </div>
             </div>
           </template>

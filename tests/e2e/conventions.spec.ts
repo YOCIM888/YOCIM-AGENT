@@ -10,7 +10,7 @@ test('project conventions are isolated, persisted, generated and deletable', asy
   const workspaceA = await mkdtemp(join(os.tmpdir(), 'yocim-conventions-a-'))
   const workspaceB = await mkdtemp(join(os.tmpdir(), 'yocim-conventions-b-'))
   const app = await electron.launch({
-    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check']
+    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check', '--skip-language-onboarding']
   })
 
   const patchDialog = async (path: string): Promise<void> => {

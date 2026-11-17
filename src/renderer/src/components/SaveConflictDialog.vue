@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, ref } from 'vue'
 import { parentOf } from '../stores/workspace'
 
@@ -39,9 +40,10 @@ function confirmSaveAs(): void {
 <template>
   <div class="overlay" @click.self="emit('close')">
     <section class="dialog" data-testid="save-conflict-dialog">
-      <h2>文件已被外部修改</h2>
+      <h2>{{ t('文件已被外部修改') }}</h2>
       <p class="message">
-        「{{ relativePath }}」在打开后被其他程序修改。请选择处理方式，外部版本已写入时间线快照。
+        「{{ relativePath
+        }}{{ t('」在打开后被其他程序修改。请选择处理方式，外部版本已写入时间线快照。') }}
       </p>
       <div v-if="!showSaveAs" class="options">
         <button
@@ -50,8 +52,8 @@ function confirmSaveAs(): void {
           data-testid="save-conflict-overwrite"
           @click="emit('overwrite')"
         >
-          <span class="option-title">覆盖</span>
-          <span class="option-desc">用当前编辑器内容覆盖磁盘版本</span>
+          <span class="option-title">{{ t('覆盖') }}</span>
+          <span class="option-desc">{{ t('用当前编辑器内容覆盖磁盘版本') }}</span>
         </button>
         <button
           type="button"
@@ -59,16 +61,16 @@ function confirmSaveAs(): void {
           data-testid="save-conflict-reload"
           @click="emit('reload')"
         >
-          <span class="option-title">重新加载</span>
-          <span class="option-desc">丢弃本地修改，读取磁盘上的最新内容</span>
+          <span class="option-title">{{ t('重新加载') }}</span>
+          <span class="option-desc">{{ t('丢弃本地修改，读取磁盘上的最新内容') }}</span>
         </button>
         <button type="button" class="option" data-testid="save-conflict-saveas" @click="openSaveAs">
-          <span class="option-title">另存</span>
-          <span class="option-desc">把当前内容保存为一个新文件</span>
+          <span class="option-title">{{ t('另存') }}</span>
+          <span class="option-desc">{{ t('把当前内容保存为一个新文件') }}</span>
         </button>
       </div>
       <div v-else class="save-as">
-        <label for="save-as-path">新文件（工作区相对路径）</label>
+        <label for="save-as-path">{{ t('新文件（工作区相对路径）') }}</label>
         <input
           id="save-as-path"
           v-model="draft"
@@ -79,7 +81,7 @@ function confirmSaveAs(): void {
       </div>
       <div class="actions">
         <button type="button" data-testid="save-conflict-cancel" @click="emit('close')">
-          取消
+          {{ t('取消') }}
         </button>
         <button
           v-if="showSaveAs"
@@ -88,7 +90,7 @@ function confirmSaveAs(): void {
           data-testid="save-as-confirm"
           @click="confirmSaveAs"
         >
-          保存为新文件
+          {{ t('保存为新文件') }}
         </button>
       </div>
     </section>

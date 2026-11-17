@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, watch } from 'vue'
 import { useRemoteStore } from '../stores/remote'
 
@@ -27,23 +28,23 @@ function kindLabel(kind: 'wsl' | 'ssh'): string {
 }
 
 function authLabel(authType: 'agent' | 'key' | 'password' | undefined): string {
-  if (authType === 'password') return '密码'
+  if (authType === 'password') return t('密码')
   if (authType === 'agent') return 'ssh-agent'
-  return '私钥'
+  return t('私钥')
 }
 
 function statusText(targetId: string): string {
   const connection = remote.connection
   if (connection?.targetId !== targetId) return ''
-  if (connection.status === 'connected') return '已连接'
-  if (connection.status === 'connecting') return '连接中…'
-  if (connection.status === 'error') return '连接失败'
+  if (connection.status === 'connected') return t('已连接')
+  if (connection.status === 'connecting') return t('连接中…')
+  if (connection.status === 'error') return t('连接失败')
   return ''
 }
 
 function formTitle(): string {
   if (!form.value) return ''
-  return form.value.id ? '编辑远程目标' : '新建远程目标'
+  return form.value.id ? t('编辑远程目标') : t('新建远程目标')
 }
 
 async function submit(): Promise<void> {
@@ -61,12 +62,12 @@ const formAuthType = computed(authTypeOf)
 <template>
   <div class="remote" data-testid="remote-panel">
     <div class="head">
-      <span class="title">远程管理器</span>
+      <span class="title">{{ t('远程管理器') }}</span>
       <span class="count">{{ remote.targets.length }}</span>
       <button
         type="button"
         class="icon"
-        title="刷新"
+        :title="t('刷新')"
         data-testid="remote-refresh"
         :disabled="remote.loading || remote.probing"
         @click="remote.initialize()"
@@ -75,24 +76,26 @@ const formAuthType = computed(authTypeOf)
       </button>
     </div>
 
-    <div v-if="remote.error" class="error" data-testid="remote-error">{{ remote.error }}</div>
-    <div v-if="remote.notice" class="notice" data-testid="remote-notice">{{ remote.notice }}</div>
+    <div v-if="remote.error" class="error" data-testid="remote-error">{{ t(remote.error) }}</div>
+    <div v-if="remote.notice" class="notice" data-testid="remote-notice">
+      {{ t(remote.notice) }}
+    </div>
 
     <div class="env" data-testid="remote-env">
       <div class="env-row">
         <span class="env-key">WSL</span>
         <span v-if="wslAvailable" class="env-ok">
-          可用 · {{ environment?.wsl.distros.length ?? 0 }} 个发行版
+          {{ t('可用 ·') }} {{ environment?.wsl.distros.length ?? 0 }} {{ t('个发行版') }}
         </span>
-        <span v-else class="env-bad">{{ environment?.wsl.error ?? '不可用' }}</span>
+        <span v-else class="env-bad">{{ environment?.wsl.error ?? t('不可用') }}</span>
       </div>
       <div v-if="wslAvailable && environment?.wsl.defaultDistro" class="env-hint">
-        默认发行版：{{ environment.wsl.defaultDistro }}
+        {{ t('默认发行版：') }}{{ environment.wsl.defaultDistro }}
       </div>
       <div class="env-row">
         <span class="env-key">SSH</span>
-        <span v-if="sshAvailable" class="env-ok">内置 ssh2 客户端可用</span>
-        <span v-else class="env-bad">{{ environment?.ssh.error ?? '不可用' }}</span>
+        <span v-if="sshAvailable" class="env-ok">{{ t('内置 ssh2 客户端可用') }}</span>
+        <span v-else class="env-bad">{{ environment?.ssh.error ?? t('不可用') }}</span>
       </div>
     </div>
 
@@ -109,14 +112,14 @@ const formAuthType = computed(authTypeOf)
           :disabled="remote.busyId !== null"
           @click="remote.disconnect()"
         >
-          断开
+          {{ t('断开') }}
         </button>
       </div>
       <div class="connection-path">{{ remote.connection?.displayRoot }}</div>
     </div>
 
     <div v-if="remote.pendingFingerprint" class="fingerprint" data-testid="remote-fingerprint">
-      <div class="fingerprint-title">首次连接该主机，请核对指纹</div>
+      <div class="fingerprint-title">{{ t('首次连接该主机，请核对指纹') }}</div>
       <code data-testid="remote-fingerprint-value">{{
         remote.pendingFingerprint.fingerprint
       }}</code>
@@ -127,7 +130,7 @@ const formAuthType = computed(authTypeOf)
           data-testid="remote-trust"
           @click="remote.trustAndConnect()"
         >
-          信任并连接
+          {{ t('信任并连接') }}
         </button>
         <button
           type="button"
@@ -135,14 +138,18 @@ const formAuthType = computed(authTypeOf)
           data-testid="remote-trust-cancel"
           @click="remote.disconnect()"
         >
-          取消
+          {{ t('取消') }}
         </button>
       </div>
     </div>
 
     <div class="body">
       <div v-if="!remote.targets.length" class="empty" data-testid="remote-empty">
-        暂无远程目标。可添加 WSL 发行版或 SSH 主机，连接后直接在当前面板浏览、编辑、搜索与执行 Git。
+        {{
+          t(
+            '暂无远程目标。可添加 WSL 发行版或 SSH 主机，连接后直接在当前面板浏览、编辑、搜索与执行 Git。'
+          )
+        }}
       </div>
       <ul v-else class="targets" data-testid="remote-list">
         <li
@@ -175,8 +182,9 @@ const formAuthType = computed(authTypeOf)
             }}
           </div>
           <div v-if="target.kind === 'ssh'" class="target-meta sub">
-            认证：{{ authLabel(target.authType) }}{{ target.hasSecret ? ' · 已保存口令' : ''
-            }}{{ target.hostFingerprint ? ' · 指纹已信任' : '' }}
+            {{ t('认证：') }}{{ authLabel(target.authType)
+            }}{{ target.hasSecret ? t(' · 已保存口令') : ''
+            }}{{ target.hostFingerprint ? t(' · 指纹已信任') : '' }}
           </div>
           <div
             v-if="target.lastError && remote.error !== target.lastError"
@@ -193,7 +201,7 @@ const formAuthType = computed(authTypeOf)
               :disabled="remote.busyId !== null"
               @click="remote.connect(target.id)"
             >
-              {{ target.connected ? '重新连接' : '连接' }}
+              {{ target.connected ? t('重新连接') : t('连接') }}
             </button>
             <button
               type="button"
@@ -201,7 +209,7 @@ const formAuthType = computed(authTypeOf)
               :data-testid="`remote-edit-${target.id}`"
               @click="remote.startEdit(target)"
             >
-              编辑
+              {{ t('编辑') }}
             </button>
             <button
               type="button"
@@ -210,7 +218,7 @@ const formAuthType = computed(authTypeOf)
               :disabled="remote.busyId !== null"
               @click="remote.remove(target.id)"
             >
-              删除
+              {{ t('删除') }}
             </button>
           </div>
         </li>
@@ -241,24 +249,26 @@ const formAuthType = computed(authTypeOf)
       </div>
 
       <label class="field">
-        <span>名称（可选）</span>
+        <span>{{ t('名称（可选）') }}</span>
         <input
           v-model="form.name"
           type="text"
           data-testid="remote-form-name"
-          placeholder="例如 后端 WSL"
+          :placeholder="t('例如 后端 WSL')"
         />
       </label>
 
       <template v-if="form.kind === 'wsl'">
         <label class="field">
-          <span>发行版</span>
+          <span>{{ t('发行版') }}</span>
           <input
             v-model="form.distro"
             list="remote-wsl-distros"
             type="text"
             data-testid="remote-form-distro"
-            :placeholder="wslDistros.length ? '选择或输入发行版' : '未探测到发行版，可直接输入名称'"
+            :placeholder="
+              wslDistros.length ? t('选择或输入发行版') : t('未探测到发行版，可直接输入名称')
+            "
           />
           <datalist id="remote-wsl-distros">
             <option v-for="distro in wslDistros" :key="distro" :value="distro" />
@@ -268,7 +278,7 @@ const formAuthType = computed(authTypeOf)
 
       <template v-else>
         <label class="field">
-          <span>主机</span>
+          <span>{{ t('主机') }}</span>
           <input
             v-model="form.host"
             type="text"
@@ -278,24 +288,24 @@ const formAuthType = computed(authTypeOf)
         </label>
         <div class="field-row">
           <label class="field">
-            <span>端口</span>
+            <span>{{ t('端口') }}</span>
             <input v-model="form.port" type="text" data-testid="remote-form-port" />
           </label>
           <label class="field">
-            <span>用户名</span>
+            <span>{{ t('用户名') }}</span>
             <input v-model="form.username" type="text" data-testid="remote-form-username" />
           </label>
         </div>
         <label class="field">
-          <span>认证方式</span>
+          <span>{{ t('认证方式') }}</span>
           <select v-model="form.authType" data-testid="remote-form-auth">
-            <option value="key">私钥</option>
-            <option value="password">密码</option>
+            <option value="key">{{ t('私钥') }}</option>
+            <option value="password">{{ t('密码') }}</option>
             <option value="agent">ssh-agent</option>
           </select>
         </label>
         <label v-if="formAuthType === 'key'" class="field">
-          <span>私钥路径</span>
+          <span>{{ t('私钥路径') }}</span>
           <input
             v-model="form.keyPath"
             type="text"
@@ -304,18 +314,18 @@ const formAuthType = computed(authTypeOf)
           />
         </label>
         <label v-if="formAuthType === 'key' || formAuthType === 'password'" class="field">
-          <span>{{ formAuthType === 'key' ? '私钥口令（可选）' : '密码' }}</span>
+          <span>{{ formAuthType === 'key' ? t('私钥口令（可选）') : t('密码') }}</span>
           <input
             v-model="form.secret"
             type="password"
             data-testid="remote-form-secret"
-            placeholder="保存后不再回显"
+            :placeholder="t('保存后不再回显')"
           />
         </label>
       </template>
 
       <label class="field">
-        <span>{{ form.kind === 'wsl' ? 'Linux 路径' : '远端路径' }}</span>
+        <span>{{ form.kind === 'wsl' ? t('Linux 路径') : t('远端路径') }}</span>
         <input
           v-model="form.rootPath"
           type="text"
@@ -331,7 +341,7 @@ const formAuthType = computed(authTypeOf)
           data-testid="remote-save"
           :disabled="remote.saving"
         >
-          保存
+          {{ t('保存') }}
         </button>
         <button
           type="button"
@@ -339,7 +349,7 @@ const formAuthType = computed(authTypeOf)
           data-testid="remote-cancel"
           @click="remote.cancelForm()"
         >
-          取消
+          {{ t('取消') }}
         </button>
       </div>
     </form>

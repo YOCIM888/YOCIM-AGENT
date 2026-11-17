@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, onMounted, ref } from 'vue'
 import { COMMAND_WHITELIST_LIMITS, normalizeCommandWhitelist } from '@shared/settings'
 import { useAppSettingsStore } from '../stores/appSettings'
@@ -24,16 +25,16 @@ function addCommand(): void {
   const normalized = normalizeCommandWhitelist([draft.value])[0]
   if (!normalized) {
     localError.value = draft.value.trim()
-      ? `命令不能超过 ${COMMAND_WHITELIST_LIMITS.maxCommandLength} 个字符`
-      : '请先输入命令'
+      ? t('命令不能超过 {max} 个字符', { max: COMMAND_WHITELIST_LIMITS.maxCommandLength })
+      : t('请先输入命令')
     return
   }
   if (rows.value.some((item) => item.toLowerCase() === normalized.toLowerCase())) {
-    localError.value = '该命令已在白名单中'
+    localError.value = t('该命令已在白名单中')
     return
   }
   if (rows.value.length >= COMMAND_WHITELIST_LIMITS.maxEntries) {
-    localError.value = `白名单最多 ${COMMAND_WHITELIST_LIMITS.maxEntries} 条`
+    localError.value = t('白名单最多 {max} 条', { max: COMMAND_WHITELIST_LIMITS.maxEntries })
     return
   }
   rows.value = [...rows.value, normalized]
@@ -71,11 +72,11 @@ onMounted(async () => {
   <div class="overlay" @click.self="emit('close')">
     <section class="dialog" data-testid="commands-dialog">
       <header class="dialog-head">
-        <h2>命令管理</h2>
+        <h2>{{ t('命令管理') }}</h2>
         <button
           type="button"
           class="close"
-          aria-label="关闭命令管理弹窗"
+          :aria-label="t('关闭命令管理弹窗')"
           data-testid="commands-dialog-close-icon"
           @click="emit('close')"
         >
@@ -86,21 +87,24 @@ onMounted(async () => {
       <div class="dialog-body">
         <div class="sp-section">
           <div class="sp-section-head">
-            <h3 class="sp-section-title">命令白名单</h3>
+            <h3 class="sp-section-title">{{ t('命令白名单') }}</h3>
             <p class="sp-section-sub">
-              仅在开放模式生效：命中白名单的命令直接执行，不再拦截或二次确认。可填可执行程序名（如
-              docker），也可填完整命令（如 npm run dev）。
+              {{
+                t(
+                  '仅在开放模式生效：命中白名单的命令直接执行，不再拦截或二次确认。可填可执行程序名（如 docker），也可填完整命令（如 npm run dev）。'
+                )
+              }}
             </p>
           </div>
 
           <div class="sp-row align-end">
             <div class="sp-field grow">
-              <label for="command-whitelist-input">添加命令</label>
+              <label for="command-whitelist-input">{{ t('添加命令') }}</label>
               <input
                 id="command-whitelist-input"
                 v-model="draft"
                 data-testid="command-whitelist-input"
-                placeholder="例如：docker 或 npm run dev"
+                :placeholder="t('例如：docker 或 npm run dev')"
                 maxlength="2000"
                 @keydown.enter.prevent="addCommand"
               />
@@ -111,7 +115,7 @@ onMounted(async () => {
               data-testid="command-whitelist-add"
               @click="addCommand"
             >
-              添加
+              {{ t('添加') }}
             </button>
           </div>
 
@@ -120,7 +124,7 @@ onMounted(async () => {
             class="sp-error"
             data-testid="command-whitelist-error"
           >
-            {{ localError || store.error }}
+            {{ t(localError || store.error) }}
           </p>
 
           <ul v-if="rows.length" class="list" data-testid="command-whitelist-list">
@@ -134,34 +138,40 @@ onMounted(async () => {
               <button
                 type="button"
                 class="sp-btn sm ghost"
-                :aria-label="`删除 ${command}`"
+                :aria-label="t('删除 {name}', { name: command })"
                 data-testid="command-whitelist-remove"
                 @click="removeCommand(index)"
               >
-                删除
+                {{ t('删除') }}
               </button>
             </li>
           </ul>
           <p v-else class="sp-empty" data-testid="command-whitelist-empty">
-            还没有自定义白名单命令。开放模式下遇到被拦截的命令时，也可以在处理提示里选择「加入白名单」。
+            {{
+              t(
+                '还没有自定义白名单命令。开放模式下遇到被拦截的命令时，也可以在处理提示里选择「加入白名单」。'
+              )
+            }}
           </p>
 
           <p v-if="saved" class="sp-notice" data-testid="command-whitelist-saved">
-            已保存，后续任务立即生效。
+            {{ t('已保存，后续任务立即生效。') }}
           </p>
         </div>
       </div>
 
       <footer class="dialog-foot">
-        <span class="hint">最多 {{ COMMAND_WHITELIST_LIMITS.maxEntries }} 条</span>
-        <span v-if="dirty" class="hint dirty">有未保存的更改</span>
+        <span class="hint"
+          >{{ t('最多') }} {{ COMMAND_WHITELIST_LIMITS.maxEntries }} {{ t('条') }}</span
+        >
+        <span v-if="dirty" class="hint dirty">{{ t('有未保存的更改') }}</span>
         <button
           type="button"
           class="sp-btn"
           data-testid="command-whitelist-done"
           @click="emit('close')"
         >
-          完成
+          {{ t('完成') }}
         </button>
         <button
           type="button"
@@ -170,7 +180,7 @@ onMounted(async () => {
           :disabled="saving || store.loading"
           @click="save"
         >
-          {{ saving ? '保存中…' : '保存' }}
+          {{ saving ? t('保存中…') : t('保存') }}
         </button>
       </footer>
     </section>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, inject } from 'vue'
 import type { FsTreeNode } from '@shared/ipc'
 import { FILE_TREE_KEY } from '../lib/fileTree'
@@ -101,7 +102,7 @@ function more(event: MouseEvent): void {
           v-if="isDir"
           type="button"
           class="act"
-          title="新建文件"
+          :title="t('新建文件')"
           :data-testid="`tree-new-file-${node.relativePath}`"
           @click="tree.startCreate(node.relativePath, 'create-file')"
         >
@@ -114,7 +115,7 @@ function more(event: MouseEvent): void {
           v-if="isDir"
           type="button"
           class="act"
-          title="新建文件夹"
+          :title="t('新建文件夹')"
           :data-testid="`tree-new-folder-${node.relativePath}`"
           @click="tree.startCreate(node.relativePath, 'create-folder')"
         >
@@ -131,7 +132,7 @@ function more(event: MouseEvent): void {
         <button
           type="button"
           class="act more"
-          title="更多操作"
+          :title="t('更多操作')"
           :data-testid="`tree-more-${node.relativePath}`"
           @click="more"
         >
@@ -158,14 +159,14 @@ function more(event: MouseEvent): void {
         :depth="depth + 1"
       />
       <li v-if="loading" class="hint" :style="{ paddingLeft: `${(depth + 1) * 14 + 8}px` }">
-        加载中…
+        {{ t('加载中…') }}
       </li>
       <li
         v-else-if="!children.length && !creatingHere"
         class="hint"
         :style="{ paddingLeft: `${(depth + 1) * 14 + 8}px` }"
       >
-        空目录
+        {{ t('空目录') }}
       </li>
     </ul>
   </li>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, ref } from 'vue'
 import { useAppCommands } from '../composables/useAppCommands'
 import type { ContextMenuItem } from '../lib/menu'
@@ -21,31 +22,31 @@ const showAbout = ref(false)
 const appItems = computed<ContextMenuItem[]>(() => [
   {
     id: 'theme',
-    label: settings.theme === 'dark' ? '切换到浅色主题' : '切换到深色主题',
+    label: settings.theme === 'dark' ? t('切换到浅色主题') : t('切换到深色主题'),
     testid: 'theme-toggle'
   },
   {
     id: 'commands',
-    label: '命令管理…',
+    label: t('命令管理…'),
     testid: 'commands-open',
     separatorBefore: true
   },
-  { id: 'settings', label: '设置…', testid: 'settings-open' }
+  { id: 'settings', label: t('设置…'), testid: 'settings-open' }
 ])
 
 const editItems = computed<ContextMenuItem[]>(() => [
-  { id: 'open-folder', label: '打开文件夹…', testid: 'menu-open-folder' },
-  { id: 'new-session', label: '新建会话', testid: 'menu-new-session', separatorBefore: true },
-  { id: 'search-session', label: '搜索会话', testid: 'menu-search-session' },
+  { id: 'open-folder', label: t('打开文件夹…'), testid: 'menu-open-folder' },
+  { id: 'new-session', label: t('新建会话'), testid: 'menu-new-session', separatorBefore: true },
+  { id: 'search-session', label: t('搜索会话'), testid: 'menu-search-session' },
   {
     id: 'toggle-workspace',
-    label: settings.workspaceCollapsed ? '展开工作区' : '折叠工作区',
+    label: settings.workspaceCollapsed ? t('展开工作区') : t('折叠工作区'),
     testid: 'menu-toggle-workspace',
     separatorBefore: true
   },
   {
     id: 'toggle-status',
-    label: settings.statusExpanded ? '收起状态栏' : '展开状态栏',
+    label: settings.statusExpanded ? t('收起状态栏') : t('展开状态栏'),
     testid: 'menu-toggle-status'
   }
 ])
@@ -104,8 +105,8 @@ function toggleMaximize(): void {
         type="button"
         class="title-button icon"
         :data-testid="settings.sessionCollapsed ? 'session-expand' : 'session-collapse'"
-        :title="`${settings.sessionCollapsed ? '展开' : '收起'}会话列表 (Ctrl+B)`"
-        :aria-label="settings.sessionCollapsed ? '展开会话列表' : '收起会话列表'"
+        :title="`${settings.sessionCollapsed ? t('展开') : t('收起')}会话列表 (Ctrl+B)`"
+        :aria-label="settings.sessionCollapsed ? t('展开会话列表') : t('收起会话列表')"
         @click="commands.toggleSession()"
       >
         ◫
@@ -117,7 +118,7 @@ function toggleMaximize(): void {
         :class="{ open: menu?.kind === 'app' }"
         @click="toggleMenu('app', $event)"
       >
-        应用
+        {{ t('应用') }}
       </button>
       <button
         type="button"
@@ -126,22 +127,22 @@ function toggleMaximize(): void {
         :class="{ open: menu?.kind === 'edit' }"
         @click="toggleMenu('edit', $event)"
       >
-        编辑
+        {{ t('编辑') }}
       </button>
       <button type="button" class="title-button" data-testid="menu-about" @click="openAbout">
-        关于
+        {{ t('关于') }}
       </button>
     </div>
 
-    <div class="drag-space" title="双击最大化/还原"></div>
+    <div class="drag-space" :title="t('双击最大化/还原')"></div>
 
     <div class="window-controls no-drag" @dblclick.stop>
       <button
         type="button"
         class="window-button"
         data-testid="window-minimize"
-        title="最小化"
-        aria-label="最小化"
+        :title="t('最小化')"
+        :aria-label="t('最小化')"
         @click="controlWindow('minimize')"
       >
         ─
@@ -150,8 +151,8 @@ function toggleMaximize(): void {
         type="button"
         class="window-button"
         data-testid="window-maximize"
-        title="最大化/还原"
-        aria-label="最大化或还原"
+        :title="t('最大化/还原')"
+        :aria-label="t('最大化或还原')"
         @click="controlWindow('maximize')"
       >
         □
@@ -160,8 +161,8 @@ function toggleMaximize(): void {
         type="button"
         class="window-button close"
         data-testid="window-close"
-        title="关闭"
-        aria-label="关闭"
+        :title="t('关闭')"
+        :aria-label="t('关闭')"
         @click="controlWindow('close')"
       >
         ✕
@@ -179,7 +180,12 @@ function toggleMaximize(): void {
   </header>
 
   <!-- 必须放在标题栏拖动区之外，否则真实鼠标事件会被 -webkit-app-region: drag 吞掉 -->
-  <SettingsDialog v-if="ui.settingsOpen" @close="ui.closeSettings()" />
+  <SettingsDialog
+    v-if="ui.settingsOpen"
+    :initial-tab="ui.settingsInitialTab"
+    :guide-api-key="ui.settingsGuideApiKey"
+    @close="ui.closeSettings()"
+  />
   <AboutDialog v-if="showAbout" @close="showAbout = false" />
   <CommandsDialog v-if="ui.commandsOpen" @close="ui.closeCommands()" />
 </template>

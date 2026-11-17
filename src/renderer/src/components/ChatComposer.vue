@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { ApprovalMode } from '@shared/approval'
 import type { ContextAttachment } from '@shared/attachment'
@@ -24,33 +25,35 @@ const textarea = ref<HTMLTextAreaElement | null>(null)
 const modelMenu = ref<{ x: number; y: number } | null>(null)
 const approvalMenu = ref<{ x: number; y: number } | null>(null)
 
-const APPROVAL_LABELS: Record<ApprovalMode, string> = {
-  manual: '手动模式',
-  auto: '自动模式',
-  open: '开放模式'
-}
+const APPROVAL_LABELS = computed<Record<ApprovalMode, string>>(() => ({
+  manual: t('手动模式'),
+  auto: t('自动模式'),
+  open: t('开放模式')
+}))
 
-const APPROVAL_TITLES: Record<ApprovalMode, string> = {
-  manual: '审批模式：手动 · 只读命令直接执行，文件改动与有损命令需要审批',
-  auto: '审批模式：自动 · 本地改动直接执行，推送与有损命令需要审批（默认）',
-  open: '审批模式：开放 · 白名单命令直接执行；其它命令被拦截时可选择允许一次或加入白名单'
-}
+const APPROVAL_TITLES = computed<Record<ApprovalMode, string>>(() => ({
+  manual: t('审批模式：手动 · 只读命令直接执行，文件改动与有损命令需要审批'),
+  auto: t('审批模式：自动 · 本地改动直接执行，推送与有损命令需要审批（默认）'),
+  open: t('审批模式：开放 · 白名单命令直接执行；其它命令被拦截时可选择允许一次或加入白名单')
+}))
 
-const workspaceName = computed(() => workspace.info?.name ?? '未选择工作区')
+const workspaceName = computed(() => workspace.info?.name ?? t('未选择工作区'))
 const activeLabel = computed(
-  () => providers.activeModel || providers.activeProvider?.name || '配置模型'
+  () =>
+    providers.activeModel ||
+    (providers.activeProvider ? t(providers.activeProvider.name) : t('配置模型'))
 )
 const activeTitle = computed(() =>
   providers.activeProvider
-    ? `${providers.activeProvider.name} · ${providers.activeModel}`
-    : '配置模型'
+    ? `${t(providers.activeProvider.name)} · ${providers.activeModel}`
+    : t('配置模型')
 )
-const approvalLabel = computed(() => APPROVAL_LABELS[preferences.approvalMode])
-const approvalTitle = computed(() => APPROVAL_TITLES[preferences.approvalMode])
+const approvalLabel = computed(() => APPROVAL_LABELS.value[preferences.approvalMode])
+const approvalTitle = computed(() => APPROVAL_TITLES.value[preferences.approvalMode])
 const approvalItems = computed<ContextMenuItem[]>(() =>
   (['manual', 'auto', 'open'] as ApprovalMode[]).map((mode) => ({
     id: mode,
-    label: APPROVAL_LABELS[mode],
+    label: APPROVAL_LABELS.value[mode],
     selected: preferences.approvalMode === mode,
     testid: `approval-mode-${mode}`,
     separatorBefore: mode !== 'manual'
@@ -65,15 +68,15 @@ const modelItems = computed<ContextMenuItem[]>(() => {
       items.push({
         id: `${provider.id}::${model}`,
         label: model,
-        title: `${provider.name} · ${model}`,
+        title: `${t(provider.name)} · ${model}`,
         selected: active,
-        group: index === 0 ? provider.name : undefined,
+        group: index === 0 ? t(provider.name) : undefined,
         testid: `model-option-${provider.id}-${model}`
       })
     })
   }
   if (!items.length) {
-    items.push({ id: 'none', label: '暂无可用模型，请在设置中添加', disabled: true })
+    items.push({ id: 'none', label: t('暂无可用模型，请在设置中添加'), disabled: true })
   }
   return items
 })
@@ -187,7 +190,7 @@ onMounted(() => {
       ref="textarea"
       v-model="chat.draft"
       rows="1"
-      placeholder="描述你想构建的内容，Enter 发送（Shift+Enter 换行）"
+      :placeholder="t('描述你想构建的内容，Enter 发送（Shift+Enter 换行）')"
       data-testid="chat-input"
       @input="resize"
       @keydown.enter.exact.prevent="submit"
@@ -206,11 +209,11 @@ onMounted(() => {
         :data-testid="`attachment-${attachment.id}`"
       >
         <span class="att-name">{{ chipLabel(attachment) }}</span>
-        <span v-if="attachment.truncated" class="att-trunc">截断</span>
+        <span v-if="attachment.truncated" class="att-trunc">{{ t('截断') }}</span>
         <button
           type="button"
           class="att-remove"
-          title="移除附件"
+          :title="t('移除附件')"
           :data-testid="`attachment-remove-${attachment.id}`"
           @click="chat.removeAttachment(attachment.id)"
         >
@@ -224,7 +227,7 @@ onMounted(() => {
         data-testid="attachment-clear"
         @click="chat.clearAttachments()"
       >
-        清除
+        {{ t('清除') }}
       </button>
       <span v-if="chat.attachmentError" class="att-error" data-testid="attachment-error">
         {{ chat.attachmentError }}
@@ -236,7 +239,7 @@ onMounted(() => {
         type="button"
         class="attach"
         :disabled="!workspace.activeFile"
-        title="添加当前文件到对话"
+        :title="t('添加当前文件到对话')"
         data-testid="attach-current"
         @click="attachCurrent"
       >
@@ -277,12 +280,12 @@ onMounted(() => {
         class="send"
         :disabled="!chat.draft.trim()"
         data-testid="chat-send"
-        title="发送"
+        :title="t('发送')"
       >
         ↑
       </button>
       <button v-else type="button" class="stop" data-testid="chat-cancel" @click="chat.cancel()">
-        停止
+        {{ t('停止') }}
       </button>
     </div>
 
@@ -298,7 +301,7 @@ onMounted(() => {
     >
       <template #footer>
         <label class="window-row" data-testid="context-window-row">
-          <span class="window-label">上下文窗口（当前 {{ activeWindowLabel }}）</span>
+          <span class="window-label">{{ t('上下文窗口（当前') }} {{ activeWindowLabel }}）</span>
           <select
             class="window-select"
             :value="providers.contextWindow"
@@ -312,7 +315,7 @@ onMounted(() => {
           </select>
         </label>
         <label class="window-row" data-testid="reasoning-effort-row">
-          <span class="window-label">思考强度</span>
+          <span class="window-label">{{ t('思考强度') }}</span>
           <select
             class="window-select"
             :value="providers.reasoningEffort"
@@ -321,7 +324,7 @@ onMounted(() => {
             @click.stop
           >
             <option v-for="option in effortOptions" :key="option" :value="option">
-              {{ REASONING_EFFORT_LABELS[option] }}
+              {{ t(REASONING_EFFORT_LABELS[option]) }}
             </option>
           </select>
         </label>

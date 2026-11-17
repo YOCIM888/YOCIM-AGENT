@@ -17,7 +17,7 @@ function launch(
       )
     : undefined
   return electron.launch({
-    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check'],
+    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check', '--skip-language-onboarding'],
     ...(merged ? { env: merged } : {})
   })
 }

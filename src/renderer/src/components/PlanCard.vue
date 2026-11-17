@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import type { PlanItem } from '@shared/agent'
 import { computed } from 'vue'
 import { useChatStore } from '../stores/chat'
@@ -16,16 +17,16 @@ const percent = computed(() =>
 )
 
 function statusLabel(item: PlanItem): string {
-  if (item.status === 'done') return '完成'
-  if (item.status === 'doing') return '进行中'
-  return '待办'
+  if (item.status === 'done') return t('完成')
+  if (item.status === 'doing') return t('进行中')
+  return t('待办')
 }
 </script>
 
 <template>
   <div class="plan-card" data-testid="plan-card">
     <div class="plan-head">
-      <span class="plan-title">任务计划</span>
+      <span class="plan-title">{{ t('任务计划') }}</span>
       <span class="plan-progress">{{ doneCount }}/{{ plan.length }} · {{ percent }}%</span>
     </div>
     <div class="plan-bar">
@@ -53,7 +54,7 @@ function statusLabel(item: PlanItem): string {
       data-testid="plan-continue"
       @click="chat.continuePlan()"
     >
-      继续执行
+      {{ t('继续执行') }}
     </button>
   </div>
 </template>

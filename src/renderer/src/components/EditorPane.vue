@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { registerExtensionSnippets } from '../lib/extensionSnippets'
 import { languageForPath, monaco } from '../lib/monaco'
@@ -41,15 +42,15 @@ const readOnly = computed(
 )
 const imageSrc = computed(() => activeTab.value?.imageDataUrl ?? '')
 const binaryHint = computed(
-  () => activeTab.value?.loadError ?? '二进制文件不可编辑，请在外部程序中打开'
+  () => activeTab.value?.loadError ?? t('二进制文件不可编辑，请在外部程序中打开')
 )
 const conflict = computed(() => (activeTab.value?.disk ? activeTab.value.relativePath : null))
 const statusLabel = computed(() => {
   const tab = activeTab.value
-  if (!tab) return '未打开文件'
-  if (tab.kind !== 'text') return '只读预览'
-  if (tab.content !== tab.savedContent) return '未保存'
-  return readOnly.value ? '只读' : '可编辑'
+  if (!tab) return t('未打开文件')
+  if (tab.kind !== 'text') return t('只读预览')
+  if (tab.content !== tab.savedContent) return t('未保存')
+  return readOnly.value ? t('只读') : t('可编辑')
 })
 
 function formatSize(size: number): string {
@@ -116,7 +117,9 @@ function applyDecorations(): void {
           ? 'yocim-bp-glyph yocim-bp-glyph-verified'
           : 'yocim-bp-glyph',
         glyphMarginHoverMessage: {
-          value: bp.condition ? `断点（条件：${bp.condition}）` : '断点'
+          value: bp.condition
+            ? t('断点（条件：{condition}）', { condition: bp.condition })
+            : t('断点')
         },
         stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
       }
@@ -132,7 +135,7 @@ function applyDecorations(): void {
           isWholeLine: true,
           className: 'yocim-debug-current-line',
           glyphMarginClassName: 'yocim-debug-paused-glyph',
-          glyphMarginHoverMessage: { value: '当前执行行' }
+          glyphMarginHoverMessage: { value: t('当前执行行') }
         }
       }
     ])
@@ -309,7 +312,7 @@ onMounted(() => {
   })
   editor.addAction({
     id: 'yocim.addToChat',
-    label: '添加到对话',
+    label: t('添加到对话'),
     contextMenuGroupId: 'navigation',
     contextMenuOrder: 1,
     run: () => attachToChat()
@@ -446,14 +449,14 @@ onBeforeUnmount(() => {
           v-if="tab.kind === 'text' && tab.content !== tab.savedContent"
           class="dirty"
           data-testid="editor-dirty"
-          title="未保存"
+          :title="t('未保存')"
         >
           ●
         </span>
         <span
           class="tab-close"
           :data-testid="`editor-tab-close-${tab.relativePath}`"
-          title="关闭"
+          :title="t('关闭')"
           @click.stop="requestClose(tab.id)"
         >
           ×
@@ -463,7 +466,7 @@ onBeforeUnmount(() => {
         v-if="workspace.tabs.length"
         type="button"
         class="close-all"
-        title="全部关闭"
+        :title="t('全部关闭')"
         data-testid="editor-close-all"
         @click="requestCloseAll"
       >
@@ -474,10 +477,10 @@ onBeforeUnmount(() => {
     <div class="panel-header">
       <div class="file-info">
         <span class="file-name" :title="activeTab?.relativePath">
-          {{ activeTab ? activeTab.relativePath : '编辑器' }}
+          {{ activeTab ? activeTab.relativePath : t('编辑器') }}
         </span>
         <span v-if="activeTab" class="file-meta" data-testid="editor-size">
-          {{ formatSize(activeTab.size) }}{{ activeTab.truncated ? ' · 已截断' : '' }}
+          {{ formatSize(activeTab.size) }}{{ activeTab.truncated ? t(' · 已截断') : '' }}
         </span>
         <span class="badge" data-testid="editor-status">{{ statusLabel }}</span>
       </div>
@@ -489,27 +492,27 @@ onBeforeUnmount(() => {
           data-testid="editor-readonly-toggle"
           @click="toggleReadOnly"
         >
-          {{ manualReadOnly ? '可编辑' : '只读' }}
+          {{ manualReadOnly ? t('可编辑') : t('只读') }}
         </button>
         <button
           v-if="activeTab && activeTab.kind === 'text' && !readOnly"
           type="button"
           class="header-action primary"
           data-testid="editor-save"
-          title="保存 (Ctrl+S)"
+          :title="t('保存 (Ctrl+S)')"
           @click="save"
         >
-          保存
+          {{ t('保存') }}
         </button>
         <button
           v-if="activeTab"
           type="button"
           class="header-action"
-          title="添加当前文件或选区到对话"
+          :title="t('添加当前文件或选区到对话')"
           data-testid="editor-attach"
           @click="attachToChat"
         >
-          添加到对话
+          {{ t('添加到对话') }}
         </button>
       </div>
     </div>
@@ -519,7 +522,7 @@ onBeforeUnmount(() => {
 
       <div v-if="activeTab?.kind === 'image'" class="image-preview" data-testid="editor-image">
         <img v-if="imageSrc" :src="imageSrc" :alt="activeTab.relativePath" />
-        <p v-else>图片过大，无法预览</p>
+        <p v-else>{{ t('图片过大，无法预览') }}</p>
       </div>
       <div v-else-if="activeTab?.kind === 'binary'" class="binary-hint" data-testid="editor-binary">
         {{ binaryHint }}
@@ -534,28 +537,28 @@ onBeforeUnmount(() => {
             data-testid="diff-close"
             @click="workspace.closeDiff()"
           >
-            关闭 Diff
+            {{ t('关闭 Diff') }}
           </button>
         </div>
         <div ref="diffContainer" class="diff-container"></div>
       </div>
 
       <div v-if="!activeTab && !workspace.diff" class="editor-empty">
-        <h2>未打开文件</h2>
-        <p>从右侧文件树选择一个文件，使用 Monaco 查看与编辑。</p>
+        <h2>{{ t('未打开文件') }}</h2>
+        <p>{{ t('从右侧文件树选择一个文件，使用 Monaco 查看与编辑。') }}</p>
         <button
           type="button"
           class="open-tree"
           data-testid="editor-open-tree"
           @click="settings.setWorkspaceView('files')"
         >
-          打开文件树
+          {{ t('打开文件树') }}
         </button>
       </div>
     </div>
 
     <p v-if="workspace.error" class="editor-error" data-testid="editor-error">
-      {{ workspace.error }}
+      {{ t(workspace.error) }}
     </p>
 
     <SaveConflictDialog
@@ -568,9 +571,9 @@ onBeforeUnmount(() => {
     />
     <ConfirmDialog
       v-if="pendingCloseId || pendingCloseAll"
-      title="放弃未保存的更改"
-      message="编辑器中有未保存的内容，关闭标签将丢弃这些修改。确定继续吗？"
-      confirm-label="放弃并关闭"
+      :title="t('放弃未保存的更改')"
+      :message="t('编辑器中有未保存的内容，关闭标签将丢弃这些修改。确定继续吗？')"
+      :confirm-label="t('放弃并关闭')"
       testid="discard-dialog"
       danger
       @confirm="pendingCloseAll ? confirmCloseAll() : confirmDiscard()"

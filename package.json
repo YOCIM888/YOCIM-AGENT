@@ -5,7 +5,7 @@
   "description": "YOCIM AGENT - local-first desktop AI coding assistant",
   "main": "./out/main/index.js",
   "author": "YOCIM",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "engines": {
     "node": ">=22.12.0"
   },

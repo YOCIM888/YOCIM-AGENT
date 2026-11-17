@@ -15,6 +15,8 @@ let database: DatabaseSync | null = null
 let rendererReloads = 0
 
 const rendererDevUrl = process.env['ELECTRON_RENDERER_URL']
+/** 自动化测试可用该开关跳过首启语言引导，不影响正常用户。 */
+const skipLanguageOnboarding = app.commandLine.hasSwitch('skip-language-onboarding')
 
 app.setName(APP_NAME)
 
@@ -115,9 +117,14 @@ function createMainWindow(): BrowserWindow {
   window.webContents.once('did-finish-load', () => scheduleStartupUpdateCheck(window))
 
   if (rendererDevUrl) {
-    void window.loadURL(rendererDevUrl)
+    const url = new URL(rendererDevUrl)
+    if (skipLanguageOnboarding) url.searchParams.set('onboarding', 'skip')
+    void window.loadURL(url.toString())
   } else {
-    void window.loadFile(join(__dirname, '../renderer/index.html'))
+    void window.loadFile(
+      join(__dirname, '../renderer/index.html'),
+      skipLanguageOnboarding ? { query: { onboarding: 'skip' } } : undefined
+    )
   }
 
   logInfo('main window created')

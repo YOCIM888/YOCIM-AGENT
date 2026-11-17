@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, ref } from 'vue'
 import type { ProjectSummary, SessionSummary } from '@shared/session'
 import type { ContextMenuItem } from '../lib/menu'
@@ -27,18 +28,18 @@ const editingProjectName = ref('')
 const projectMenu = ref<{ x: number; y: number; project: ProjectSummary } | null>(null)
 const removeTarget = ref<ProjectSummary | null>(null)
 
-const projectMenuItems: ContextMenuItem[] = [
-  { id: 'new-session', label: '在项目中新建会话', testid: 'project-new-session' },
-  { id: 'open', label: '打开该项目', testid: 'project-open' },
-  { id: 'rename', label: '重命名项目', testid: 'project-rename', separatorBefore: true },
+const projectMenuItems = computed<ContextMenuItem[]>(() => [
+  { id: 'new-session', label: t('在项目中新建会话'), testid: 'project-new-session' },
+  { id: 'open', label: t('打开该项目'), testid: 'project-open' },
+  { id: 'rename', label: t('重命名项目'), testid: 'project-rename', separatorBefore: true },
   {
     id: 'remove',
-    label: '移除该项目',
+    label: t('移除该项目'),
     testid: 'project-remove',
     separatorBefore: true,
     danger: true
   }
-]
+])
 
 interface SessionGroup {
   id: string
@@ -77,7 +78,7 @@ const groups = computed<SessionGroup[]>(() => {
     (session) => !session.projectId && !pinnedIds.has(session.id)
   )
   if (unassigned.length) {
-    list.push({ id: 'unassigned', name: '未归属会话', project: null, sessions: unassigned })
+    list.push({ id: 'unassigned', name: t('未归属会话'), project: null, sessions: unassigned })
   }
 
   return keyword ? list.filter((group) => group.sessions.length > 0) : list
@@ -158,9 +159,16 @@ const removeMessage = computed(() => {
   const count = sessions.sessions.filter((session) => session.projectId === project.id).length
   const running =
     chat.sending && sessions.activeSession?.projectId === project.id
-      ? '正在进行的对话会被取消。'
+      ? t('正在进行的对话会被取消。')
       : ''
-  return `将从应用列表中移除“${project.name}”及其 ${count} 个会话（含已归档）。${running}磁盘上的文件夹与文件不会被删除或修改。`
+  return t(
+    '将从应用列表中移除“{name}”及其 {count} 个会话（含已归档）。{running}磁盘上的文件夹与文件不会被删除或修改。',
+    {
+      name: project.name,
+      count,
+      running
+    }
+  )
 })
 
 async function confirmRemoveProject(): Promise<void> {
@@ -176,7 +184,7 @@ async function confirmRemoveProject(): Promise<void> {
   }
   const ok = await projects.removeProject(project.id)
   if (!ok) {
-    workspace.setError(projects.error || '移除项目失败')
+    workspace.setError(projects.error || t('移除项目失败'))
     return
   }
   chat.forgetSessions(removedIds)
@@ -215,11 +223,11 @@ function selectProjectMenu(id: string): void {
       type="button"
       class="new-session"
       data-testid="new-session"
-      title="新建会话 (Ctrl+N)"
+      :title="t('新建会话 (Ctrl+N)')"
       @click="createSessionFromHeader"
     >
       <span class="plus">＋</span>
-      新会话
+      {{ t('新会话') }}
     </button>
 
     <div class="search-row">
@@ -227,7 +235,7 @@ function selectProjectMenu(id: string): void {
         v-model="query"
         class="search-input"
         type="search"
-        placeholder="搜索会话 (Ctrl+K)"
+        :placeholder="t('搜索会话 (Ctrl+K)')"
         data-testid="session-search"
       />
       <button
@@ -235,7 +243,7 @@ function selectProjectMenu(id: string): void {
         class="archive-toggle"
         :class="{ active: showArchived }"
         data-testid="archive-toggle"
-        :title="showArchived ? '隐藏已归档' : '显示已归档'"
+        :title="showArchived ? t('隐藏已归档') : t('显示已归档')"
         @click="showArchived = !showArchived"
       >
         ▣
@@ -243,13 +251,13 @@ function selectProjectMenu(id: string): void {
     </div>
 
     <div class="section-head">
-      <span>工作区</span>
+      <span>{{ t('工作区') }}</span>
       <span class="section-count">{{ projects.projects.length }}</span>
     </div>
 
     <div class="list-area">
       <section v-if="pinnedSessions.length" class="pinned" data-testid="pinned-section">
-        <div class="section-label">★ 置顶</div>
+        <div class="section-label">{{ t('★ 置顶') }}</div>
         <ul class="session-list">
           <SessionListItem
             v-for="session in pinnedSessions"
@@ -275,7 +283,7 @@ function selectProjectMenu(id: string): void {
           :role="group.project ? 'button' : undefined"
           :tabindex="group.project ? 0 : undefined"
           :aria-expanded="group.project ? isExpanded(group) : undefined"
-          :title="group.project ? (isExpanded(group) ? '折叠项目' : '展开项目') : undefined"
+          :title="group.project ? (isExpanded(group) ? t('折叠项目') : t('展开项目')) : undefined"
           @click="toggleGroup(group)"
           @keydown="handleGroupKeydown(group, $event)"
           @contextmenu.prevent.stop="group.project && openProjectMenu($event, group.project)"
@@ -337,15 +345,15 @@ function selectProjectMenu(id: string): void {
             @select="selectSession(session)"
             @move="openMove(session)"
           />
-          <li v-if="!group.sessions.length" class="group-empty">暂无会话</li>
+          <li v-if="!group.sessions.length" class="group-empty">{{ t('暂无会话') }}</li>
         </ul>
       </section>
 
       <p v-if="!sessions.sessions.length && !projects.projects.length" class="empty">
-        选择工作区后，可在这里创建会话。
+        {{ t('选择工作区后，可在这里创建会话。') }}
       </p>
       <p v-else-if="!visibleSessions.length" class="empty">
-        {{ query ? '没有匹配的会话。' : '暂无会话，点击“新建”开始。' }}
+        {{ query ? t('没有匹配的会话。') : t('暂无会话，点击“新建”开始。') }}
       </p>
     </div>
 
@@ -370,9 +378,9 @@ function selectProjectMenu(id: string): void {
 
     <ConfirmDialog
       v-if="removeTarget"
-      title="移除项目"
+      :title="t('移除项目')"
       :message="removeMessage"
-      confirm-label="移除项目"
+      :confirm-label="t('移除项目')"
       danger
       testid="remove-project-dialog"
       @close="removeTarget = null"

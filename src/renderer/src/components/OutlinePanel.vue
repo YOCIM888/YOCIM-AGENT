@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed } from 'vue'
 import { languageForPath } from '../lib/language'
 import { extractOutline, type OutlineKind, type OutlineSymbol } from '../lib/outline'
@@ -42,13 +43,15 @@ function jump(symbol: OutlineSymbol): void {
 
 <template>
   <CollapsibleSection
-    title="大纲"
+    :title="t('大纲')"
     section="outline"
     testid="outline-section"
     :count="symbols.length"
   >
-    <p v-if="!workspace.activeFile" class="empty" data-testid="outline-empty">打开文件后显示大纲</p>
-    <p v-else-if="!symbols.length" class="empty">未识别到符号</p>
+    <p v-if="!workspace.activeFile" class="empty" data-testid="outline-empty">
+      {{ t('打开文件后显示大纲') }}
+    </p>
+    <p v-else-if="!symbols.length" class="empty">{{ t('未识别到符号') }}</p>
     <ul v-else class="symbols">
       <li v-for="(symbol, index) in symbols" :key="`${symbol.line}-${symbol.name}`">
         <button

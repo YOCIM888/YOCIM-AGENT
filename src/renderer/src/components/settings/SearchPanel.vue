@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../i18n'
 import { computed, onMounted, ref } from 'vue'
 import {
   SEARCH_DEPTH_LABELS,
@@ -79,15 +80,19 @@ onMounted(async () => {
   <div class="sp-panel">
     <section class="sp-section">
       <div class="sp-section-head">
-        <h3 class="sp-section-title">联网搜索（Tavily）</h3>
+        <h3 class="sp-section-title">{{ t('联网搜索（Tavily）') }}</h3>
         <label class="sp-check">
           <input v-model="enabled" type="checkbox" data-testid="search-enabled" />
-          允许 Agent 联网搜索
+          {{ t('允许 Agent 联网搜索') }}
         </label>
       </div>
       <p class="sp-section-sub">
-        开启后 Agent 会多出一个 <code>web_search</code> 工具，用来查最新的文档、版本号、报错含义等
-        本地代码里查不到的信息。需要先填写 Tavily API Key（也可用环境变量
+        {{ t('开启后 Agent 会多出一个') }} <code>web_search</code>
+        {{
+          t(
+            '工具，用来查最新的文档、版本号、报错含义等 本地代码里查不到的信息。需要先填写 Tavily API Key（也可用环境变量'
+          )
+        }}
         <code>TAVILY_API_KEY</code>）。
       </p>
 
@@ -97,27 +102,27 @@ onMounted(async () => {
           v-model="apiKey"
           type="password"
           data-testid="search-api-key"
-          :placeholder="hasKey ? '已保存（留空不修改）' : 'tvly-...'"
+          :placeholder="hasKey ? t('已保存（留空不修改）') : 'tvly-...'"
         />
       </label>
 
       <div class="sp-row">
         <label class="sp-check">
           <input v-model="clearKey" type="checkbox" data-testid="search-clear-key" />
-          清除已保存的 Key
+          {{ t('清除已保存的 Key') }}
         </label>
         <span class="key-state" :class="{ ok: hasKey }">
-          {{ hasKey ? '已配置' : '未配置' }}
+          {{ hasKey ? t('已配置') : t('未配置') }}
         </span>
       </div>
     </section>
 
     <section class="sp-section">
-      <h3 class="sp-section-title">搜索参数</h3>
+      <h3 class="sp-section-title">{{ t('搜索参数') }}</h3>
 
       <div class="sp-row">
         <label class="sp-field">
-          <span>最大结果条数</span>
+          <span>{{ t('最大结果条数') }}</span>
           <input
             v-model.number="maxResults"
             type="number"
@@ -127,18 +132,18 @@ onMounted(async () => {
           />
         </label>
         <label class="sp-field">
-          <span>搜索强度</span>
+          <span>{{ t('搜索强度') }}</span>
           <select v-model="searchDepth" data-testid="search-depth">
             <option v-for="depth in SEARCH_DEPTHS" :key="depth" :value="depth">
-              {{ SEARCH_DEPTH_LABELS[depth] }}
+              {{ t(SEARCH_DEPTH_LABELS[depth]) }}
             </option>
           </select>
         </label>
         <label class="sp-field">
-          <span>搜索主题</span>
+          <span>{{ t('搜索主题') }}</span>
           <select v-model="topic" data-testid="search-topic">
             <option v-for="item in SEARCH_TOPICS" :key="item" :value="item">
-              {{ SEARCH_TOPIC_LABELS[item] }}
+              {{ t(SEARCH_TOPIC_LABELS[item]) }}
             </option>
           </select>
         </label>
@@ -146,21 +151,21 @@ onMounted(async () => {
 
       <label class="sp-check">
         <input v-model="includeAnswer" type="checkbox" data-testid="search-include-answer" />
-        附带 Tavily 生成的摘要答案
+        {{ t('附带 Tavily 生成的摘要答案') }}
       </label>
       <label class="sp-check">
         <input v-model="includeRawContent" type="checkbox" data-testid="search-include-raw" />
-        附带网页原始正文（更全，但更费额度与上下文）
+        {{ t('附带网页原始正文（更全，但更费额度与上下文）') }}
       </label>
 
       <p class="sp-hint">
-        进阶强度每次搜索消耗 2 倍额度，但结果更准；最大条数上限
-        {{ WEB_SEARCH_LIMITS.maxResults }} 条。
+        {{ t('进阶强度每次搜索消耗 2 倍额度，但结果更准；最大条数上限') }}
+        {{ WEB_SEARCH_LIMITS.maxResults }} {{ t('条。') }}
       </p>
     </section>
 
-    <p v-if="store.error" class="sp-error">{{ store.error }}</p>
-    <p v-if="saved" class="sp-notice">已保存</p>
+    <p v-if="store.error" class="sp-error">{{ t(store.error) }}</p>
+    <p v-if="saved" class="sp-notice">{{ t('已保存') }}</p>
 
     <div class="sp-actions">
       <button
@@ -170,7 +175,7 @@ onMounted(async () => {
         data-testid="search-save"
         @click="save"
       >
-        保存搜索设置
+        {{ t('保存搜索设置') }}
       </button>
     </div>
   </div>

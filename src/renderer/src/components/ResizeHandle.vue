@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { onBeforeUnmount } from 'vue'
 
 const props = withDefaults(
@@ -70,12 +71,12 @@ onBeforeUnmount(stop)
     :data-testid="`resize-${side}`"
     role="separator"
     aria-orientation="vertical"
-    :aria-label="side === 'left' ? '调整会话栏宽度' : '调整工作区宽度'"
+    :aria-label="side === 'left' ? t('调整会话栏宽度') : t('调整工作区宽度')"
     :aria-valuemin="min"
     :aria-valuemax="max"
     :aria-valuenow="value"
     tabindex="0"
-    title="拖动调整宽度，双击恢复默认"
+    :title="t('拖动调整宽度，双击恢复默认')"
     @pointerdown="onPointerDown"
     @keydown="onKeydown"
     @dblclick="emit('reset')"

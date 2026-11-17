@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, onMounted, ref, watch } from 'vue'
 import type { ExtensionCompatibility, ExtensionInfo } from '@shared/extensions'
 import { useExtensionsStore } from '../stores/extensions'
@@ -13,11 +14,11 @@ const workspace = useWorkspaceStore()
 const showImport = ref(false)
 const pendingUninstall = ref<ExtensionInfo | null>(null)
 
-const COMPAT_LABEL: Record<ExtensionCompatibility, string> = {
-  declarative: '仅声明式',
-  partial: '部分兼容',
-  incompatible: '不兼容'
-}
+const COMPAT_LABEL = computed<Record<ExtensionCompatibility, string>>(() => ({
+  declarative: t('仅声明式'),
+  partial: t('部分兼容'),
+  incompatible: t('不兼容')
+}))
 
 const importableCount = computed(
   () => extensions.candidates.filter((item) => item.compatibility !== 'incompatible').length
@@ -26,12 +27,12 @@ const importableCount = computed(
 function contributionSummary(extension: ExtensionInfo): string {
   const parts: string[] = []
   const c = extension.contributions
-  if (c.commands) parts.push(`命令 ${c.commands}`)
-  if (c.snippets) parts.push(`片段 ${c.snippets}`)
-  if (c.languages) parts.push(`语言 ${c.languages}`)
-  if (c.grammars) parts.push(`语法 ${c.grammars}`)
-  if (c.themes) parts.push(`主题 ${c.themes}`)
-  return parts.length ? parts.join(' · ') : '无声明式贡献'
+  if (c.commands) parts.push(t('命令 {count}', { count: c.commands }))
+  if (c.snippets) parts.push(t('片段 {count}', { count: c.snippets }))
+  if (c.languages) parts.push(t('语言 {count}', { count: c.languages }))
+  if (c.grammars) parts.push(t('语法 {count}', { count: c.grammars }))
+  if (c.themes) parts.push(t('主题 {count}', { count: c.themes }))
+  return parts.length ? parts.join(' · ') : t('无声明式贡献')
 }
 
 function formatDate(ts: number): string {
@@ -71,12 +72,12 @@ onMounted(() => {
 <template>
   <aside class="extensions" data-testid="extensions-panel">
     <div class="ext-head">
-      <span class="title">扩展</span>
+      <span class="title">{{ t('扩展') }}</span>
       <span class="count" data-testid="extensions-count">{{ extensions.enabledCount }}</span>
       <button
         type="button"
         class="icon"
-        title="刷新扩展列表"
+        :title="t('刷新扩展列表')"
         data-testid="extensions-refresh"
         :disabled="extensions.loading"
         @click="extensions.refresh()"
@@ -92,7 +93,7 @@ onMounted(() => {
         :disabled="extensions.busyId === 'install-local'"
         @click="extensions.installLocal()"
       >
-        本地目录
+        {{ t('本地目录') }}
       </button>
       <button
         type="button"
@@ -103,20 +104,23 @@ onMounted(() => {
         VSIX
       </button>
       <button type="button" data-testid="extensions-scan" @click="openImport">
-        从 VS Code 导入
+        {{ t('从 VS Code 导入') }}
       </button>
     </div>
 
     <div v-if="extensions.error" class="error" data-testid="extensions-error">
-      {{ extensions.error }}
+      {{ t(extensions.error) }}
     </div>
     <div v-if="extensions.notice" class="notice" data-testid="extensions-notice">
-      {{ extensions.notice }}
+      {{ t(extensions.notice) }}
     </div>
 
     <div v-if="!extensions.list.length" class="hint" data-testid="extensions-empty">
-      暂无扩展。可安装本地扩展目录、.vsix 包，或从 VS Code
-      扩展目录导入；第一层只支持声明式贡献，不执行扩展代码。
+      {{
+        t(
+          '暂无扩展。可安装本地扩展目录、.vsix 包，或从 VS Code 扩展目录导入；第一层只支持声明式贡献，不执行扩展代码。'
+        )
+      }}
     </div>
 
     <ul v-else class="ext-list">
@@ -153,7 +157,7 @@ onMounted(() => {
               :disabled="extensions.busyId === extension.id"
               @click="extensions.setEnabled(extension.id, !extension.enabled)"
             >
-              {{ extension.enabled ? '禁用' : '启用' }}
+              {{ extension.enabled ? t('禁用') : t('启用') }}
             </button>
             <button
               type="button"
@@ -161,7 +165,7 @@ onMounted(() => {
               :data-testid="`extension-detail-toggle-${extension.id}`"
               @click="extensions.toggleDetail(extension.id)"
             >
-              {{ extensions.detailId === extension.id ? '收起' : '详情' }}
+              {{ extensions.detailId === extension.id ? t('收起') : t('详情') }}
             </button>
             <button
               type="button"
@@ -169,7 +173,7 @@ onMounted(() => {
               :data-testid="`extension-reveal-${extension.id}`"
               @click="extensions.reveal(extension.id)"
             >
-              目录
+              {{ t('目录') }}
             </button>
             <button
               type="button"
@@ -177,7 +181,7 @@ onMounted(() => {
               :data-testid="`extension-uninstall-${extension.id}`"
               @click="pendingUninstall = extension"
             >
-              卸载
+              {{ t('卸载') }}
             </button>
           </div>
           <div
@@ -190,10 +194,10 @@ onMounted(() => {
             </p>
             <p v-if="extension.description" class="desc">{{ extension.description }}</p>
             <p v-if="extension.runtimeEntry" class="warn">
-              运行时代码入口：{{ extension.runtimeEntry }}（不会被执行）
+              {{ t('运行时代码入口：') }}{{ extension.runtimeEntry }}{{ t('（不会被执行）') }}
             </p>
             <p class="path">{{ extension.dir }}</p>
-            <p class="meta">安装于 {{ formatDate(extension.installedAt) }}</p>
+            <p class="meta">{{ t('安装于') }} {{ formatDate(extension.installedAt) }}</p>
           </div>
         </div>
       </li>
@@ -202,22 +206,22 @@ onMounted(() => {
     <div v-if="showImport" class="overlay" data-testid="vscode-import-dialog">
       <section class="dialog">
         <header>
-          <h2>从 VS Code 导入</h2>
+          <h2>{{ t('从 VS Code 导入') }}</h2>
           <button type="button" data-testid="vscode-import-close" @click="showImport = false">
             ×
           </button>
         </header>
         <p class="dialog-dir">
-          {{ extensions.scan?.directory ?? '正在扫描…' }}
-          <span v-if="extensions.scan?.exists === false">（目录不存在）</span>
+          {{ extensions.scan?.directory ?? t('正在扫描…') }}
+          <span v-if="extensions.scan?.exists === false">{{ t('（目录不存在）') }}</span>
         </p>
-        <div v-if="extensions.scanning" class="hint">正在扫描扩展目录…</div>
+        <div v-if="extensions.scanning" class="hint">{{ t('正在扫描扩展目录…') }}</div>
         <div
           v-else-if="!extensions.candidates.length"
           class="hint"
           data-testid="vscode-import-empty"
         >
-          未发现可导入的扩展
+          {{ t('未发现可导入的扩展') }}
         </div>
         <ul v-else class="candidate-list">
           <li
@@ -241,14 +245,15 @@ onMounted(() => {
               :data-testid="`vscode-import-${candidate.id}`"
               @click="extensions.importVscode(candidate.id)"
             >
-              导入
+              {{ t('导入') }}
             </button>
-            <span v-else class="installed">已安装</span>
+            <span v-else class="installed">{{ t('已安装') }}</span>
           </li>
         </ul>
         <footer class="dialog-foot">
           <span data-testid="vscode-import-summary">
-            共 {{ extensions.candidates.length }} 个，可导入 {{ importableCount }} 个
+            {{ t('共') }} {{ extensions.candidates.length }} {{ t('个，可导入') }}
+            {{ importableCount }} {{ t('个') }}
           </span>
         </footer>
       </section>
@@ -256,9 +261,13 @@ onMounted(() => {
 
     <ConfirmDialog
       v-if="pendingUninstall"
-      title="卸载扩展"
-      :message="`确定卸载 ${pendingUninstall.displayName}？其资源目录会被删除，此操作不可撤销。`"
-      confirm-label="卸载"
+      :title="t('卸载扩展')"
+      :message="
+        t('确定卸载 {name}？其资源目录会被删除，此操作不可撤销。', {
+          name: pendingUninstall.displayName
+        })
+      "
+      :confirm-label="t('卸载')"
       danger
       testid="extension-uninstall-dialog"
       @confirm="confirmUninstall"

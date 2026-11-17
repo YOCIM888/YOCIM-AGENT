@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal, type ITheme } from '@xterm/xterm'
@@ -152,7 +153,7 @@ function handleEvent(event: TerminalEvent): void {
 async function runCommand(command: string): Promise<void> {
   if (!terminal) return
   if (running) {
-    terminal.write('\x1b[31m上一条命令仍在运行，按 Ctrl+C 取消。\x1b[0m\n')
+    terminal.write(`\x1b[31m${t('上一条命令仍在运行，按 Ctrl+C 取消。')}\x1b[0m\n`)
     writePrompt()
     return
   }
@@ -247,7 +248,7 @@ onMounted(() => {
     if (!result.ok || !terminal) return
     state.value = result.data
     if (!result.data.root) {
-      terminal.write('\x1b[33m未打开项目，终端已切换到用户主目录。\x1b[0m\n')
+      terminal.write(`\x1b[33m${t('未打开项目，终端已切换到用户主目录。')}\x1b[0m\n`)
     }
     writePrompt()
     terminal.focus()
@@ -289,16 +290,16 @@ onBeforeUnmount(() => {
 <template>
   <section class="terminal-panel" data-testid="terminal-panel">
     <header class="terminal-header">
-      <span class="terminal-title">终端</span>
+      <span class="terminal-title">{{ t('终端') }}</span>
       <span class="terminal-cwd" data-testid="terminal-cwd" :title="state?.cwd ?? ''">{{
-        state?.cwd ?? '终端'
+        state?.cwd ?? t('终端')
       }}</span>
       <button
         type="button"
         class="terminal-close"
         data-testid="terminal-close"
-        title="关闭终端"
-        aria-label="关闭终端"
+        :title="t('关闭终端')"
+        :aria-label="t('关闭终端')"
         @click="emit('close')"
       >
         ✕

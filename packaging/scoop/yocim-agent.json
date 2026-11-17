@@ -2,7 +2,7 @@
   "version": "0.1.6",
   "description": "Local-first desktop AI coding assistant",
   "homepage": "https://agent.yocim.top/",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "architecture": {
     "64bit": {
       "url": "https://github.com/YOCIM888/YOCIM-AGENT/releases/download/v0.1.6/YOCIM.AGENT-0.1.6-setup.exe#/dl.7z",

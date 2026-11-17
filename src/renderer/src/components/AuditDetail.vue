@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed, ref } from 'vue'
 import type { AuditEntry } from '@shared/audit'
 
@@ -8,32 +9,32 @@ const emit = defineEmits<{ close: [] }>()
 const copied = ref(false)
 
 const approvalText = computed(() => {
-  if (props.entry.approval === 'approved') return '已批准'
-  if (props.entry.approval === 'denied') return '已拒绝'
-  return '免审批'
+  if (props.entry.approval === 'approved') return t('已批准')
+  if (props.entry.approval === 'denied') return t('已拒绝')
+  return t('免审批')
 })
 
 const timeText = computed(() => new Date(props.entry.ts).toLocaleString())
 
 function formatDuration(value: number | undefined): string {
-  if (typeof value !== 'number') return '未记录'
+  if (typeof value !== 'number') return t('未记录')
   return value >= 1000 ? `${(value / 1000).toFixed(2)} s` : `${value} ms`
 }
 
 async function copyAll(): Promise<void> {
   const entry = props.entry
   const text = [
-    `时间：${timeText.value}`,
-    `工具：${entry.tool}`,
-    `结果：${entry.ok ? '成功' : '失败'}`,
-    `审批：${approvalText.value}`,
-    `会话：${entry.sessionId}`,
+    t('时间：{time}', { time: timeText.value }),
+    t('工具：{tool}', { tool: entry.tool }),
+    t('结果：{result}', { result: entry.ok ? t('成功') : t('失败') }),
+    t('审批：{approval}', { approval: approvalText.value }),
+    t('会话：{session}', { session: entry.sessionId }),
     `runId：${entry.runId}`,
-    `callId：${entry.callId ?? '未记录'}`,
-    `耗时：${formatDuration(entry.durationMs)}`,
+    `callId：${entry.callId ?? t('未记录')}`,
+    t('耗时：{duration}', { duration: formatDuration(entry.durationMs) }),
     '',
-    `参数摘要：${entry.argsSummary}`,
-    `结果摘要：${entry.resultSummary}`
+    t('参数摘要：{args}', { args: entry.argsSummary }),
+    t('结果摘要：{summary}', { summary: entry.resultSummary })
   ].join('\n')
   const result = await window.yocim.clipboard.writeText({ text: text.slice(0, 4096) })
   if (result.ok) {
@@ -56,34 +57,36 @@ async function copyAll(): Promise<void> {
       </header>
 
       <div class="badges">
-        <span class="badge" :class="{ failed: !entry.ok }">{{ entry.ok ? '成功' : '失败' }}</span>
+        <span class="badge" :class="{ failed: !entry.ok }">{{
+          entry.ok ? t('成功') : t('失败')
+        }}</span>
         <span class="badge" :class="{ denied: entry.approval === 'denied' }">
           {{ approvalText }}
         </span>
       </div>
 
       <dl>
-        <dt>时间</dt>
+        <dt>{{ t('时间') }}</dt>
         <dd>{{ timeText }}</dd>
-        <dt>耗时</dt>
+        <dt>{{ t('耗时') }}</dt>
         <dd>{{ formatDuration(entry.durationMs) }}</dd>
-        <dt>会话</dt>
+        <dt>{{ t('会话') }}</dt>
         <dd class="mono">{{ entry.sessionId }}</dd>
         <dt>runId</dt>
         <dd class="mono">{{ entry.runId }}</dd>
         <dt>callId</dt>
-        <dd class="mono">{{ entry.callId ?? '未记录' }}</dd>
+        <dd class="mono">{{ entry.callId ?? t('未记录') }}</dd>
       </dl>
 
-      <h3>参数摘要</h3>
-      <pre data-testid="audit-detail-args">{{ entry.argsSummary || '（空）' }}</pre>
+      <h3>{{ t('参数摘要') }}</h3>
+      <pre data-testid="audit-detail-args">{{ entry.argsSummary || t('（空）') }}</pre>
 
-      <h3>结果</h3>
-      <pre data-testid="audit-detail-result">{{ entry.resultSummary || '（空）' }}</pre>
+      <h3>{{ t('结果') }}</h3>
+      <pre data-testid="audit-detail-result">{{ entry.resultSummary || t('（空）') }}</pre>
 
       <footer>
         <button type="button" data-testid="audit-detail-copy" @click="copyAll">
-          {{ copied ? '已复制' : '复制全部' }}
+          {{ copied ? t('已复制') : t('复制全部') }}
         </button>
       </footer>
     </aside>

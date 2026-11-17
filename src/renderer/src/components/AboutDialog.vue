@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { t } from '../i18n'
+import { computed } from 'vue'
 import { APP_NAME, APP_VERSION } from '@shared/app'
 import { useUpdateStore } from '../stores/update'
 
@@ -15,13 +17,13 @@ const PLATFORM_LABELS: Record<string, string> = {
   linux: 'Linux'
 }
 
-const infoRows = [
-  { label: '版本', value: `v${APP_VERSION}` },
-  { label: '平台', value: PLATFORM_LABELS[api.platform] ?? api.platform },
+const infoRows = computed(() => [
+  { label: t('版本'), value: `v${APP_VERSION}` },
+  { label: t('平台'), value: PLATFORM_LABELS[api.platform] ?? api.platform },
   { label: 'Electron', value: api.versions.electron },
   { label: 'Node.js', value: api.versions.node },
   { label: 'Chromium', value: api.versions.chrome }
-]
+])
 
 function checkForUpdates(): void {
   emit('close')
@@ -33,8 +35,10 @@ function checkForUpdates(): void {
   <div class="overlay" @click.self="emit('close')">
     <section class="dialog" data-testid="about-dialog">
       <header class="dialog-head">
-        <h2>关于</h2>
-        <button type="button" class="close" aria-label="关闭关于窗口" @click="emit('close')">✕</button>
+        <h2>{{ t('关于') }}</h2>
+        <button type="button" class="close" :aria-label="t('关闭关于窗口')" @click="emit('close')">
+          ✕
+        </button>
       </header>
 
       <div class="dialog-body">
@@ -46,7 +50,9 @@ function checkForUpdates(): void {
           </div>
         </div>
 
-        <p class="desc">本地优先的桌面 AI 编程助手，支持多模型对话、工作区编辑与命令行工具调用。</p>
+        <p class="desc">
+          {{ t('本地优先的桌面 AI 编程助手，支持多模型对话、工作区编辑与命令行工具调用。') }}
+        </p>
 
         <dl class="info">
           <div v-for="row in infoRows" :key="row.label" class="info-row">
@@ -58,7 +64,7 @@ function checkForUpdates(): void {
 
       <footer class="dialog-foot">
         <button type="button" class="sp-btn" data-testid="about-close" @click="emit('close')">
-          关闭
+          {{ t('关闭') }}
         </button>
         <button
           type="button"
@@ -67,7 +73,7 @@ function checkForUpdates(): void {
           :disabled="update.checking"
           @click="checkForUpdates"
         >
-          {{ update.checking ? '检查中…' : '检查更新' }}
+          {{ update.checking ? t('检查中…') : t('检查更新') }}
         </button>
       </footer>
     </section>

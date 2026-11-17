@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../i18n'
 import { computed, onMounted, ref } from 'vue'
 import {
   getProviderPreset,
@@ -8,6 +9,13 @@ import {
   type PublicProvider
 } from '@shared/providers'
 import { useProvidersStore } from '../../stores/providers'
+
+const props = withDefaults(
+  defineProps<{
+    guideApiKey?: boolean
+  }>(),
+  { guideApiKey: false }
+)
 
 const emit = defineEmits<{
   saved: []
@@ -55,7 +63,7 @@ const modelOptions = computed(() => {
 function protocolLabel(value: ProviderProtocol): string {
   if (value === 'anthropic') return 'Anthropic'
   if (value === 'gemini') return 'Gemini'
-  return 'OpenAI 兼容'
+  return t('OpenAI 兼容')
 }
 
 function fillFromProvider(provider: PublicProvider): void {
@@ -160,6 +168,10 @@ async function useProvider(): Promise<void> {
 
 onMounted(async () => {
   await store.refresh()
+  if (props.guideApiKey) {
+    startAdd()
+    return
+  }
   const active =
     store.providers.find((provider) => provider.id === store.activeProviderId) ?? store.providers[0]
   if (active) fillFromProvider(active)
@@ -179,15 +191,15 @@ onMounted(async () => {
         :data-testid="`settings-provider-${provider.id}`"
         @click="fillFromProvider(provider)"
       >
-        <span class="provider-name">{{ provider.name }}</span>
+        <span class="provider-name">{{ t(provider.name) }}</span>
         <span class="provider-meta">
           {{ protocolLabel(provider.protocol) }}
-          <template v-if="provider.id === store.activeProviderId"> · 当前</template>
+          <template v-if="provider.id === store.activeProviderId"> {{ t('· 当前') }}</template>
         </span>
         <span
           class="key-dot"
           :class="{ ok: provider.hasApiKey }"
-          :title="provider.hasApiKey ? '已配置 API Key' : '未配置 API Key'"
+          :title="provider.hasApiKey ? t('已配置 API Key') : t('未配置 API Key')"
         ></span>
       </button>
       <button
@@ -196,28 +208,31 @@ onMounted(async () => {
         data-testid="settings-add-provider"
         @click="startAdd"
       >
-        ＋ 添加提供商
+        {{ t('＋ 添加提供商') }}
       </button>
     </aside>
 
     <div class="form">
+      <p v-if="!store.providers.some((provider) => provider.hasApiKey)" class="guide">
+        {{ t('请填写 API Key 并保存，然后即可开始对话。') }}
+      </p>
       <label v-if="isNew" class="field">
-        <span>Provider 预设</span>
+        <span>{{ t('Provider 预设') }}</span>
         <select v-model="presetId" data-testid="settings-preset" @change="applyPreset(presetId)">
           <option v-for="item in addablePresets" :key="item.id" :value="item.id">
-            {{ item.name }}
+            {{ t(item.name) }}
           </option>
         </select>
       </label>
-      <p v-if="isNew" class="preset-desc">{{ preset.description }}</p>
+      <p v-if="isNew" class="preset-desc">{{ t(preset.description) }}</p>
 
       <label class="field">
-        <span>名称</span>
+        <span>{{ t('名称') }}</span>
         <input v-model="name" data-testid="settings-name" :disabled="isMock" />
       </label>
 
       <label v-if="isCustom" class="field">
-        <span>协议</span>
+        <span>{{ t('协议') }}</span>
         <select v-model="protocol" data-testid="settings-protocol">
           <option value="openai">OpenAI-compatible</option>
           <option value="anthropic">Anthropic Messages</option>
@@ -236,7 +251,7 @@ onMounted(async () => {
       </label>
 
       <label class="field">
-        <span>模型列表（每行一个，也可用逗号分隔）</span>
+        <span>{{ t('模型列表（每行一个，也可用逗号分隔）') }}</span>
         <textarea
           v-model="modelsText"
           data-testid="settings-models"
@@ -247,7 +262,7 @@ onMounted(async () => {
       </label>
 
       <label class="field">
-        <span>当前模型</span>
+        <span>{{ t('当前模型') }}</span>
         <select v-model="model" data-testid="settings-model" :disabled="isMock">
           <option v-for="item in modelOptions" :key="item" :value="item">{{ item }}</option>
         </select>
@@ -261,25 +276,30 @@ onMounted(async () => {
           data-testid="settings-api-key"
           :placeholder="
             selectedProvider?.hasApiKey
-              ? '已保存（留空不修改）'
+              ? t('已保存（留空不修改）')
               : preset.requiresApiKey
-                ? '输入 API Key'
-                : '可选（本地服务可留空）'
+                ? t('输入 API Key')
+                : t('可选（本地服务可留空）')
           "
         />
       </label>
 
       <label v-if="!isMock" class="checkbox">
         <input v-model="clearKey" type="checkbox" data-testid="settings-clear-key" />
-        清除已保存的 API Key
+        {{ t('清除已保存的 API Key') }}
       </label>
 
       <p class="hint">
-        API Key 通过系统安全存储按 Provider 独立加密保存，不会写入日志或明文数据库。
-        保存后将自动切换为该 Provider。
+        {{
+          t(
+            'API Key 通过系统安全存储按 Provider 独立加密保存，不会写入日志或明文数据库。 保存后将自动切换为该 Provider。'
+          )
+        }}
       </p>
-      <p v-if="isMock" class="hint">内置 Mock Provider 无需配置，可直接在输入卡右下角切换。</p>
-      <p v-if="error" class="error">{{ error }}</p>
+      <p v-if="isMock" class="hint">
+        {{ t('内置 Mock Provider 无需配置，可直接在输入卡右下角切换。') }}
+      </p>
+      <p v-if="error" class="error">{{ t(error) }}</p>
 
       <div class="actions">
         <button
@@ -290,7 +310,7 @@ onMounted(async () => {
           data-testid="settings-delete-provider"
           @click="remove"
         >
-          删除
+          {{ t('删除') }}
         </button>
         <span class="spacer"></span>
         <button
@@ -300,7 +320,7 @@ onMounted(async () => {
           data-testid="settings-use-provider"
           @click="useProvider"
         >
-          设为当前
+          {{ t('设为当前') }}
         </button>
         <button
           type="button"
@@ -309,7 +329,7 @@ onMounted(async () => {
           data-testid="settings-save"
           @click="save"
         >
-          保存
+          {{ t('保存') }}
         </button>
       </div>
     </div>
@@ -408,6 +428,17 @@ onMounted(async () => {
   min-width: 0;
   padding: 16px 22px 18px;
   overflow: auto;
+}
+
+.guide {
+  margin: 0 0 14px;
+  padding: 9px 11px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .preset-desc {

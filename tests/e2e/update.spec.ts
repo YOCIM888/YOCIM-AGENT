@@ -23,7 +23,7 @@ async function openAboutAndCheck(page: Page): Promise<void> {
 test('checks for updates from the about dialog and respects cancel/update', async () => {
   const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-update-e2e-'))
   const app = await electron.launch({
-    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check']
+    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check', '--skip-language-onboarding']
   })
 
   try {

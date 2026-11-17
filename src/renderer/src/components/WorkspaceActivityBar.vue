@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { WORKSPACE_VIEWS, type WorkspaceView } from '../lib/workspaceViews'
 import WorkspaceViewIcon from './WorkspaceViewIcon.vue'
 
@@ -18,7 +19,7 @@ const emit = defineEmits<{ select: [view: WorkspaceView] }>()
   <div
     class="activity-bar"
     role="tablist"
-    aria-label="工作区视图"
+    :aria-label="t('工作区视图')"
     data-testid="workspace-activity-bar"
   >
     <template v-for="view in WORKSPACE_VIEWS" :key="view.key">
@@ -30,8 +31,8 @@ const emit = defineEmits<{ select: [view: WorkspaceView] }>()
         :class="{ active: active === view.key }"
         :aria-selected="active === view.key"
         :data-testid="view.testid"
-        :title="view.label"
-        :aria-label="view.label"
+        :title="t(view.label)"
+        :aria-label="t(view.label)"
         @click="emit('select', view.key)"
       >
         <WorkspaceViewIcon :name="view.key" />

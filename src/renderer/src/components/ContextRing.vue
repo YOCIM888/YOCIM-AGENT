@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n'
 import { computed } from 'vue'
 import { formatTokenCount, formatWindowSize, usageTone, type ContextUsage } from '@shared/context'
 
@@ -21,9 +22,15 @@ const dashOffset = computed(() => CIRCUMFERENCE * (1 - Math.min(1, props.usage?.
 
 const title = computed(() => {
   const usage = props.usage
-  if (!usage) return '上下文用量：暂无数据'
-  const tooltip = `上下文 ${percent.value}%（${formatTokenCount(usage.used)} / ${formatWindowSize(usage.limit)} tokens）`
-  return props.compressing ? `正在压缩上下文…（${tooltip}）` : `${tooltip} · 点击手动压缩`
+  if (!usage) return t('上下文用量：暂无数据')
+  const tooltip = t('上下文 {percent}%（{used} / {limit} tokens）', {
+    percent: percent.value,
+    used: formatTokenCount(usage.used),
+    limit: formatWindowSize(usage.limit)
+  })
+  return props.compressing
+    ? t('正在压缩上下文…（{tooltip}）', { tooltip })
+    : t('{tooltip} · 点击手动压缩', { tooltip })
 })
 
 function onClick(): void {
