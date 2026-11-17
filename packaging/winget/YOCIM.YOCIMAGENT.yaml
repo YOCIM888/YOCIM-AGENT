@@ -1,5 +1,5 @@
 PackageIdentifier: YOCIM.YOCIMAGENT
-PackageVersion: 0.1.6
+PackageVersion: 0.1.7
 PackageLocale: en-US
 Publisher: YOCIM
 PublisherUrl: https://github.com/YOCIM888
@@ -14,8 +14,8 @@ Installers:
   - Architecture: x64
     InstallerType: nullsoft
     Scope: user
-    InstallerUrl: https://github.com/YOCIM888/YOCIM-AGENT/releases/download/v0.1.6/YOCIM.AGENT-0.1.6-setup.exe
-    InstallerSha256: d7a4947ba14f2dec7ca5f44aaf4198abc60e8d3710beb1df3372328730976dfb
+    InstallerUrl: https://github.com/YOCIM888/YOCIM-AGENT/releases/download/v0.1.7/YOCIM.AGENT-0.1.7-setup.exe
+    InstallerSha256: 11fe0fc71fbd9cbf32291df9ab91b48b08f98f3b71351237cc45668141d5a6ea
     InstallerSwitches:
       Silent: /S
       SilentWithProgress: /S
