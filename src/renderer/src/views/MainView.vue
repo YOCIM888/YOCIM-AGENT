@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import AuditDialog from '../components/AuditDialog.vue'
 import ChatPanel from '../components/ChatPanel.vue'
 import ConventionsPanel from '../components/ConventionsPanel.vue'
 import ResizeHandle from '../components/ResizeHandle.vue'
@@ -154,6 +155,7 @@ onBeforeUnmount(() => {
     <StatusBar />
 
     <ConventionsPanel v-if="ui.conventionsOpen" @close="ui.closeConventions()" />
+    <AuditDialog v-if="ui.auditOpen" @close="ui.closeAudit()" />
   </div>
 </template>
 
