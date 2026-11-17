@@ -339,6 +339,78 @@ describe('runAgentTurn', () => {
   })
 })
 
+describe('runAgentTurn round and tool gating', () => {
+  it('uses toolsForRound to change the declared tools per round', async () => {
+    const provider = new ScriptedProvider([
+      [
+        {
+          type: 'tool_call',
+          toolCall: { id: 'c1', name: 'read_file', argumentsJson: '{"relativePath":"a.ts"}' }
+        },
+        { type: 'done', finishReason: 'tool_calls' }
+      ],
+      [{ type: 'text', text: 'done' }, { type: 'done', finishReason: 'stop' }]
+    ])
+    const tools = {
+      definitions: [
+        { name: 'read_file', description: 'r', parameters: { type: 'object' } },
+        { name: 'delegate_task', description: 'd', parameters: { type: 'object' } }
+      ],
+      execute: async () => ({ ok: true, content: 'x', summary: 'x' })
+    }
+
+    await runAgentTurn(
+      {
+        provider,
+        tools,
+        toolsForRound: (round) =>
+          round === 0
+            ? tools.definitions.filter((definition) => definition.name !== 'delegate_task')
+            : tools.definitions,
+        emit: () => {}
+      },
+      baseInput,
+      new AbortController().signal
+    )
+
+    expect(provider.requests[0]?.tools?.map((tool) => tool.name)).toEqual(['read_file'])
+    expect(provider.requests[1]?.tools?.map((tool) => tool.name)).toEqual([
+      'read_file',
+      'delegate_task'
+    ])
+  })
+
+  it('honors a fixed roundLimit and pauses instead of erroring', async () => {
+    const events: AgentEvent[] = []
+    const provider = new ScriptedProvider([
+      [
+        {
+          type: 'tool_call',
+          toolCall: { id: 'c1', name: 'read_file', argumentsJson: '{"relativePath":"a.ts"}' }
+        },
+        { type: 'done', finishReason: 'tool_calls' }
+      ],
+      [{ type: 'text', text: 'should not run' }, { type: 'done', finishReason: 'stop' }]
+    ])
+
+    const result = await runAgentTurn(
+      {
+        provider,
+        tools: { definitions: [], execute: async () => ({ ok: true, content: '', summary: '' }) },
+        roundLimit: 1,
+        emit: (event) => events.push(event)
+      },
+      baseInput,
+      new AbortController().signal
+    )
+
+    expect(result.reason).toBe('paused')
+    expect(provider.requests).toHaveLength(1)
+    expect(events.some((event) => event.type === 'run:paused')).toBe(true)
+    expect(events.some((event) => event.type === 'run:error')).toBe(false)
+  })
+})
+
 describe('runAgentTurn usage reporting', () => {
   it('reports the token usage of each round', async () => {
     const onUsage = vi.fn()

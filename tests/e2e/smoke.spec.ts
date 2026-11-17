@@ -207,11 +207,17 @@ test('launches the shell, streams a reply and cancels generation', async () => {
     await page.getByTestId('chat-input').fill('/think 看看思考链')
     await page.getByTestId('chat-send').click()
     await expect(page.getByTestId('reasoning-toggle')).toBeVisible()
+    await expect(page.getByTestId('reasoning-toggle')).toHaveCSS('border-style', 'none')
+    await expect(page.getByTestId('reasoning-toggle')).toHaveCSS(
+      'background-color',
+      'rgba(0, 0, 0, 0)'
+    )
     await expect(page.getByTestId('chat-panel')).toContainText('思考完成：看看思考链')
     await expect(page.getByTestId('reasoning-toggle')).toContainText('已思考')
     await expect(page.getByTestId('reasoning-content')).toHaveCount(0)
     await page.getByTestId('reasoning-toggle').click()
     await expect(page.getByTestId('reasoning-content')).toContainText('先拆解问题')
+    await expect(page.getByTestId('reasoning-content')).toHaveCSS('border-top-width', '0px')
     await page.getByTestId('reasoning-toggle').click()
     await expect(page.getByTestId('reasoning-content')).toHaveCount(0)
 
@@ -309,6 +315,11 @@ test('selects a workspace, runs tools with approvals and persists across restart
     await page.getByTestId('chat-input').fill('/tool read hello.txt')
     await page.getByTestId('chat-send').click()
     await expect(page.getByTestId('timeline').last()).toContainText('已执行 1 个步骤')
+    await expect(page.getByTestId('timeline-toggle').last()).toHaveCSS('border-style', 'none')
+    await expect(page.getByTestId('timeline-toggle').last()).toHaveCSS(
+      'background-color',
+      'rgba(0, 0, 0, 0)'
+    )
     await page.getByTestId('timeline-toggle').last().click()
     await expect(page.getByTestId('timeline-step').last()).toContainText('read_file')
     await expect(page.getByTestId('timeline-step').last()).toContainText('hello.txt')

@@ -134,7 +134,6 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
       data-testid="timeline-toggle"
       @click="expanded = !expanded"
     >
-      <span v-if="running" class="sweep" aria-hidden="true"></span>
       <span class="lead" :class="leadTone" aria-hidden="true">
         <svg
           v-if="leadTone === 'running'"
@@ -168,20 +167,6 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
 
       <span class="meta">
         <span v-if="elapsed" class="duration">{{ elapsed }}</span>
-        <span class="chevron" :class="{ open: isOpen }" aria-hidden="true">
-          <svg
-            viewBox="0 0 16 16"
-            width="12"
-            height="12"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="m4.5 6.5 3.5 3.5 3.5-3.5" />
-          </svg>
-        </span>
       </span>
     </button>
 
@@ -349,56 +334,23 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-subtle);
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
   color: var(--text-muted);
   font: inherit;
   font-size: 11.5px;
   text-align: left;
   cursor: pointer;
-  overflow: hidden;
-  transition:
-    border-color 140ms ease,
-    background-color 140ms ease;
+  transition: color 140ms ease;
 }
 
 .timeline-toggle:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .timeline.running .timeline-toggle {
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
-  background: color-mix(in srgb, var(--accent) 6%, var(--bg-subtle));
-}
-
-.timeline.pending .timeline-toggle {
-  border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
-  background: color-mix(in srgb, var(--warning) 8%, var(--bg-subtle));
-}
-
-/* 运行中：底边一条来回扫的高光，表示还有活儿在干 */
-.sweep {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  background-repeat: no-repeat;
-  background-size: 38% 100%;
-  animation: sweep 1.7s ease-in-out infinite;
-}
-
-@keyframes sweep {
-  from {
-    background-position: -40% 0;
-  }
-  to {
-    background-position: 140% 0;
-  }
+  color: var(--text);
 }
 
 .lead {
@@ -427,11 +379,9 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 15px;
-  height: 15px;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  font-size: 9.5px;
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
 }
@@ -478,16 +428,6 @@ function linePrefix(type: 'add' | 'del' | 'ctx'): string {
   font-size: 10.5px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
-}
-
-.chevron {
-  display: inline-flex;
-  color: var(--text-muted);
-  transition: transform 160ms ease;
-}
-
-.chevron.open {
-  transform: rotate(180deg);
 }
 
 /* ── 展开态：活动流 ───────────────────────────────── */

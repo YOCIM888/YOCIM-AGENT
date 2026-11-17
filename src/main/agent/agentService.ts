@@ -30,6 +30,20 @@ import { loadWorkspaceRules } from './rules'
 
 const DEFAULT_TITLE_PATTERN = /^会话 \d+$/
 
+/** 子代理仅在长任务（轮次 ≥ 30）暴露；此时引擎上限已因多文件写入放宽到 60 */
+export const SUBAGENT_EXPOSE_ROUND = 30
+
+/** 按轮次决定暴露给模型的工具：delegate_task 只在长任务出现 */
+export function toolsForAgentRound(
+  definitions: ToolDefinition[],
+  round: number
+): ToolDefinition[] {
+  if (round < SUBAGENT_EXPOSE_ROUND) {
+    return definitions.filter((definition) => definition.name !== 'delegate_task')
+  }
+  return definitions
+}
+
 export interface AgentToolContext {
   sessionId: string
   runId: string
@@ -270,6 +284,7 @@ export class AgentService {
         provider,
         systemPrompt,
         tools: this.resolveTools(input.sessionId, runId),
+        toolsForRound: (round) => toolsForAgentRound(this.toolDefinitions(), round),
         emit,
         onAppend: context
           ? (messages) => {

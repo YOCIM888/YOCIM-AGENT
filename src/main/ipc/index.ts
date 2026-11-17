@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto'
 import { access, readdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
-import type { AgentEvent } from '../../shared/agent'
+import type { AgentEvent, ProviderUsage } from '../../shared/agent'
 import type { ContextUsage } from '../../shared/context'
 import type { ApprovalRequest } from '../../shared/approval'
 import type { AuditExportResult, AuditFilter, AuditPage, AuditStats } from '../../shared/audit'
@@ -255,6 +255,7 @@ import {
 import type { ProjectSummary } from '../../shared/session'
 import type { UpdateCheckResult } from '../../shared/update'
 import { AgentService } from '../agent/agentService'
+import { runSubagent } from '../agent/subagent'
 import { ConventionsService } from '../agent/conventionsService'
 import { AllowRuleStore } from '../approval/allowRules'
 import { ApprovalManager } from '../approval/approvalManager'
@@ -615,6 +616,21 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
       }
     }
   })
+  /** 主代理与子代理共用的 token 账单记录 */
+  const recordUsage = (usage: ProviderUsage, sessionId: string): void => {
+    const settings = settingsService.getPublic()
+    const provider = settings.providers.find((item) => item.id === settings.activeProviderId)
+    usageRepo.insert({
+      id: randomUUID(),
+      sessionId,
+      providerId: settings.activeProviderId,
+      model: settings.activeModel || provider?.model || 'unknown',
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      createdAt: Date.now()
+    })
+  }
+
   const sessionService = new SessionService({
     sessions: sessionRepo,
     projects: projectRepo,
@@ -640,19 +656,28 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     },
     contextWindow: () => settingsService.getContextWindow(),
     planStore,
-    onUsage: (usage, sessionId) => {
-      const settings = settingsService.getPublic()
-      const provider = settings.providers.find((item) => item.id === settings.activeProviderId)
-      usageRepo.insert({
-        id: randomUUID(),
-        sessionId,
-        providerId: settings.activeProviderId,
-        model: settings.activeModel || provider?.model || 'unknown',
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        createdAt: Date.now()
-      })
-    }
+    onUsage: recordUsage
+  })
+
+  // 子代理复用当前 Provider 与同一个工具执行器；构造后注入以解开循环依赖
+  toolService.setSubagent(async (input, ctx, onProgress) => {
+    return runSubagent(
+      {
+        resolveProvider: () => settingsService.createProvider(),
+        definitions: () => toolService.getDefinitions(),
+        execute: (call, context) => toolService.execute(call, context),
+        onUsage: recordUsage
+      },
+      {
+        role: input.role,
+        task: input.task,
+        context: input.context,
+        sessionId: ctx.sessionId,
+        runId: ctx.runId,
+        signal: ctx.signal,
+        onProgress
+      }
+    )
   })
 
   handleIpc<ChatCompressInput, ChatCompressResult>(

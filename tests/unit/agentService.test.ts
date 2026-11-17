@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
-import { AgentService } from '../../src/main/agent/agentService'
+import { AgentService, SUBAGENT_EXPOSE_ROUND, toolsForAgentRound } from '../../src/main/agent/agentService'
 import { MockProvider } from '../../src/main/agent/providers/mockProvider'
 import { migrate } from '../../src/main/db/database'
 import { MessageRepository, SessionRepository } from '../../src/main/db/repositories'
@@ -75,5 +75,22 @@ describe('AgentService persistence', () => {
     )
     expect(events).toHaveLength(0)
     db.close()
+  })
+})
+
+describe('subagent exposure gate', () => {
+  const definitions = [
+    { name: 'read_file', description: '', parameters: {} },
+    { name: 'delegate_task', description: '', parameters: {} }
+  ]
+
+  it('hides delegate_task in short tasks and reveals it from the long-task round', () => {
+    expect(toolsForAgentRound(definitions, 0).map((tool) => tool.name)).toEqual(['read_file'])
+    expect(
+      toolsForAgentRound(definitions, SUBAGENT_EXPOSE_ROUND - 1).map((tool) => tool.name)
+    ).toEqual(['read_file'])
+    expect(
+      toolsForAgentRound(definitions, SUBAGENT_EXPOSE_ROUND).map((tool) => tool.name)
+    ).toEqual(['read_file', 'delegate_task'])
   })
 })
