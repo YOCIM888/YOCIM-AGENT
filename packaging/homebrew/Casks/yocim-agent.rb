@@ -1,9 +1,9 @@
 cask "yocim-agent" do
   arch arm: "arm64", intel: "x64"
 
-  version "0.1.6"
-  sha256 arm:   "1f1fa061dfb57e4d17ca6a6cdd302045a3f2738431f2eda3ca92c348bda69925",
-         intel: "fb2d7706d0bfa2d87afa0e19bebde7b64799fb2216faef31bb1c454d5ad0cfa1"
+  version "0.1.7"
+  sha256 arm:   "b1e8f2009d40f6b046cce970c955f6c73ad8a3727f0b699092051e22c65c40ae",
+         intel: "d6cb4cf0b102b8a4777095414624503b9a0f14e118fba7e9b0c3bfdc7b608646"
 
   url "https://github.com/YOCIM888/YOCIM-AGENT/releases/download/v#{version}/YOCIM.AGENT-#{version}-#{arch}.dmg"
   name "YOCIM AGENT"
