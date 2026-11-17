@@ -6,12 +6,15 @@ import {
 } from '../../src/main/update/updateService'
 import {
   compareVersions,
+  isDomesticNetwork,
   isNewerVersion,
   normalizeVersion,
   resolveAppVersion,
   selectReleaseAsset,
+  UPDATE_API_MIRROR_URLS,
   UPDATE_API_URL,
   UPDATE_NOTES_MAX,
+  updateApiUrls,
   type ReleaseAsset
 } from '../../src/shared/update'
 
@@ -84,6 +87,7 @@ describe('checkForUpdate', () => {
       currentVersion: '0.1.0',
       platform: 'win32',
       arch: 'x64',
+      isDomestic: false,
       fetchImpl
     })
 
@@ -171,5 +175,63 @@ describe('checkForUpdate', () => {
     })
     expect(failed.status).toBe('error')
     if (failed.status === 'error') expect(failed.message).toContain('network down')
+  })
+})
+
+describe('domestic mirror fallback', () => {
+  it('detects domestic networks from timezone or locale', () => {
+    expect(isDomesticNetwork('Asia/Shanghai', 'en-US')).toBe(true)
+    expect(isDomesticNetwork('Asia/Urumqi', 'en-US')).toBe(true)
+    expect(isDomesticNetwork('UTC', 'zh-CN')).toBe(true)
+    expect(isDomesticNetwork('America/New_York', 'en-US')).toBe(false)
+    expect(isDomesticNetwork('Europe/London', 'en-GB')).toBe(false)
+  })
+
+  it('prioritizes stable mirrors on domestic networks and keeps the official API as fallback', () => {
+    expect(updateApiUrls(true)).toEqual([...UPDATE_API_MIRROR_URLS, UPDATE_API_URL])
+    expect(updateApiUrls(false)).toEqual([UPDATE_API_URL, ...UPDATE_API_MIRROR_URLS])
+  })
+
+  it('falls back to the next endpoint when a mirror fails', async () => {
+    const fetchImpl = vi.fn<UpdateFetch>(async (url) => {
+      if (url === UPDATE_API_MIRROR_URLS[0]) throw new Error('fetch failed')
+      return jsonResponse(release())
+    })
+    const result = await checkForUpdate({
+      currentVersion: '0.1.0',
+      isDomestic: true,
+      fetchImpl
+    })
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(UPDATE_API_MIRROR_URLS[0])
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe(UPDATE_API_MIRROR_URLS[1])
+    expect(result.status).toBe('available')
+  })
+
+  it('returns the last failure after every endpoint is exhausted', async () => {
+    const fetchImpl = vi.fn<UpdateFetch>(async () => jsonResponse({}, false, 403))
+    const result = await checkForUpdate({
+      currentVersion: '0.1.0',
+      apiUrls: [UPDATE_API_MIRROR_URLS[0], UPDATE_API_URL],
+      fetchImpl
+    })
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(result).toEqual({ status: 'error', message: 'GitHub 返回 403' })
+  })
+
+  it('honors an explicit endpoint list instead of auto-detected ordering', async () => {
+    const fetchImpl = vi.fn<UpdateFetch>(async () => jsonResponse(release()))
+    const result = await checkForUpdate({
+      currentVersion: '0.1.0',
+      isDomestic: true,
+      apiUrls: [UPDATE_API_URL],
+      fetchImpl
+    })
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(UPDATE_API_URL)
+    expect(result.status).toBe('available')
   })
 })

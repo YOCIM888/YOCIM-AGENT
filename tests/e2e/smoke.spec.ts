@@ -929,6 +929,34 @@ test('keeps executed steps when switching sessions away and back', async () => {
   }
 })
 
+test('sidebar toolbar opens the command manager directly', async () => {
+  const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-commands-toolbar-'))
+  const app = await launch(userDataDir)
+
+  try {
+    const page = await app.firstWindow()
+    const tool = page.getByTestId('sidebar-tool-commands')
+    await expect(tool).toBeVisible()
+    await expect(tool).toHaveAttribute('aria-label', '命令管理')
+
+    await tool.click()
+    const dialog = page.getByTestId('commands-dialog')
+    await expect(dialog).toBeVisible()
+    await expect(tool).toHaveAttribute('aria-pressed', 'true')
+    await page.getByTestId('commands-dialog-close-icon').click()
+    await expect(dialog).toHaveCount(0)
+    await expect(tool).toHaveAttribute('aria-pressed', 'false')
+
+    // 原应用菜单入口仍可用
+    await openCommands(page)
+    await expect(dialog).toBeVisible()
+    await page.getByTestId('commands-dialog-close-icon').click()
+    await app.close()
+  } finally {
+    await rm(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+  }
+})
+
 test('command manager adds, removes and persists whitelist entries', async () => {
   const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-commands-'))
   const app = await launch(userDataDir)

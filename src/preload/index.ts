@@ -128,7 +128,12 @@ import type {
   VscodeScanResponse
 } from '../shared/ipc'
 import type { DebugConfigFile, DebugEvent } from '../shared/debug'
-import type { BrowserAuditEntry, BrowserEvent, BrowserState } from '../shared/browser'
+import type {
+  BrowserAuditEntry,
+  BrowserEvent,
+  BrowserResetResult,
+  BrowserState
+} from '../shared/browser'
 import type {
   RemoteConnectInput,
   RemoteConnectResponse,
@@ -314,6 +319,7 @@ const api: YocimApi = {
       invoke<IpcResult<BrowserState>>(IPC_CHANNELS.browserRetry, input),
     audit: (input: BrowserAuditInput) =>
       invoke<IpcResult<BrowserAuditEntry[]>>(IPC_CHANNELS.browserAudit, input),
+    reset: () => invoke<IpcResult<BrowserResetResult>>(IPC_CHANNELS.browserReset),
     onEvent: (listener: (event: BrowserEvent) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, payload: BrowserEvent): void => {
         listener(payload)

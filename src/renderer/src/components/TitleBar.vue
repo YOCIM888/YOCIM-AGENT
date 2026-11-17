@@ -17,7 +17,6 @@ const ui = useUiStore()
 const commands = useAppCommands()
 const menu = ref<{ kind: MenuKind; x: number; y: number } | null>(null)
 const showAbout = ref(false)
-const showCommands = ref(false)
 
 const appItems = computed<ContextMenuItem[]>(() => [
   {
@@ -72,7 +71,7 @@ function selectMenu(id: string): void {
   } else if (id === 'settings') {
     ui.openSettings()
   } else if (id === 'commands') {
-    showCommands.value = true
+    ui.openCommands()
   } else if (id === 'new-session') {
     void commands.createSession()
   } else if (id === 'search-session') {
@@ -182,7 +181,7 @@ function toggleMaximize(): void {
   <!-- 必须放在标题栏拖动区之外，否则真实鼠标事件会被 -webkit-app-region: drag 吞掉 -->
   <SettingsDialog v-if="ui.settingsOpen" @close="ui.closeSettings()" />
   <AboutDialog v-if="showAbout" @close="showAbout = false" />
-  <CommandsDialog v-if="showCommands" @close="showCommands = false" />
+  <CommandsDialog v-if="ui.commandsOpen" @close="ui.closeCommands()" />
 </template>
 
 <style scoped>

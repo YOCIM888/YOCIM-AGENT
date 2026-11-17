@@ -7,6 +7,7 @@ export const useUiStore = defineStore('ui', () => {
   const browserOpen = ref(false)
   const settingsOpen = ref(false)
   const conventionsOpen = ref(false)
+  const commandsOpen = ref(false)
 
   /** 下半屏工具区当前 tab；两侧都可关闭整个 dock */
   const toolTab = computed<'terminal' | 'browser' | null>(() =>
@@ -19,6 +20,14 @@ export const useUiStore = defineStore('ui', () => {
 
   function closeConventions(): void {
     conventionsOpen.value = false
+  }
+
+  function openCommands(): void {
+    commandsOpen.value = true
+  }
+
+  function closeCommands(): void {
+    commandsOpen.value = false
   }
 
   function toggleTerminal(): void {
@@ -67,8 +76,11 @@ export const useUiStore = defineStore('ui', () => {
     toolTab,
     settingsOpen,
     conventionsOpen,
+    commandsOpen,
     toggleConventions,
     closeConventions,
+    openCommands,
+    closeCommands,
     toggleTerminal,
     closeTerminal,
     toggleBrowser,

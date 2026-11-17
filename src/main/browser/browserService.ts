@@ -47,6 +47,8 @@ interface NetworkStart {
 interface Context {
   scope: BrowserScope
   view: WebContentsView
+  /** 创建时的 Electron partition；undefined 表示复用默认 session（不在重置范围内） */
+  partition: string | undefined
   status: BrowserStatus
   mode: BrowserControlMode
   url: string | null
@@ -159,6 +161,16 @@ export class BrowserService {
       this.idleTimer = null
     }
     for (const sessionId of [...this.contexts.keys()]) this.dispose(sessionId)
+  }
+
+  /** 当前活跃上下文使用的隔离 profile 名（不含 persist: 前缀）；默认 session 不返回 */
+  activePartitions(): string[] {
+    const result = new Set<string>()
+    for (const context of this.contexts.values()) {
+      if (!context.partition) continue
+      result.add(context.partition.replace(/^persist:/, ''))
+    }
+    return [...result]
   }
 
   state(sessionId: string): BrowserState {
@@ -387,9 +399,10 @@ export class BrowserService {
       throw new AppError('E_BROWSER_UNAVAILABLE', '浏览器能力已在设置中关闭')
     }
 
+    const partition = profilePartition(scope, settings)
     const view = new WebContentsView({
       webPreferences: {
-        partition: profilePartition(scope, settings),
+        partition,
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
@@ -402,6 +415,7 @@ export class BrowserService {
     const context: Context = {
       scope,
       view,
+      partition,
       status: 'idle',
       mode: 'ai',
       url: null,
