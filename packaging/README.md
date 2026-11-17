@@ -17,9 +17,9 @@
 | 资产                                | SHA-256                                                            |
 | ----------------------------------- | ------------------------------------------------------------------ |
 | `YOCIM.AGENT-0.1.7-setup.exe`       | `11fe0fc71fbd9cbf32291df9ab91b48b08f98f3b71351237cc45668141d5a6ea` |
-| `YOCIM.AGENT-0.1.6-arm64.dmg`       | `1f1fa061dfb57e4d17ca6a6cdd302045a3f2738431f2eda3ca92c348bda69925` |
-| `YOCIM.AGENT-0.1.6-x64.dmg`         | `fb2d7706d0bfa2d87afa0e19bebde7b64799fb2216faef31bb1c454d5ad0cfa1` |
-| `YOCIM.AGENT-0.1.6-x86_64.AppImage` | `736c23ec62cc8a36046d008dbbae74e419d23358dc5b6a85cdffdeb3364a0b20` |
+| `YOCIM.AGENT-0.1.7-arm64.dmg`       | `b1e8f2009d40f6b046cce970c955f6c73ad8a3727f0b699092051e22c65c40ae` |
+| `YOCIM.AGENT-0.1.7-x64.dmg`         | `d6cb4cf0b102b8a4777095414624503b9a0f14e118fba7e9b0c3bfdc7b608646` |
+| `YOCIM.AGENT-0.1.7-x86_64.AppImage` | `95233774cc85b29efeeb0eef1b0d2ec511fe04e0f256c50687e4a87da4540565` |
 
 ## 发版时更新
 
