@@ -4,8 +4,10 @@ import { useProjectsStore } from '../stores/projects'
 import { useSessionStore } from '../stores/session'
 import { useUiStore } from '../stores/ui'
 import { useWorkspaceStore } from '../stores/workspace'
+import { useAppSettingsStore } from '../stores/appSettings'
 
 const ui = useUiStore()
+const appSettings = useAppSettingsStore()
 const sessions = useSessionStore()
 const projects = useProjectsStore()
 const workspace = useWorkspaceStore()
@@ -17,6 +19,16 @@ const currentProjectId = computed(
     projects.projects.find((project) => project.root === workspace.info?.root)?.id ??
     null
 )
+
+/** 无当前会话或浏览器被禁用时，占位按钮禁用并给出原因 */
+const browserDisabled = computed(
+  () => !sessions.activeSessionId || !appSettings.browser.enabled
+)
+const browserTitle = computed(() => {
+  if (!sessions.activeSessionId) return '请先选择一个会话'
+  if (!appSettings.browser.enabled) return '浏览器能力已在设置中关闭'
+  return ui.browserOpen ? '关闭浏览器视图' : '浏览器'
+})
 </script>
 
 <template>
@@ -80,11 +92,14 @@ const currentProjectId = computed(
 
     <button
       type="button"
-      class="tool-button placeholder"
+      class="tool-button"
+      :class="{ active: ui.browserOpen }"
       data-testid="sidebar-tool-browser"
-      title="浏览器（占位）"
-      aria-label="浏览器（占位）"
-      aria-disabled="true"
+      :title="browserTitle"
+      :aria-label="browserTitle"
+      :aria-pressed="ui.browserOpen"
+      :disabled="browserDisabled"
+      @click="ui.toggleBrowser()"
     >
       <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true">
         <circle cx="8" cy="8" r="5.75" stroke="currentColor" stroke-width="1.3" />

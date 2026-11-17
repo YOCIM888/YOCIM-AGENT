@@ -1,6 +1,11 @@
 import { z } from 'zod'
 import { AppError } from '../../shared/errors'
 import { IMAGE_GEN_LIMITS, IMAGE_SIZES, WEB_SEARCH_LIMITS } from '../../shared/settings'
+import {
+  BROWSER_ALLOWED_METHODS,
+  BROWSER_LIMITS,
+  BROWSER_WAIT_KINDS
+} from '../../shared/browser'
 
 export const READ_FILE_DEFAULT_LIMIT = 400
 export const READ_FILE_MAX_LIMIT = 2000
@@ -105,6 +110,24 @@ export const generateImageArgsSchema = z.object({
   model: z.string().min(1).max(200).optional()
 })
 
+export const browserCdpArgsSchema = z.object({
+  method: z.enum(BROWSER_ALLOWED_METHODS),
+  params: z.record(z.string(), z.unknown()).optional().default({}),
+  intent: z.string().max(300).optional().default('')
+})
+
+export const browserWaitArgsSchema = z.object({
+  kind: z.enum(BROWSER_WAIT_KINDS),
+  value: z.string().max(2000).optional().default(''),
+  timeoutMs: z
+    .number()
+    .int()
+    .min(500)
+    .max(60_000)
+    .optional()
+    .default(BROWSER_LIMITS.commandTimeoutMs)
+})
+
 export type ListDirArgs = z.output<typeof listDirArgsSchema>
 export type ReadFileArgs = z.output<typeof readFileArgsSchema>
 export type SearchFilesArgs = z.output<typeof searchFilesArgsSchema>
@@ -118,6 +141,8 @@ export type GetGitDiffArgs = z.output<typeof getGitDiffArgsSchema>
 export type UpdatePlanArgs = z.output<typeof updatePlanArgsSchema>
 export type WebSearchArgs = z.output<typeof webSearchArgsSchema>
 export type GenerateImageArgs = z.output<typeof generateImageArgsSchema>
+export type BrowserCdpArgs = z.output<typeof browserCdpArgsSchema>
+export type BrowserWaitArgs = z.output<typeof browserWaitArgsSchema>
 
 export type ParsedToolArguments =
   | { tool: 'list_dir'; args: ListDirArgs }
@@ -133,6 +158,8 @@ export type ParsedToolArguments =
   | { tool: 'update_plan'; args: UpdatePlanArgs }
   | { tool: 'web_search'; args: WebSearchArgs }
   | { tool: 'generate_image'; args: GenerateImageArgs }
+  | { tool: 'browser_cdp'; args: BrowserCdpArgs }
+  | { tool: 'browser_wait'; args: BrowserWaitArgs }
 
 export function parseToolArguments(name: string, raw: string): ParsedToolArguments {
   let json: unknown
@@ -169,6 +196,10 @@ export function parseToolArguments(name: string, raw: string): ParsedToolArgumen
       return { tool: 'web_search', args: webSearchArgsSchema.parse(json) }
     case 'generate_image':
       return { tool: 'generate_image', args: generateImageArgsSchema.parse(json) }
+    case 'browser_cdp':
+      return { tool: 'browser_cdp', args: browserCdpArgsSchema.parse(json) }
+    case 'browser_wait':
+      return { tool: 'browser_wait', args: browserWaitArgsSchema.parse(json) }
     default:
       throw new AppError('E_TOOL_DENIED', `未知工具：${name}`)
   }

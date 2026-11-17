@@ -20,7 +20,9 @@ describe('tool definitions', () => {
       'get_git_diff',
       'update_plan',
       'web_search',
-      'generate_image'
+      'generate_image',
+      'browser_cdp',
+      'browser_wait'
     ])
   })
 

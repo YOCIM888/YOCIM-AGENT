@@ -1,7 +1,13 @@
 import type { ApprovalMode } from './approval'
 import type { AgentStep } from './agent'
 import type { PublicProvider } from './providers'
-import type { ImageSettings, ModelPricing, SearchSettings, StorageSettings } from './settings'
+import type {
+  BrowserSettings,
+  ImageSettings,
+  ModelPricing,
+  SearchSettings,
+  StorageSettings
+} from './settings'
 
 export interface SessionSummary {
   id: string
@@ -55,4 +61,6 @@ export interface PublicSettings {
   pricing: ModelPricing[]
   /** 存储设置（数据目录） */
   storage: StorageSettings
+  /** AI 可操作浏览器设置 */
+  browser: BrowserSettings
 }

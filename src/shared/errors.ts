@@ -10,6 +10,9 @@ export type IpcErrorCode =
   | 'E_UNSUPPORTED'
   | 'E_TOOL_DENIED'
   | 'E_FORBIDDEN'
+  | 'E_BROWSER_UNAVAILABLE'
+  | 'E_BROWSER_TIMEOUT'
+  | 'E_BROWSER_TAKEOVER'
   | 'E_UNKNOWN'
 
 export class AppError extends Error {

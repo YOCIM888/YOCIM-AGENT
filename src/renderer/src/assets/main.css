@@ -117,6 +117,12 @@ body.col-resizing * {
   user-select: none !important;
 }
 
+body.row-resizing,
+body.row-resizing * {
+  cursor: row-resize !important;
+  user-select: none !important;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

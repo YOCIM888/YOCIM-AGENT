@@ -96,6 +96,12 @@ import type {
   SettingsSetReasoningEffortInput,
   SettingsSetSearchInput,
   SettingsSetStorageInput,
+  SettingsSetBrowserInput,
+  BrowserAuditInput,
+  BrowserControlInput,
+  BrowserNavigateInput,
+  BrowserSessionInput,
+  BrowserViewportInput,
   BillingBalanceInput,
   BillingBalanceResult,
   BillingSummaryInput,
@@ -132,6 +138,7 @@ import type {
 import type { RemoteConnectionState } from './remote'
 import type { TaskEvent } from './tasks'
 import type { TerminalEvent, TerminalRunResult, TerminalState } from './terminal'
+import type { BrowserAuditEntry, BrowserEvent, BrowserState } from './browser'
 import type { ProjectSummary, SessionSummary } from './session'
 import type {
   GitBranches,
@@ -316,6 +323,7 @@ export interface YocimSettingsApi {
   clearImageKey(): Promise<IpcResult<SettingsResult>>
   setPricing(input: SettingsSetPricingInput): Promise<IpcResult<SettingsResult>>
   setStorage(input: SettingsSetStorageInput): Promise<IpcResult<SettingsResult>>
+  setBrowser(input: SettingsSetBrowserInput): Promise<IpcResult<SettingsResult>>
 }
 
 export interface YocimBillingApi {
@@ -342,6 +350,22 @@ export interface YocimUpdateApi {
   onAvailable(listener: (info: UpdateInfo) => void): () => void
 }
 
+export interface YocimBrowserApi {
+  /** 当前会话的浏览器状态（不存在时返回空闲态） */
+  state(input: BrowserSessionInput): Promise<IpcResult<BrowserState>>
+  /** 渲染层上报浏览器视图在窗口中的位置；主进程据此放置原生视图 */
+  viewport(input: BrowserViewportInput): Promise<IpcResult<{ applied: boolean }>>
+  /** 地址栏导航（人类操作，记入审计） */
+  navigate(input: BrowserNavigateInput): Promise<IpcResult<{ url: string }>>
+  /** 暂停 AI / 接管 / 恢复 */
+  control(input: BrowserControlInput): Promise<IpcResult<BrowserState>>
+  /** CDP 断线后手动重试 */
+  retry(input: BrowserSessionInput): Promise<IpcResult<BrowserState>>
+  /** 查询最近 N 条 append-only 操作审计（时间倒序） */
+  audit(input: BrowserAuditInput): Promise<IpcResult<BrowserAuditEntry[]>>
+  onEvent(listener: (event: BrowserEvent) => void): () => void
+}
+
 export interface YocimApi {
   platform: string
   versions: YocimVersions
@@ -353,6 +377,7 @@ export interface YocimApi {
   git: YocimGitApi
   tasks: YocimTasksApi
   terminal: YocimTerminalApi
+  browser: YocimBrowserApi
   debug: YocimDebugApi
   extensions: YocimExtensionsApi
   remote: YocimRemoteApi

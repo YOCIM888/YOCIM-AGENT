@@ -1,22 +1,62 @@
 <script setup lang="ts">
-const planned = [
-  {
-    title: '网页浏览',
-    detail: '内置无头浏览器会话，Agent 可打开页面、点击元素、填写表单并截图取证。'
+import { computed, onMounted, ref, watch } from 'vue'
+import ConfirmDialog from '../ConfirmDialog.vue'
+import { useAppSettingsStore } from '../../stores/appSettings'
+import type { BrowserSettings } from '@shared/settings'
+
+const appSettings = useAppSettingsStore()
+
+const form = ref<BrowserSettings>({
+  enabled: true,
+  headless: false,
+  idleRecycleMinutes: 30,
+  allowEvaluate: true,
+  inheritProfile: false
+})
+const saving = ref(false)
+const notice = ref('')
+const confirmInherit = ref(false)
+
+watch(
+  () => appSettings.browser,
+  (next) => {
+    form.value = { ...next }
   },
-  {
-    title: '页面抽取',
-    detail: '把当前打开的网页转成可读文本，直接喂给模型，省去手工复制粘贴。'
-  },
-  {
-    title: '远程调试接入',
-    detail: '接管 Chrome / Edge 的调试端口，让 Agent 在你正在用的浏览器里排查问题。'
-  },
-  {
-    title: '自动化脚本',
-    detail: '录制一段浏览流程并重放，用于回归验证与数据采集。'
+  { immediate: true, deep: true }
+)
+
+const inheritRisk = computed(() => form.value.inheritProfile)
+
+onMounted(() => {
+  void appSettings.refresh()
+})
+
+async function save(): Promise<void> {
+  saving.value = true
+  notice.value = ''
+  try {
+    const ok = await appSettings.setBrowser({ ...form.value })
+    notice.value = ok ? '浏览器设置已保存' : appSettings.error || '保存失败'
+  } finally {
+    saving.value = false
   }
-]
+}
+
+function onInheritChange(event: Event): void {
+  const checked = (event.target as HTMLInputElement).checked
+  if (checked && !appSettings.browser.inheritProfile) {
+    // 显式风险确认：勾选后弹出确认框，取消则回退
+    confirmInherit.value = true
+    form.value.inheritProfile = false
+    return
+  }
+  form.value.inheritProfile = checked
+}
+
+function confirmInheritProfile(): void {
+  form.value.inheritProfile = true
+  confirmInherit.value = false
+}
 </script>
 
 <template>
@@ -24,66 +64,86 @@ const planned = [
     <section class="sp-section">
       <div class="sp-section-head">
         <h3 class="sp-section-title">浏览器</h3>
-        <span class="badge">规划中</span>
+        <span class="badge">AI 可操作</span>
       </div>
       <p class="sp-section-sub">
-        浏览器能力还在设计阶段，这一页先占位。等功能落地后，这里会放开关、浏览器实例配置与
-        权限控制。
+        Agent 通过 Chrome DevTools Protocol 直接操作内置浏览器；页面在下半屏工具区的「浏览器」tab
+        中可见。控制流走现有 Agent 工具链，可随时暂停、接管与恢复。
       </p>
     </section>
 
     <section class="sp-section">
-      <h3 class="sp-section-title">打算支持的能力</h3>
-      <ul class="plan-list">
-        <li v-for="item in planned" :key="item.title">
-          <strong>{{ item.title }}</strong>
-          <span>{{ item.detail }}</span>
-        </li>
-      </ul>
+      <label class="sp-check">
+        <input v-model="form.enabled" type="checkbox" />
+        <span>允许 AI 使用浏览器工具（关闭后工具不暴露给模型，UI 仍可人工打开查看）</span>
+      </label>
+      <label class="sp-check">
+        <input v-model="form.headless" type="checkbox" />
+        <span>无头模式（页面在后台运行并可通过 CDP 操作；UI 会标识，默认有头可见）</span>
+      </label>
+      <label class="sp-check">
+        <input v-model="form.allowEvaluate" type="checkbox" />
+        <span>允许受限 Runtime.evaluate（已禁止访问 Node / Electron / 文件系统）</span>
+      </label>
+      <label class="sp-check">
+        <input
+          type="checkbox"
+          :checked="form.inheritProfile"
+          @change="onInheritChange"
+        />
+        <span>
+          复用日常浏览器 profile 登录态（<strong>高风险</strong>：AI 将以你的登录身份操作页面，
+          建议保持关闭以使用独立 profile）
+        </span>
+      </label>
+      <p v-if="inheritRisk" class="sp-error">
+        已勾选复用日常 profile：保存后浏览器将使用你的登录态，请确认你理解相关风险。
+      </p>
+
+      <div class="sp-row compact">
+        <label class="sp-field">
+          <span>空闲回收时间（分钟，0 表示不回收）</span>
+          <input v-model.number="form.idleRecycleMinutes" type="number" min="0" max="1440" />
+        </label>
+      </div>
+      <p class="sp-hint">
+        回收前会写入 append-only 审计日志；tab 切换仅隐藏视图、不销毁会话，滚动/运行状态保留。
+      </p>
     </section>
 
-    <p class="sp-hint">
-      目前 Agent 的联网能力由「搜索」页的 Tavily 提供——可以查资料，但不能打开并操作网页。
-    </p>
+    <div class="actions">
+      <button type="button" class="sp-btn primary" :disabled="saving" @click="save">
+        {{ saving ? '保存中…' : '保存' }}
+      </button>
+      <span v-if="notice" class="sp-hint">{{ notice }}</span>
+    </div>
+
+    <ConfirmDialog
+      v-if="confirmInherit"
+      title="确认复用日常登录态？"
+      message="启用后，内置浏览器会复用你的日常 profile（含 Cookie 与登录状态）。AI 操作页面时将以你的身份进行，可能触发真实账户操作。请确认只在你充分信任的场景下启用。"
+      confirm-label="我已知晓并启用"
+      danger
+      testid="browser-inherit-confirm"
+      @confirm="confirmInheritProfile"
+      @close="confirmInherit = false"
+    />
   </div>
 </template>
 
 <style scoped>
 .badge {
   padding: 2px 8px;
-  border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--success) 45%, var(--border));
   border-radius: 999px;
-  background: var(--warning-soft);
-  color: var(--warning);
+  background: var(--success-soft);
+  color: var(--success);
   font-size: 10.5px;
 }
-
-.plan-list {
+.actions {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.plan-list li {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-left: 12px;
-  border-left: 2px solid var(--border-strong);
-}
-
-.plan-list strong {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.plan-list span {
-  font-size: 11.5px;
-  line-height: 1.6;
-  color: var(--text-muted);
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
 }
 </style>

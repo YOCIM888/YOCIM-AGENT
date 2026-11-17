@@ -5,10 +5,11 @@ import ConventionsPanel from '../components/ConventionsPanel.vue'
 import ResizeHandle from '../components/ResizeHandle.vue'
 import SessionSidebar from '../components/SessionSidebar.vue'
 import StatusBar from '../components/StatusBar.vue'
-import TerminalPanel from '../components/TerminalPanel.vue'
+import ToolDeck from '../components/ToolDeck.vue'
 import TitleBar from '../components/TitleBar.vue'
 import WorkspacePanel from '../components/WorkspacePanel.vue'
 import { useAppCommands } from '../composables/useAppCommands'
+import { useAppSettingsStore } from '../stores/appSettings'
 import { useChatStore } from '../stores/chat'
 import { usePreferencesStore } from '../stores/preferences'
 import { useProjectsStore } from '../stores/projects'
@@ -31,6 +32,7 @@ const sessions = useSessionStore()
 const projects = useProjectsStore()
 const chat = useChatStore()
 const providers = useProvidersStore()
+const appSettings = useAppSettingsStore()
 const preferences = usePreferencesStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
@@ -89,6 +91,7 @@ async function bootstrap(): Promise<void> {
   await workspace.restore()
   await projects.refresh()
   await providers.refresh()
+  await appSettings.refresh()
   await preferences.refresh()
   await sessions.init()
   const active = sessions.activeSession
@@ -133,7 +136,7 @@ onBeforeUnmount(() => {
 
       <main class="conversation">
         <ChatPanel />
-        <TerminalPanel v-if="ui.terminalOpen" @close="ui.closeTerminal()" />
+        <ToolDeck v-if="ui.toolTab" />
       </main>
 
       <ResizeHandle

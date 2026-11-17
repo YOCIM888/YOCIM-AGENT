@@ -69,6 +69,12 @@ const key = computed<ToolIconKey>(() => toolIconKey(props.name))
       <circle cx="5.7" cy="6.1" r="1.2" />
       <path d="m2.2 11.4 3.4-3.1 2.3 2.1 2.2-2.4 3.7 3.6" />
     </g>
+    <!-- 浏览器：地球 -->
+    <g v-else-if="key === 'browser'">
+      <circle cx="8" cy="8" r="5.8" />
+      <path d="M2.3 8h11.4" />
+      <path d="M8 2.2c1.6 1.8 2.4 3.6 2.4 5.8S9.6 12 8 13.8C6.4 12 5.6 10.2 5.6 8S6.4 4 8 2.2Z" />
+    </g>
     <!-- Git：分支 -->
     <g v-else>
       <circle cx="4.8" cy="3.9" r="1.9" />

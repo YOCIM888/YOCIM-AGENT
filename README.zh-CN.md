@@ -9,6 +9,7 @@
 - **多模型接入**：DeepSeek、Qwen、BigModel、Kimi、MiniMax、腾讯云、阿里云、硅基流动、火山引擎、ChatGPT、Claude、Gemini、Grok、本地 Ollama 与自定义端点；设置中添加，输入卡右下角切换（按服务商分组，只显示模型名，选中项右侧为绿色实心圆）
 - **分栏设置**：账单、模型、搜索、生图、外观、存储、浏览器；审批模式（手动 / 自动 / 开放）在输入卡左下角切换并持久化
 - **三栏工作台**：左侧项目化会话、中间纯会话区、右侧 8 个图标视图（文件 / 搜索 / 编辑器 / 审计 / 源代码管理 / 扩展 / 调试 / 远程）；左右栏可折叠、可拖动调宽，状态重启后保留
+- **AI 可操作浏览器**：会话区下半屏工具区提供「终端 / 浏览器」双 tab（共享可拖拽高度）；Agent 通过薄 CDP 原语（`browser_cdp` / `browser_wait`）驱动内嵌可见的 Chromium 视图——导航、截图、读标题/DOM、坐标级输入、条件等待。视图内可折叠控制台汇聚 Console / Network / 未处理异常 / append-only 操作审计，并提供暂停 AI / 接管 / 恢复入口。浏览器上下文按会话隔离，Runtime.evaluate 与 Node/Electron 隔离。
 - **全文搜索与替换**：流式结果、取消、include/exclude、大小写 / 全词 / 正则、替换预览与 hash 冲突校验、时间线回滚（优先 ripgrep，缺失时回退内置搜索）
 - **Monaco 多标签编辑器**：预览 / 固定标签、`Ctrl+S` 保存、脏状态、外部修改冲突（覆盖 / 重新加载 / 另存）、图片预览、选区「添加到对话」
 - **项目与会话**：一个工作区 = 一个项目，同项目多会话；搜索、置顶、归档 / 取消归档、跨项目迁移；会话与项目操作收进右键菜单
@@ -113,7 +114,7 @@ node node_modules/electron/install.js
 | 本地 Ollama       | `http://localhost:11434/v1`                         | OpenAI 兼容（无需 Key）     |
 | 自定义            | 自行填写                                            | OpenAI / Anthropic / Gemini |
 
-设置分页：账单（DeepSeek 余额 + 按 provider/模型统计 token 用量、手填单价估算费用）、模型、搜索（Tavily Key，开启后多出 `web_search`，没配 Key 则该工具不出现）、生图（智谱 Key，默认免费 `cogview-3-flash`，开启后多出 `generate_image`，可切自定义 OpenAI 图像格式端点）、外观（主题 / 字号 / 自动换行 / 代码缩略图）、存储（查看与自定义数据目录，重启生效）、浏览器（占位）。
+设置分页：账单（DeepSeek 余额 + 按 provider/模型统计 token 用量、手填单价估算费用）、模型、搜索（Tavily Key，开启后多出 `web_search`，没配 Key 则该工具不出现）、生图（智谱 Key，默认免费 `cogview-3-flash`，开启后多出 `generate_image`，可切自定义 OpenAI 图像格式端点）、外观（主题 / 字号 / 自动换行 / 代码缩略图）、存储（查看与自定义数据目录，重启生效）、浏览器（开关浏览器工具、无头模式、空闲回收、Runtime.evaluate、以及带风险提示的显式复用日常 profile 选项）。
 
 API Key 处理：每个 Provider 的 Key 独立经 Electron `safeStorage` 加密后存入 `settings`，不明文落库；renderer 只能读 `hasApiKey`。也支持环境变量回退（`DEEPSEEK_API_KEY`、`DASHSCOPE_API_KEY`、`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`GEMINI_API_KEY`、`XAI_API_KEY`、`TAVILY_API_KEY`、`ZHIPU_API_KEY` 等）。
 
