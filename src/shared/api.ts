@@ -86,6 +86,7 @@ import type {
   SettingsResult,
   SettingsSetActiveInput,
   SettingsSetApprovalModeInput,
+  SettingsSetCommandWhitelistInput,
   SettingsSetContextWindowInput,
   SettingsSetImageInput,
   SettingsSetPricingInput,
@@ -286,6 +287,7 @@ export interface YocimSettingsApi {
   removeProvider(input: ProviderDeleteInput): Promise<IpcResult<SettingsResult>>
   setActive(input: SettingsSetActiveInput): Promise<IpcResult<SettingsResult>>
   setApprovalMode(input: SettingsSetApprovalModeInput): Promise<IpcResult<SettingsResult>>
+  setCommandWhitelist(input: SettingsSetCommandWhitelistInput): Promise<IpcResult<SettingsResult>>
   setContextWindow(input: SettingsSetContextWindowInput): Promise<IpcResult<SettingsResult>>
   setReasoningEffort(input: SettingsSetReasoningEffortInput): Promise<IpcResult<SettingsResult>>
   setSearch(input: SettingsSetSearchInput): Promise<IpcResult<SettingsResult>>

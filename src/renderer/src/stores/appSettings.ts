@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { BillingSummary, ProviderBalance, StorageInfo } from '@shared/billing'
 import type {
+  SettingsSetCommandWhitelistInput,
   SettingsSetImageInput,
   SettingsSetPricingInput,
   SettingsSetSearchInput,
@@ -24,6 +25,7 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
   const search = ref<SearchSettings>({ ...SEARCH_SETTINGS_DEFAULTS })
   const image = ref<ImageSettings>({ ...IMAGE_SETTINGS_DEFAULTS })
   const pricing = ref<ModelPricing[]>([])
+  const commandWhitelist = ref<string[]>([])
   const storage = ref<StorageSettings>({ dataDir: '' })
   const balances = ref<Record<string, ProviderBalance>>({})
   const summary = ref<BillingSummary | null>(null)
@@ -39,11 +41,13 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
     search: SearchSettings
     image: ImageSettings
     pricing: ModelPricing[]
+    commandWhitelist: string[]
     storage: StorageSettings
   }): void {
     search.value = { ...settings.search }
     image.value = { ...settings.image }
     pricing.value = settings.pricing.map((item) => ({ ...item }))
+    commandWhitelist.value = [...settings.commandWhitelist]
     storage.value = { ...settings.storage }
   }
 
@@ -117,6 +121,17 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
     return false
   }
 
+  async function setCommandWhitelist(input: SettingsSetCommandWhitelistInput): Promise<boolean> {
+    error.value = ''
+    const result = await window.yocim.settings.setCommandWhitelist(input)
+    if (result.ok) {
+      apply(result.data)
+      return true
+    }
+    error.value = result.error.message
+    return false
+  }
+
   async function setStorage(input: SettingsSetStorageInput): Promise<boolean> {
     error.value = ''
     const result = await window.yocim.settings.setStorage(input)
@@ -178,6 +193,7 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
     search,
     image,
     pricing,
+    commandWhitelist,
     storage,
     balances,
     summary,
@@ -193,6 +209,7 @@ export const useAppSettingsStore = defineStore('appSettings', () => {
     setImage,
     clearImageKey,
     setPricing,
+    setCommandWhitelist,
     setStorage,
     fetchBalance,
     fetchSummary,

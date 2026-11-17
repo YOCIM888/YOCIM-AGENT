@@ -45,6 +45,8 @@ export interface PublicSettings {
   activeProviderId: string
   activeModel: string
   approvalMode: ApprovalMode
+  /** 命令白名单：开放模式下命中的命令直接放行（手动/自动档仍走原拦截） */
+  commandWhitelist: string[]
   /** 联网搜索设置（Tavily） */
   search: SearchSettings
   /** 生图设置（智谱 cogview-3-flash / 自定义） */

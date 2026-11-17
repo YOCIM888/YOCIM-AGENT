@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  COMMAND_WHITELIST_LIMITS,
   estimateCost,
+  isCommandWhitelisted,
+  normalizeCommandWhitelist,
   normalizePricing,
   normalizeSearchSettings,
   normalizeStorageSettings,
@@ -71,6 +74,43 @@ describe('estimateCost', () => {
 
   it('returns zero without pricing', () => {
     expect(estimateCost(undefined, 1_000_000, 1_000_000)).toBe(0)
+  })
+})
+
+describe('command whitelist', () => {
+  it('normalizes entries and de-duplicates ignoring case', () => {
+    const entries = normalizeCommandWhitelist([
+      '  docker  ',
+      'DOCKER',
+      '',
+      '   ',
+      42,
+      'npm run dev',
+      'npm run dev'
+    ])
+    expect(entries).toEqual(['docker', 'npm run dev'])
+    expect(normalizeCommandWhitelist('["git"]')).toEqual(['git'])
+    expect(normalizeCommandWhitelist(null)).toEqual([])
+  })
+
+  it('caps entries and rejects overlength commands', () => {
+    const entries = Array.from({ length: COMMAND_WHITELIST_LIMITS.maxEntries + 5 }, (_, i) =>
+      String(i)
+    )
+    expect(normalizeCommandWhitelist(entries)).toHaveLength(COMMAND_WHITELIST_LIMITS.maxEntries)
+    expect(
+      normalizeCommandWhitelist(['x'.repeat(COMMAND_WHITELIST_LIMITS.maxCommandLength + 1)])
+    ).toEqual([])
+  })
+
+  it('matches whole commands or executable names only', () => {
+    const whitelist = ['docker', 'npm run dev']
+    expect(isCommandWhitelisted('docker ps -a', whitelist)).toBe(true)
+    expect(isCommandWhitelisted('DOCKER ps', whitelist)).toBe(true)
+    expect(isCommandWhitelisted('  npm   run   dev  ', whitelist)).toBe(true)
+    expect(isCommandWhitelisted('npm run build', whitelist)).toBe(false)
+    expect(isCommandWhitelisted('docker-compose up', whitelist)).toBe(false)
+    expect(isCommandWhitelisted('', whitelist)).toBe(false)
   })
 })
 

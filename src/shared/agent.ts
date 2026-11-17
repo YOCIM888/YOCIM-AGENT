@@ -35,6 +35,8 @@ export interface ToolDefinition {
   parameters: Record<string, unknown>
 }
 
+import type { ApprovalDecision } from './approval'
+
 /**
  * 时间线步骤的持久化形态。过去只存在于 renderer 内存，切会话/重启后丢失，
  * 因此下沉到 shared：消息落库、IPC 回传与 UI 渲染共用同一份结构。
@@ -46,6 +48,10 @@ export interface StepApproval {
   approvalId: string
   risk: 'medium' | 'high'
   status: StepApprovalStatus
+  /** 常规风险审批 / 开放模式下的命令硬拦截 */
+  kind?: 'risk' | 'blocked'
+  /** 用户的最终决定，用于卡片收口文案（allow_once / allow_whitelist 等） */
+  decision?: ApprovalDecision
 }
 
 export interface AgentStep {

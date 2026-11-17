@@ -136,7 +136,7 @@ watch(
   max-width: 60vw;
   min-height: 0;
   border-left: 1px solid var(--border);
-  background: var(--bg-subtle);
+  background: var(--bg);
 }
 
 .activity-row {

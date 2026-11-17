@@ -64,14 +64,20 @@ export function resolveToolStep(
 
 export function attachStepApproval(
   steps: AgentStep[],
-  request: { approvalId: string; callId: string; risk: 'medium' | 'high' }
+  request: {
+    approvalId: string
+    callId: string
+    risk: 'medium' | 'high'
+    kind?: 'risk' | 'blocked'
+  }
 ): AgentStep | null {
   const step = steps.find((item) => item.callId === request.callId)
   if (!step) return null
   step.approval = {
     approvalId: request.approvalId,
     risk: request.risk,
-    status: 'pending'
+    status: 'pending',
+    ...(request.kind ? { kind: request.kind } : {})
   }
   return step
 }
@@ -83,7 +89,8 @@ export function resolveStepApproval(
 ): AgentStep | null {
   const step = steps.find((item) => item.approval?.approvalId === approvalId)
   if (!step?.approval) return null
-  step.approval.status = decision === 'approve' ? 'approved' : 'denied'
+  step.approval.status = decision === 'deny' ? 'denied' : 'approved'
+  step.approval.decision = decision
   return step
 }
 

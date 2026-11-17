@@ -28,6 +28,7 @@ import {
 import { PROVIDER_PRESET_IDS, REASONING_EFFORT_LEVELS } from './providers'
 import type { PublicSettings, ProjectSummary, SessionSummary, StoredMessage } from './session'
 import {
+  COMMAND_WHITELIST_LIMITS,
   IMAGE_PROVIDERS,
   IMAGE_SIZES,
   PRICING_CURRENCIES,
@@ -336,7 +337,18 @@ const persistedStepSchema = z.object({
     .object({
       approvalId: z.string().min(1).max(128),
       risk: z.enum(['medium', 'high']),
-      status: z.enum(['pending', 'approved', 'denied'])
+      status: z.enum(['pending', 'approved', 'denied']),
+      kind: z.enum(['risk', 'blocked']).optional(),
+      decision: z
+        .enum([
+          'approve',
+          'approve_session',
+          'approve_project',
+          'allow_once',
+          'allow_whitelist',
+          'deny'
+        ])
+        .optional()
     })
     .optional(),
   output: z.string().max(8000).optional(),
@@ -373,7 +385,14 @@ export interface ChatPersistStepsResult {
 
 export const approvalRespondInputSchema = z.object({
   approvalId: z.string().min(1).max(64),
-  decision: z.enum(['approve', 'approve_session', 'approve_project', 'deny'])
+  decision: z.enum([
+    'approve',
+    'approve_session',
+    'approve_project',
+    'allow_once',
+    'allow_whitelist',
+    'deny'
+  ])
 })
 
 export type ApprovalRespondInput = z.input<typeof approvalRespondInputSchema>
@@ -522,6 +541,19 @@ export const settingsSetApprovalModeInputSchema = z.object({
 
 export type SettingsSetApprovalModeInput = z.input<typeof settingsSetApprovalModeInputSchema>
 export type SettingsSetApprovalModeRequest = z.output<typeof settingsSetApprovalModeInputSchema>
+
+export const settingsSetCommandWhitelistInputSchema = z.object({
+  entries: z
+    .array(z.string().max(COMMAND_WHITELIST_LIMITS.maxCommandLength))
+    .max(COMMAND_WHITELIST_LIMITS.maxEntries)
+})
+
+export type SettingsSetCommandWhitelistInput = z.input<
+  typeof settingsSetCommandWhitelistInputSchema
+>
+export type SettingsSetCommandWhitelistRequest = z.output<
+  typeof settingsSetCommandWhitelistInputSchema
+>
 
 export const settingsSetContextWindowInputSchema = z.object({
   providerId: z.string().min(1).max(64),

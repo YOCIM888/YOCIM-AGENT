@@ -353,14 +353,21 @@ describe('command risk tiers by approval mode', () => {
     await run
   })
 
-  it('open mode still blocks non-git dangerous commands', async () => {
-    const outcome = await makeService('open').execute(
-      toolCall('run_command', { command: 'rm -rf /' }),
+  it('open mode asks before running a blocked dangerous command', async () => {
+    const run = makeService('open').execute(
+      toolCall('run_command', { command: 'echo rm -rf' }),
       context()
     )
-    expect(outcome.ok).toBe(false)
-    expect(outcome.summary).toContain('危险命令')
-    expect(requests).toHaveLength(0)
+    await settleApproval()
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ kind: 'blocked', risk: 'high', tool: 'run_command' })
+    expect(requests[0].reason).toContain('危险命令')
+
+    // 拒绝时不执行
+    approvals.respond(requests[0].approvalId, 'deny')
+    const denied = await run
+    expect(denied.ok).toBe(false)
+    expect(denied.content).toContain('用户拒绝')
   })
 })
 
@@ -401,6 +408,96 @@ describe('run_command protection', () => {
     expect(outcome.ok).toBe(true)
     expect(outcome.content).toContain('hi')
     expect(audit.list()[0]).toMatchObject({ tool: 'run_command', approval: 'approved', ok: true })
+  })
+})
+
+describe('command whitelist in open mode', () => {
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 50))
+
+  function openService(whitelist: string[], onAdd?: (command: string) => void): ToolService {
+    return new ToolService({
+      approvals,
+      audit,
+      requireGuard: () => guard,
+      getApprovalMode: () => 'open',
+      getCommandWhitelist: () => whitelist,
+      addCommandToWhitelist: onAdd
+    })
+  }
+
+  it('runs whitelisted commands without any approval card', async () => {
+    const outcome = await openService(['echo']).execute(
+      toolCall('run_command', { command: 'echo whitelisted' }),
+      context()
+    )
+    expect(outcome.ok).toBe(true)
+    expect(outcome.content).toContain('whitelisted')
+    expect(requests).toHaveLength(0)
+    expect(audit.list()[0]).toMatchObject({ approval: 'not_required', ok: true })
+  })
+
+  it('allows a blocked command once without persisting it', async () => {
+    const added: string[] = []
+    const serviceOnce = openService([], (command) => added.push(command))
+    const run = serviceOnce.execute(toolCall('run_command', { command: 'echo rm -rf' }), context())
+    await settle()
+    expect(requests).toHaveLength(1)
+    approvals.respond(requests[0].approvalId, 'allow_once')
+
+    const outcome = await run
+    expect(outcome.ok).toBe(true)
+    expect(outcome.content).toContain('rm -rf')
+    expect(added).toEqual([])
+    expect(audit.list().at(-1)).toMatchObject({ approval: 'approved', ok: true })
+
+    // 「仅一次」不写入白名单：下一次仍要处理
+    requests.length = 0
+    const again = serviceOnce.execute(
+      toolCall('run_command', { command: 'echo rm -rf' }),
+      context()
+    )
+    await settle()
+    expect(requests).toHaveLength(1)
+    approvals.respond(requests[0].approvalId, 'deny')
+    expect((await again).ok).toBe(false)
+  })
+
+  it('adds a blocked command to the whitelist and reuses it in later runs', async () => {
+    const added: string[] = []
+    const command = 'echo add-me'
+    const first = openService([], (value) => added.push(value)).execute(
+      toolCall('run_command', { command }),
+      context()
+    )
+    await settle()
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ kind: 'blocked' })
+    expect(requests[0].reason).toContain('白名单')
+    approvals.respond(requests[0].approvalId, 'allow_whitelist')
+    expect((await first).ok).toBe(true)
+    expect(added).toEqual([command])
+
+    // 模拟设置已落盘：后续任务从 getter 读到新白名单
+    requests.length = 0
+    const second = await openService(added).execute(toolCall('run_command', { command }), context())
+    expect(second.ok).toBe(true)
+    expect(requests).toHaveLength(0)
+  })
+
+  it('keeps hard interception in non-open modes even if the command is whitelisted', async () => {
+    const outcome = await new ToolService({
+      approvals,
+      audit,
+      requireGuard: () => guard,
+      getApprovalMode: () => 'auto',
+      getCommandWhitelist: () => ['echo'],
+      addCommandToWhitelist: () => {
+        throw new Error('should not be called')
+      }
+    }).execute(toolCall('run_command', { command: 'echo blocked' }), context())
+    expect(outcome.ok).toBe(false)
+    expect(outcome.summary).toContain('白名单')
+    expect(requests).toHaveLength(0)
   })
 })
 

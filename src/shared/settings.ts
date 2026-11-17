@@ -305,3 +305,61 @@ export function normalizeStorageSettings(value: unknown): StorageSettings {
   const dataDir = typeof raw['dataDir'] === 'string' ? raw['dataDir'].trim() : ''
   return { dataDir: dataDir.replace(/[\\/]+$/, '') }
 }
+
+/* -------------------------------------------------------------------------- */
+/* 命令白名单（开放模式下免拦截）                                              */
+/* -------------------------------------------------------------------------- */
+
+export const COMMAND_WHITELIST_LIMITS = {
+  maxEntries: 100,
+  maxCommandLength: 2000
+} as const
+
+/**
+ * 收敛命令白名单：去空、去重（忽略大小写）、限长限量。
+ * 条目可以是可执行程序名（node、docker），也可以是完整命令（npm run dev）。
+ */
+export function normalizeCommandWhitelist(value: unknown): string[] {
+  const source = unwrapJson(value)
+  if (!Array.isArray(source)) return []
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const item of source) {
+    if (typeof item !== 'string') continue
+    const command = item.trim()
+    if (
+      !command ||
+      command.length > COMMAND_WHITELIST_LIMITS.maxCommandLength ||
+      command.includes('\0')
+    ) {
+      continue
+    }
+    const key = command.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(command)
+    if (result.length >= COMMAND_WHITELIST_LIMITS.maxEntries) break
+  }
+  return result
+}
+
+function normalizeCommandForMatch(command: string): string {
+  return command.trim().replace(/\s+/g, ' ')
+}
+
+/**
+ * 白名单匹配：整条命令精确匹配，或「单项命令名」匹配可执行程序段。
+ * 只用于开放模式；手动/自动档仍按原有策略硬拦截。
+ */
+export function isCommandWhitelisted(command: string, whitelist: readonly string[]): boolean {
+  const normalized = normalizeCommandForMatch(command)
+  if (!normalized) return false
+  const executable = normalized.split(' ')[0].toLowerCase()
+  for (const entry of whitelist) {
+    const candidate = normalizeCommandForMatch(entry)
+    if (!candidate) continue
+    if (candidate.toLowerCase() === normalized.toLowerCase()) return true
+    if (!candidate.includes(' ') && candidate.toLowerCase() === executable) return true
+  }
+  return false
+}

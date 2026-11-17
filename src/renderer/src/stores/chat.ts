@@ -363,7 +363,8 @@ export const useChatStore = defineStore('chat', () => {
         attachStepApproval(message.steps, {
           approvalId: request.approvalId,
           callId: request.callId,
-          risk: request.risk
+          risk: request.risk,
+          kind: request.kind ?? 'risk'
         })
       }
     }

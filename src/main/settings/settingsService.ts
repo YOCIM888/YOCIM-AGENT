@@ -8,6 +8,7 @@ import type {
   ProviderSaveRequest,
   SettingsSetActiveRequest,
   SettingsSetApprovalModeRequest,
+  SettingsSetCommandWhitelistRequest,
   SettingsSetContextWindowRequest,
   SettingsSetImageRequest,
   SettingsSetPricingRequest,
@@ -24,7 +25,9 @@ import {
   type PublicProvider
 } from '../../shared/providers'
 import {
+  COMMAND_WHITELIST_LIMITS,
   IMAGE_SETTINGS_DEFAULTS,
+  normalizeCommandWhitelist,
   normalizeImageSettings,
   normalizePricing,
   normalizeSearchSettings,
@@ -52,6 +55,7 @@ const KEY_PROVIDERS = 'providers'
 const KEY_ACTIVE_PROVIDER = 'activeProviderId'
 const KEY_ACTIVE_MODEL = 'activeModel'
 const KEY_APPROVAL_MODE = 'approvalMode'
+const KEY_COMMAND_WHITELIST = 'commandWhitelist'
 const KEY_SEARCH = 'search'
 const KEY_IMAGE = 'image'
 const KEY_PRICING = 'pricing'
@@ -136,6 +140,7 @@ export class SettingsService {
       activeProviderId: activeProvider.id,
       activeModel,
       approvalMode: this.getApprovalMode(),
+      commandWhitelist: this.getCommandWhitelist(),
       search: this.getSearchSettings(),
       image: this.getImageSettings(),
       pricing: this.getPricing(),
@@ -283,6 +288,35 @@ export class SettingsService {
 
   setApprovalMode(input: SettingsSetApprovalModeRequest): PublicSettings {
     this.repo.set(KEY_APPROVAL_MODE, input.mode)
+    return this.getPublic()
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 命令白名单（开放模式生效）                                          */
+  /* ------------------------------------------------------------------ */
+
+  getCommandWhitelist(): string[] {
+    return normalizeCommandWhitelist(this.repo.get(KEY_COMMAND_WHITELIST))
+  }
+
+  setCommandWhitelist(input: SettingsSetCommandWhitelistRequest): PublicSettings {
+    this.repo.set(KEY_COMMAND_WHITELIST, normalizeCommandWhitelist(input.entries))
+    return this.getPublic()
+  }
+
+  /** 拦截提示里的「加入白名单」：追加一条并立刻落盘（重复则不写入） */
+  addCommandToWhitelist(command: string): PublicSettings {
+    const entry = normalizeCommandWhitelist([command])[0]
+    if (!entry) {
+      throw new AppError('E_INVALID_INPUT', '命令为空，无法加入白名单')
+    }
+    const current = this.getCommandWhitelist()
+    if (!current.some((item) => item.toLowerCase() === entry.toLowerCase())) {
+      if (current.length >= COMMAND_WHITELIST_LIMITS.maxEntries) {
+        throw new AppError('E_INVALID_INPUT', '命令白名单已满，请先删除部分条目')
+      }
+      this.repo.set(KEY_COMMAND_WHITELIST, [...current, entry])
+    }
     return this.getPublic()
   }
 

@@ -32,6 +32,11 @@ async function openSettings(page: Page): Promise<void> {
   await page.getByTestId('settings-open').click()
 }
 
+async function openCommands(page: Page): Promise<void> {
+  await openAppMenu(page)
+  await page.getByTestId('commands-open').click()
+}
+
 async function openSessionMenu(page: Page): Promise<void> {
   await page.getByTestId('session-row-active').click({ button: 'right' })
 }
@@ -917,6 +922,108 @@ test('keeps executed steps when switching sessions away and back', async () => {
     await expect(restored).toContainText('已执行 1 个步骤')
     await restored.getByTestId('timeline-toggle').click()
     await expect(restored.getByTestId('timeline-step')).toContainText('read_file')
+  } finally {
+    await app.close()
+    await rm(userDataDir, { recursive: true, force: true })
+    await rm(workspaceDir, { recursive: true, force: true })
+  }
+})
+
+test('command manager adds, removes and persists whitelist entries', async () => {
+  const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-commands-'))
+  const app = await launch(userDataDir)
+
+  try {
+    const page = await app.firstWindow()
+    await openCommands(page)
+    const dialog = page.getByTestId('commands-dialog')
+    await expect(dialog).toBeVisible()
+    await expect(page.getByTestId('command-whitelist-empty')).toBeVisible()
+
+    await page.getByTestId('command-whitelist-input').fill('docker')
+    await page.getByTestId('command-whitelist-add').click()
+    await page.getByTestId('command-whitelist-input').fill('npm run dev')
+    await page.getByTestId('command-whitelist-add').click()
+    await expect(page.getByTestId('command-whitelist-item')).toHaveCount(2)
+    await expect(page.getByTestId('command-whitelist-item').first()).toContainText('docker')
+    await page.getByTestId('command-whitelist-remove').first().click()
+    await expect(page.getByTestId('command-whitelist-item')).toHaveCount(1)
+    await page.getByTestId('command-whitelist-save').click()
+    await expect(page.getByTestId('command-whitelist-saved')).toBeVisible()
+    await page.getByTestId('command-whitelist-done').click()
+    await expect(dialog).toHaveCount(0)
+
+    // 重启后仍在：写进设置库而不是只留在内存
+    await app.close()
+    const restarted = await launch(userDataDir)
+    try {
+      const reopened = await restarted.firstWindow()
+      await openCommands(reopened)
+      await expect(reopened.getByTestId('command-whitelist-item')).toHaveCount(1)
+      await expect(reopened.getByTestId('command-whitelist-item').first()).toContainText(
+        'npm run dev'
+      )
+    } finally {
+      await restarted.close()
+    }
+  } finally {
+    // Electron 退出后仍可能短暂持有 userData 下的 SQLite 文件
+    await rm(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+  }
+})
+
+test('open mode offers allow-once and add-to-whitelist for blocked commands', async () => {
+  const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-command-approval-'))
+  const workspaceDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-command-approval-ws-'))
+  await writeFile(join(workspaceDir, 'hello.txt'), 'hello')
+  const app = await launch(userDataDir)
+
+  try {
+    const page = await app.firstWindow()
+    await patchOpenDialog(app, workspaceDir)
+    await openFolder(page)
+    await page.getByTestId('new-session').click()
+    await setApprovalMode(page, 'open')
+
+    // 非白名单命令：开放模式不再直接拒绝，而是给出两个处理动作
+    await page.getByTestId('chat-input').fill('/tool command echo need-allow')
+    await page.getByTestId('chat-send').click()
+    const card = page.getByTestId('approval-card').last()
+    await expect(card).toBeVisible()
+    await expect(card).toContainText('命令被拦截')
+    await expect(card.getByTestId('approval-allow-once')).toBeVisible()
+    await expect(card.getByTestId('approval-allow-whitelist')).toBeVisible()
+    await card.getByTestId('approval-allow-whitelist').click()
+    await expect(page.getByTestId('chat-send')).toBeVisible()
+
+    // 加入白名单后，同一命令在后续任务直接放行
+    await page.getByTestId('chat-input').fill('/tool command echo need-allow')
+    await page.getByTestId('chat-send').click()
+    await expect(page.getByTestId('chat-send')).toBeVisible()
+    await expect(page.getByTestId('timeline').last().getByTestId('approval-card')).toHaveCount(0)
+
+    await openCommands(page)
+    await expect(page.getByTestId('command-whitelist-item')).toHaveCount(1)
+    await expect(page.getByTestId('command-whitelist-item').first()).toContainText(
+      'echo need-allow'
+    )
+    await page.getByTestId('command-whitelist-done').click()
+
+    // 危险命令：允许一次仅放行本次，下一次仍会拦截
+    await page.getByTestId('chat-input').fill('/tool command echo rm -rf')
+    await page.getByTestId('chat-send').click()
+    const dangerCard = page.getByTestId('approval-card').last()
+    await expect(dangerCard).toBeVisible()
+    await expect(dangerCard).toContainText('危险命令')
+    await dangerCard.getByTestId('approval-allow-once').click()
+    await expect(page.getByTestId('chat-send')).toBeVisible()
+
+    await page.getByTestId('chat-input').fill('/tool command echo rm -rf')
+    await page.getByTestId('chat-send').click()
+    const againCard = page.getByTestId('approval-card').last()
+    await expect(againCard).toBeVisible()
+    await againCard.getByTestId('approval-deny').click()
+    await expect(page.getByTestId('chat-send')).toBeVisible()
   } finally {
     await app.close()
     await rm(userDataDir, { recursive: true, force: true })
