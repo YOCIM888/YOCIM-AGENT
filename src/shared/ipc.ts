@@ -1,9 +1,18 @@
 import { z } from 'zod'
 import { ATTACHMENT_LIMITS, contextAttachmentSchema } from './attachment'
+import type { ConventionSource, ProjectConvention } from './conventions'
 import type { PlanItem } from './agent'
 import { CONTEXT_WINDOW_MAX, CONTEXT_WINDOW_MIN, type ContextUsage } from './context'
 import type { IpcErrorCode } from './errors'
-import { AUDIT_LIMITS, DEBUG_LIMITS, FS_LIMITS, GIT_LIMITS, SEARCH_LIMITS } from './ipcChannels'
+import {
+  AUDIT_LIMITS,
+  CONVENTION_LIMITS,
+  DEBUG_LIMITS,
+  FS_LIMITS,
+  GIT_LIMITS,
+  SEARCH_LIMITS,
+  TERMINAL_LIMITS
+} from './ipcChannels'
 import type { AuditEntry, AuditExportResult, AuditPage, AuditStats } from './audit'
 import type {
   DebugBreakpoint,
@@ -19,6 +28,7 @@ import type {
   VscodeScanResult
 } from './extensions'
 import type { TaskDiscovery, TaskRun } from './tasks'
+import type { TerminalEvent, TerminalRunResult, TerminalState } from './terminal'
 import {
   REMOTE_LIMITS,
   type RemoteConnectionState,
@@ -43,6 +53,7 @@ import { UPDATE_RELEASES_URL } from './update'
 export type { IpcErrorCode } from './errors'
 export {
   AUDIT_LIMITS,
+  CONVENTION_LIMITS,
   DEBUG_LIMITS,
   EXTENSION_LIMITS,
   FS_LIMITS,
@@ -50,7 +61,8 @@ export {
   IGNORED_DIRECTORIES,
   IPC_CHANNELS,
   SEARCH_LIMITS,
-  TASK_LIMITS
+  TASK_LIMITS,
+  TERMINAL_LIMITS
 } from './ipcChannels'
 export {
   ATTACHMENT_LIMITS,
@@ -464,6 +476,17 @@ export const projectIdInputSchema = z.object({
 
 export type ProjectIdInput = z.input<typeof projectIdInputSchema>
 export type ProjectIdRequest = z.output<typeof projectIdInputSchema>
+
+export const conventionSaveInputSchema = projectIdInputSchema.extend({
+  content: z.string().min(1).max(CONVENTION_LIMITS.maxContentChars),
+  source: z.enum(['manual', 'ai']).optional().default('manual')
+})
+
+export type ConventionSaveInput = z.input<typeof conventionSaveInputSchema>
+export type ConventionSaveRequest = z.output<typeof conventionSaveInputSchema>
+export type ConventionRecord = ProjectConvention
+export type ConventionSourceValue = ConventionSource
+export type ConventionGenerateResult = { content: string }
 
 export const projectRenameInputSchema = projectIdInputSchema.extend({
   name: z.string().min(1).max(100)
@@ -938,6 +961,14 @@ export const taskStopInputSchema = z.object({
 
 export type TaskStopInput = z.input<typeof taskStopInputSchema>
 export type TaskStopRequest = z.output<typeof taskStopInputSchema>
+
+export const terminalRunInputSchema = z.object({
+  command: z.string().min(1).max(TERMINAL_LIMITS.maxCommandLength)
+})
+
+export type TerminalRunInput = z.input<typeof terminalRunInputSchema>
+export type TerminalRunRequest = z.output<typeof terminalRunInputSchema>
+export type { TerminalEvent, TerminalRunResult, TerminalState }
 
 const breakpointSchema = z.object({
   id: z.string().min(1).max(120),

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useAppCommands } from '../composables/useAppCommands'
 import type { ContextMenuItem } from '../lib/menu'
 import { useSettingsStore } from '../stores/settings'
+import { useUiStore } from '../stores/ui'
 import AboutDialog from './AboutDialog.vue'
 import CommandsDialog from './CommandsDialog.vue'
 import ContextMenu from './ContextMenu.vue'
@@ -12,9 +13,9 @@ type MenuKind = 'app' | 'edit'
 type WindowAction = 'minimize' | 'maximize' | 'close'
 
 const settings = useSettingsStore()
+const ui = useUiStore()
 const commands = useAppCommands()
 const menu = ref<{ kind: MenuKind; x: number; y: number } | null>(null)
-const showSettings = ref(false)
 const showAbout = ref(false)
 const showCommands = ref(false)
 
@@ -69,7 +70,7 @@ function selectMenu(id: string): void {
   } else if (id === 'theme') {
     settings.toggleTheme()
   } else if (id === 'settings') {
-    showSettings.value = true
+    ui.openSettings()
   } else if (id === 'commands') {
     showCommands.value = true
   } else if (id === 'new-session') {
@@ -179,7 +180,7 @@ function toggleMaximize(): void {
   </header>
 
   <!-- 必须放在标题栏拖动区之外，否则真实鼠标事件会被 -webkit-app-region: drag 吞掉 -->
-  <SettingsDialog v-if="showSettings" @close="showSettings = false" />
+  <SettingsDialog v-if="ui.settingsOpen" @close="ui.closeSettings()" />
   <AboutDialog v-if="showAbout" @close="showAbout = false" />
   <CommandsDialog v-if="showCommands" @close="showCommands = false" />
 </template>

@@ -29,7 +29,7 @@ describe('schema migration', () => {
     const db = memoryDb()
     migrate(db)
     expect(userVersion(db)).toBe(SCHEMA_VERSION)
-    expect(SCHEMA_VERSION).toBe(12)
+    expect(SCHEMA_VERSION).toBe(13)
     expect(hasTable(db, 'file_history')).toBe(true)
     expect(hasTable(db, 'extensions')).toBe(true)
     expect(hasTable(db, 'agent_context')).toBe(true)

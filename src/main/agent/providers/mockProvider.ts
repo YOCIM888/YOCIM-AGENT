@@ -1,4 +1,30 @@
 import type { ChatProvider, ProviderEvent, ProviderRequest, ToolCall } from '../../../shared/agent'
+import { CONVENTION_GENERATE_MARKER } from '../../../shared/conventions'
+
+const CONVENTION_MOCK_DRAFT = `## 项目概览
+- 基于 Electron + Vue 3 + TypeScript 的本地优先 AI 编程助手。
+- 当前为离线演示用的项目约定草稿，内容可在面板中继续编辑。
+
+## 技术栈与运行方式
+- 待确认：以项目 README / package.json 为准。
+
+## 目录与核心模块
+- src/main：主进程服务；src/renderer：界面；src/shared：跨进程契约。
+
+## 开发规范
+- 提交前运行 typecheck、lint 与测试。
+
+## 数据与接口约定
+- 项目约定按 projectId 独立保存。
+
+## 测试与发布
+- 待确认：以项目 README 为准。
+
+## 注意事项 / 禁忌
+- 不要写入密钥、Token 等敏感信息。
+
+## 当前已知问题
+- 待确认`
 
 export interface MockProviderOptions {
   chunkSize?: number
@@ -107,6 +133,10 @@ export class MockProvider implements ChatProvider {
     }
 
     const lastUser = [...request.messages].reverse().find((message) => message.role === 'user')
+    if ((lastUser?.content ?? '').includes(CONVENTION_GENERATE_MARKER)) {
+      yield* this.streamText(CONVENTION_MOCK_DRAFT, signal)
+      return
+    }
     const thinking = /^\/think(?:\s+(.*))?$/is.exec(lastUser?.content ?? '')
     if (thinking) {
       yield* this.streamThinking(thinking[1]?.trim() || '演示', signal)

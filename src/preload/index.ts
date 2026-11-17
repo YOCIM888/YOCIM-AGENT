@@ -72,6 +72,9 @@ import type {
   SearchStartInput,
   SearchStartResult,
   ProjectIdInput,
+  ConventionGenerateResult,
+  ConventionRecord,
+  ConventionSaveInput,
   ProjectRemoveResult,
   ProjectRenameInput,
   ProviderDeleteInput,
@@ -106,6 +109,7 @@ import type {
   TaskStartInput,
   TaskStartResult,
   TaskStopInput,
+  TerminalRunInput,
   TaskStopResult,
   TimelineListResult,
   TimelineReadInput,
@@ -129,6 +133,7 @@ import type {
 } from '../shared/ipc'
 import type { RemoteConnectionState } from '../shared/remote'
 import type { TaskEvent } from '../shared/tasks'
+import type { TerminalEvent, TerminalRunResult, TerminalState } from '../shared/terminal'
 import type { UpdateCheckResult, UpdateInfo } from '../shared/update'
 import type { ProjectSummary, SessionSummary } from '../shared/session'
 import type {
@@ -274,6 +279,21 @@ const api: YocimApi = {
       }
     }
   },
+  terminal: {
+    state: () => invoke<IpcResult<TerminalState>>(IPC_CHANNELS.terminalState),
+    run: (input: TerminalRunInput) =>
+      invoke<IpcResult<TerminalRunResult>>(IPC_CHANNELS.terminalRun, input),
+    cancel: () => invoke<IpcResult<{ stopped: boolean }>>(IPC_CHANNELS.terminalCancel),
+    onEvent: (listener: (event: TerminalEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, payload: TerminalEvent): void => {
+        listener(payload)
+      }
+      ipcRenderer.on(IPC_CHANNELS.terminalEvent, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.terminalEvent, handler)
+      }
+    }
+  },
   debug: {
     configs: () => invoke<IpcResult<DebugConfigFile>>(IPC_CHANNELS.debugConfigs),
     start: (input: DebugStartInput) =>
@@ -358,6 +378,17 @@ const api: YocimApi = {
       invoke<IpcResult<WorkspaceInfo>>(IPC_CHANNELS.projectOpen, input),
     remove: (input: ProjectIdInput) =>
       invoke<IpcResult<ProjectRemoveResult>>(IPC_CHANNELS.projectRemove, input)
+  },
+  conventions: {
+    get: (input: ProjectIdInput) =>
+      invoke<IpcResult<ConventionRecord | null>>(IPC_CHANNELS.conventionsGet, input),
+    save: (input: ConventionSaveInput) =>
+      invoke<IpcResult<ConventionRecord>>(IPC_CHANNELS.conventionsSave, input),
+    remove: (input: ProjectIdInput) =>
+      invoke<IpcResult<{ removed: boolean }>>(IPC_CHANNELS.conventionsDelete, input),
+    generate: (input: ProjectIdInput) =>
+      invoke<IpcResult<ConventionGenerateResult>>(IPC_CHANNELS.conventionsGenerate, input),
+    copy: (input: ProjectIdInput) => invoke<IpcResult<null>>(IPC_CHANNELS.conventionsCopy, input)
   },
   settings: {
     get: () => invoke<IpcResult<SettingsResult>>(IPC_CHANNELS.settingsGet),

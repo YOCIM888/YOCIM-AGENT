@@ -24,6 +24,7 @@ import type {
   VscodeScanResult
 } from '../../shared/extensions'
 import type { TaskDiscovery, TaskEvent, TaskRun } from '../../shared/tasks'
+import type { TerminalEvent, TerminalRunResult, TerminalState } from '../../shared/terminal'
 import type { RemoteConnectionState } from '../../shared/remote'
 import { AppError } from '../../shared/errors'
 import type {
@@ -62,6 +63,7 @@ import {
   extensionsSetEnabledInputSchema,
   taskStartInputSchema,
   taskStopInputSchema,
+  terminalRunInputSchema,
   clipboardWriteTextInputSchema,
   fsClipboardInputSchema,
   fsCreateEntryInputSchema,
@@ -78,6 +80,7 @@ import {
   gitDiffInputSchema,
   gitPathsInputSchema,
   IPC_CHANNELS,
+  conventionSaveInputSchema,
   projectIdInputSchema,
   projectRenameInputSchema,
   remoteConnectInputSchema,
@@ -152,6 +155,7 @@ import {
   type ExtensionsSetEnabledRequest,
   type TaskStartRequest,
   type TaskStopRequest,
+  type TerminalRunRequest,
   type ClipboardWriteTextRequest,
   type FsClipboardRequest,
   type FsClipboardResult,
@@ -185,6 +189,9 @@ import {
   type SearchCancelResult,
   type SearchEvent,
   type SearchQuery,
+  type ConventionGenerateResult,
+  type ConventionRecord,
+  type ConventionSaveRequest,
   type ProjectIdRequest,
   type ProjectListResult,
   type ProjectRemoveResult,
@@ -221,6 +228,7 @@ import {
 import type { ProjectSummary } from '../../shared/session'
 import type { UpdateCheckResult } from '../../shared/update'
 import { AgentService } from '../agent/agentService'
+import { ConventionsService } from '../agent/conventionsService'
 import { AllowRuleStore } from '../approval/allowRules'
 import { ApprovalManager } from '../approval/approvalManager'
 import { auditToCsv, auditToJson } from '../audit/auditExport'
@@ -232,6 +240,7 @@ import {
   ExtensionRepository,
   FileHistoryRepository,
   MessageRepository,
+  ProjectConventionRepository,
   ProjectRepository,
   SessionRepository,
   SettingsRepository,
@@ -241,6 +250,7 @@ import {
 import { DebugService } from '../debug/debugService'
 import { ExtensionService } from '../extensions/extensionService'
 import { TaskService } from '../tasks/taskService'
+import { TerminalService } from '../terminal/terminalService'
 import { SessionService } from '../sessions/sessionService'
 import { GitService } from '../git/gitService'
 import { runGit } from '../git/gitRunner'
@@ -304,6 +314,14 @@ function broadcastTaskEvent(event: TaskEvent): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
       window.webContents.send(IPC_CHANNELS.tasksEvent, event)
+    }
+  }
+}
+
+function broadcastTerminalEvent(event: TerminalEvent): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.terminalEvent, event)
     }
   }
 }
@@ -387,6 +405,7 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     }
   })
   const projectRepo = new ProjectRepository(db)
+  const conventionRepo = new ProjectConventionRepository(db)
   const toolCallRepo = new ToolCallRepository(db)
   const settingsRepo = new SettingsRepository(db)
   const auditRepo = new AuditRepository(db)
@@ -398,6 +417,17 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
   const auditStore = new AuditStore({ repo: auditRepo })
   const approvalManager = new ApprovalManager(broadcastApprovalRequest)
   const settingsService = new SettingsService(settingsRepo, createSettingsCrypto())
+  const requireConventionProject = (projectId: string): void => {
+    if (!projectRepo.get(projectId)) throw new AppError('E_NOT_FOUND', '项目不存在')
+  }
+  const conventionsService = new ConventionsService({
+    resolveProvider: () => settingsService.createProvider(),
+    getProject: (projectId) => {
+      const project = projectRepo.get(projectId)
+      return project ? { id: project.id, name: project.name, root: project.root } : null
+    },
+    conventions: conventionRepo
+  })
   const usageRepo = new UsageRepository(db)
   const billingService = new BillingService(usageRepo, settingsService)
   const storageService = new StorageService(userData, storageRoot)
@@ -413,6 +443,10 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
   const taskService = new TaskService({
     getRoot: () => workspaceService.current()?.root ?? null,
     emit: broadcastTaskEvent
+  })
+  const terminalService = new TerminalService({
+    getRoot: () => workspaceService.current()?.root ?? null,
+    emit: broadcastTerminalEvent
   })
   const debugService = new DebugService({
     getRoot: () => workspaceService.current()?.root ?? null,
@@ -433,6 +467,7 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
   })
   app.once('before-quit', () => {
     taskService.dispose()
+    terminalService.dispose()
     remoteService.dispose()
     void debugService.dispose()
   })
@@ -971,6 +1006,20 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     async (input) => ({ stopped: await taskService.stop(input.runId), runId: input.runId })
   )
 
+  handleIpc<undefined, TerminalState>(IPC_CHANNELS.terminalState, null, async () =>
+    terminalService.state()
+  )
+
+  handleIpc<TerminalRunRequest, TerminalRunResult>(
+    IPC_CHANNELS.terminalRun,
+    terminalRunInputSchema,
+    async (input) => terminalService.run(input.command)
+  )
+
+  handleIpc<undefined, { stopped: boolean }>(IPC_CHANNELS.terminalCancel, null, async () => ({
+    stopped: terminalService.cancel()
+  }))
+
   handleIpc<undefined, DebugConfigFile>(IPC_CHANNELS.debugConfigs, null, async () =>
     debugService.configs()
   )
@@ -1199,6 +1248,56 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
     IPC_CHANNELS.projectRemove,
     projectIdInputSchema,
     async (input) => sessionService.removeProject(input)
+  )
+
+  handleIpc<ProjectIdRequest, ConventionRecord | null>(
+    IPC_CHANNELS.conventionsGet,
+    projectIdInputSchema,
+    async (input) => {
+      requireConventionProject(input.projectId)
+      return conventionRepo.get(input.projectId)
+    }
+  )
+
+  handleIpc<ConventionSaveRequest, ConventionRecord>(
+    IPC_CHANNELS.conventionsSave,
+    conventionSaveInputSchema,
+    async (input) => {
+      requireConventionProject(input.projectId)
+      return conventionRepo.save(
+        input.projectId,
+        input.content.trim(),
+        input.source,
+        input.source === 'ai' ? 'ai' : 'user'
+      )
+    }
+  )
+
+  handleIpc<ProjectIdRequest, { removed: boolean }>(
+    IPC_CHANNELS.conventionsDelete,
+    projectIdInputSchema,
+    async (input) => {
+      requireConventionProject(input.projectId)
+      return { removed: conventionRepo.remove(input.projectId) }
+    }
+  )
+
+  handleIpc<ProjectIdRequest, ConventionGenerateResult>(
+    IPC_CHANNELS.conventionsGenerate,
+    projectIdInputSchema,
+    async (input) => conventionsService.generate(input.projectId)
+  )
+
+  handleIpc<ProjectIdRequest, null>(
+    IPC_CHANNELS.conventionsCopy,
+    projectIdInputSchema,
+    async (input) => {
+      requireConventionProject(input.projectId)
+      const record = conventionRepo.get(input.projectId)
+      if (!record) throw new AppError('E_NOT_FOUND', '当前项目还没有项目约定')
+      clipboard.writeText(record.content)
+      return null
+    }
   )
 
   handleIpc<undefined, RemoteProbeResultType>(IPC_CHANNELS.remoteProbe, null, async () =>
