@@ -120,6 +120,33 @@ const browserTitle = computed(() => {
     <button
       type="button"
       class="tool-button"
+      :class="{ active: ui.auditOpen }"
+      data-testid="sidebar-tool-audit"
+      title="审计日志"
+      aria-label="审计日志"
+      :aria-pressed="ui.auditOpen"
+      @click="ui.toggleAudit()"
+    >
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true">
+        <path
+          d="M8 1.75 13 3.5v4.1c0 3.2-2.1 5.5-5 6.65C5.1 13.1 3 10.8 3 7.6V3.5z"
+          stroke="currentColor"
+          stroke-width="1.3"
+          stroke-linejoin="round"
+        />
+        <path
+          d="m5.9 7.9 1.5 1.5 2.9-3.1"
+          stroke="currentColor"
+          stroke-width="1.3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </button>
+
+    <button
+      type="button"
+      class="tool-button"
       :class="{ active: ui.browserOpen }"
       data-testid="sidebar-tool-browser"
       :title="browserTitle"

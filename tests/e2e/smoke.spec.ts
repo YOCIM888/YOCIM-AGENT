@@ -968,6 +968,41 @@ test('sidebar toolbar opens the command manager directly', async () => {
   }
 })
 
+test('sidebar toolbar opens the audit dialog directly', async () => {
+  const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-audit-toolbar-'))
+  const app = await launch(userDataDir)
+
+  try {
+    const page = await app.firstWindow()
+    const tool = page.getByTestId('sidebar-tool-audit')
+    await expect(tool).toBeVisible()
+    await expect(tool).toHaveAttribute('aria-label', '审计日志')
+
+    await tool.click()
+    const dialog = page.getByTestId('audit-dialog')
+    await expect(dialog).toBeVisible()
+    await expect(tool).toHaveAttribute('aria-pressed', 'true')
+    // 审计面板由弹窗承载，统计卡与列表都可见
+    await expect(dialog.getByTestId('audit-stats')).toBeVisible()
+    await expect(dialog.getByTestId('audit-panel')).toBeVisible()
+
+    // 关闭按钮生效（弹窗遮罩覆盖侧栏，不能靠再次点击工具按钮关闭）
+    await page.getByTestId('audit-dialog-close').click()
+    await expect(dialog).toHaveCount(0)
+    await expect(tool).toHaveAttribute('aria-pressed', 'false')
+
+    // 点击遮罩空白处也可关闭
+    await tool.click()
+    await expect(dialog).toBeVisible()
+    await dialog.click({ position: { x: 4, y: 4 } })
+    await expect(dialog).toHaveCount(0)
+    await expect(tool).toHaveAttribute('aria-pressed', 'false')
+    await app.close()
+  } finally {
+    await rm(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+  }
+})
+
 test('command manager adds, removes and persists whitelist entries', async () => {
   const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-e2e-commands-'))
   const app = await launch(userDataDir)
