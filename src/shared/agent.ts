@@ -35,6 +35,35 @@ export interface ToolDefinition {
   parameters: Record<string, unknown>
 }
 
+/**
+ * 时间线步骤的持久化形态。过去只存在于 renderer 内存，切会话/重启后丢失，
+ * 因此下沉到 shared：消息落库、IPC 回传与 UI 渲染共用同一份结构。
+ */
+export type ToolStepStatus = 'running' | 'done' | 'failed'
+export type StepApprovalStatus = 'pending' | 'approved' | 'denied'
+
+export interface StepApproval {
+  approvalId: string
+  risk: 'medium' | 'high'
+  status: StepApprovalStatus
+}
+
+export interface AgentStep {
+  id: string
+  callId: string
+  name: string
+  argsSummary: string
+  status: ToolStepStatus
+  startedAt: number
+  endedAt?: number
+  summary?: string
+  approval?: StepApproval
+  /** 命令等长任务的增量输出（tool:output 事件追加，保留尾部） */
+  output?: string
+  /** 生图等工具产出的图片 URL，供时间线渲染缩略图 */
+  images?: string[]
+}
+
 export type ProviderFinishReason = 'stop' | 'tool_calls' | 'length'
 
 /** 单次模型调用的 token 用量 */

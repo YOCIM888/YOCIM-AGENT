@@ -12,6 +12,8 @@ import type {
   ChatCancelResult,
   ChatCompressInput,
   ChatCompressResult,
+  ChatPersistStepsInput,
+  ChatPersistStepsResult,
   ChatPlanResult,
   ChatSendInput,
   ChatSendResult,
@@ -182,6 +184,7 @@ export interface YocimChatApi {
   compress(input: ChatCompressInput): Promise<IpcResult<ChatCompressResult>>
   contextUsage(input: SessionIdInput): Promise<IpcResult<ContextUsage>>
   getPlan(input: SessionIdInput): Promise<IpcResult<ChatPlanResult>>
+  persistSteps(input: ChatPersistStepsInput): Promise<IpcResult<ChatPersistStepsResult>>
   onEvent(listener: (event: AgentEvent) => void): () => void
 }
 

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
+import type { AgentStep } from '../../shared/agent'
 import type { AuditEntry, AuditFilter, AuditPage, AuditStats } from '../../shared/audit'
 import type { TimelineSource } from '../../shared/ipc'
 import type {
@@ -38,6 +39,9 @@ interface MessageRow {
   content: string
   created_at: number
   reasoning_content: string | null
+  steps_json: string | null
+  run_started_at: number | null
+  run_ended_at: number | null
 }
 
 interface AuditRow {
@@ -79,13 +83,33 @@ function mapProject(row: ProjectRow): ProjectSummary {
   }
 }
 
+function parseSteps(json: string | null | undefined): AgentStep[] | undefined {
+  if (!json) return undefined
+  try {
+    const parsed: unknown = JSON.parse(json)
+    if (!Array.isArray(parsed)) return undefined
+    const steps = parsed.filter(
+      (item): item is AgentStep =>
+        typeof item === 'object' && item !== null && typeof (item as AgentStep).callId === 'string'
+    )
+    return steps.length ? steps : undefined
+  } catch {
+    // 历史脏数据不应让整条消息无法显示
+    return undefined
+  }
+}
+
 function mapMessage(row: MessageRow): StoredMessage {
+  const steps = parseSteps(row.steps_json)
   return {
     id: row.id,
     role: row.role,
     content: row.content,
     createdAt: Number(row.created_at),
-    ...(row.reasoning_content ? { reasoningContent: row.reasoning_content } : {})
+    ...(row.reasoning_content ? { reasoningContent: row.reasoning_content } : {}),
+    ...(steps ? { steps } : {}),
+    ...(row.run_started_at ? { runStartedAt: Number(row.run_started_at) } : {}),
+    ...(row.run_ended_at ? { runEndedAt: Number(row.run_ended_at) } : {})
   }
 }
 
@@ -374,6 +398,43 @@ export class MessageRepository {
       .prepare('SELECT COUNT(*) AS count FROM messages WHERE session_id = ?')
       .get(sessionId) as { count?: number } | undefined
     return Number(row?.count ?? 0)
+  }
+
+  /**
+   * 回写渲染层维护的时间线快照。正文/思考链仍由 message:done 落库，
+   * 冲突时只补充步骤与 run 时间，避免覆盖刚写入的更完整正文。
+   */
+  upsertRunMessages(sessionId: string, messages: StoredMessage[]): number {
+    const stmt = this.db.prepare(
+      `INSERT INTO messages
+       (id, session_id, role, content, reasoning_content, created_at,
+        steps_json, run_started_at, run_ended_at)
+       VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         steps_json = excluded.steps_json,
+         run_started_at = excluded.run_started_at,
+         run_ended_at = excluded.run_ended_at`
+    )
+    this.db.exec('BEGIN')
+    try {
+      for (const message of messages) {
+        stmt.run(
+          message.id,
+          sessionId,
+          message.content,
+          message.reasoningContent ?? null,
+          message.createdAt,
+          message.steps?.length ? JSON.stringify(message.steps) : null,
+          message.runStartedAt ?? null,
+          message.runEndedAt ?? null
+        )
+      }
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+    return messages.length
   }
 }
 

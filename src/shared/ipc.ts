@@ -318,6 +318,59 @@ export interface ChatCompressResult {
   usage: ContextUsage
 }
 
+/**
+ * 渲染层在步骤产生/收口时把 assistant 消息的时间线快照回写主进程。
+ * 主进程只在 message:done 落库正文与思考链，拿不到渲染层维护的 steps，
+ * 因此这条 IPC 专用于补齐步骤与时间线的起止时间。
+ */
+const persistedStepSchema = z.object({
+  id: z.string().min(1).max(128),
+  callId: z.string().min(1).max(128),
+  name: z.string().max(200),
+  argsSummary: z.string().max(4000),
+  status: z.enum(['running', 'done', 'failed']),
+  startedAt: z.number().int().nonnegative(),
+  endedAt: z.number().int().nonnegative().optional(),
+  summary: z.string().max(4000).optional(),
+  approval: z
+    .object({
+      approvalId: z.string().min(1).max(128),
+      risk: z.enum(['medium', 'high']),
+      status: z.enum(['pending', 'approved', 'denied'])
+    })
+    .optional(),
+  output: z.string().max(8000).optional(),
+  images: z
+    .array(z.string().max(2 * 1024 * 1024))
+    .max(20)
+    .optional()
+})
+
+export const chatPersistStepsInputSchema = z.object({
+  sessionId: z.string().min(1).max(64),
+  messages: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(128),
+        content: z.string().max(200_000),
+        createdAt: z.number().int().nonnegative(),
+        reasoningContent: z.string().max(200_000).optional(),
+        steps: z.array(persistedStepSchema).max(200).optional(),
+        runStartedAt: z.number().int().nonnegative().optional(),
+        runEndedAt: z.number().int().nonnegative().optional()
+      })
+    )
+    .min(1)
+    .max(100)
+})
+
+export type ChatPersistStepsInput = z.input<typeof chatPersistStepsInputSchema>
+export type ChatPersistStepsRequest = z.output<typeof chatPersistStepsInputSchema>
+
+export interface ChatPersistStepsResult {
+  saved: number
+}
+
 export const approvalRespondInputSchema = z.object({
   approvalId: z.string().min(1).max(64),
   decision: z.enum(['approve', 'approve_session', 'approve_project', 'deny'])

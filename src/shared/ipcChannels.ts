@@ -25,6 +25,7 @@ export const IPC_CHANNELS = {
   chatCompress: 'chat:compress',
   chatContextUsage: 'chat:context-usage',
   chatGetPlan: 'chat:plan',
+  chatPersistSteps: 'chat:persist-steps',
   chatEvent: 'chat:event',
   approvalRespond: 'approval:respond',
   approvalRequest: 'approval:request',

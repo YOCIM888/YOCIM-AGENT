@@ -16,6 +16,8 @@ import type {
   ChatCancelResult,
   ChatCompressInput,
   ChatCompressResult,
+  ChatPersistStepsInput,
+  ChatPersistStepsResult,
   ChatPlanResult,
   ChatSendInput,
   ChatSendResult,
@@ -202,6 +204,8 @@ const api: YocimApi = {
       invoke<IpcResult<ContextUsage>>(IPC_CHANNELS.chatContextUsage, input),
     getPlan: (input: SessionIdInput) =>
       invoke<IpcResult<ChatPlanResult>>(IPC_CHANNELS.chatGetPlan, input),
+    persistSteps: (input: ChatPersistStepsInput) =>
+      invoke<IpcResult<ChatPersistStepsResult>>(IPC_CHANNELS.chatPersistSteps, input),
     onEvent: (listener: (event: AgentEvent) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, payload: AgentEvent): void => {
         listener(payload)
