@@ -132,13 +132,46 @@ describe('runWorkspaceCommand', () => {
   })
 
   it('times out long-running commands', async () => {
-    const outcome = await runWorkspaceCommand('node -e "setTimeout(()=>{}, 3000)"', {
+    // 进程寿命略长于超时即可；用 750ms 让它在 afterAll 清理 cwd 前自然退出，
+    // 避免超时主动返回后残留进程锁住 Windows 上的临时目录。
+    const outcome = await runWorkspaceCommand('node -e "setTimeout(()=>{}, 750)"', {
       cwd,
       timeoutMs: 500,
       signal: new AbortController().signal
     })
     expect(outcome.ok).toBe(false)
     expect(outcome.summary).toContain('超时')
+  })
+
+  it('keeps multi-byte UTF-8 output intact across pipe chunk boundaries', async () => {
+    // 大量中文会跨 Node 管道的字节分块边界；早期实现按 chunk 直接 toString('utf8')，
+    // 会在切点产出 U+FFFD。这里断言解码后的文本与原文完全一致。
+    const expected = '中文输出完整性测试'.repeat(200)
+    const script = `process.stdout.write(${JSON.stringify(expected)})`
+    const outcome = await runWorkspaceCommand(`node -e ${JSON.stringify(script)}`, {
+      cwd,
+      timeoutMs: 5000,
+      signal: new AbortController().signal
+    })
+    expect(outcome.ok).toBe(true)
+    expect(outcome.content).toBe(expected)
+    expect(outcome.content).not.toContain('\uFFFD')
+  })
+
+  it('resolves promptly on timeout without waiting for orphaned pipe writers', async () => {
+    // 子进程派生后父 shell 结束；孤儿进程继承管道写端，close 事件会被推迟。
+    // 超时收尾不应被 close 拖住。
+    const script = `const {spawn}=require('child_process');spawn(process.execPath,['-e','setTimeout(()=>{},900)'],{stdio:['ignore','pipe','pipe']});`
+    const started = Date.now()
+    const outcome = await runWorkspaceCommand(`node -e ${JSON.stringify(script)}`, {
+      // 用系统临时目录而非测试自己的 cwd：孤儿进程尚未退出时不会锁住 afterAll 要删的目录。
+      cwd: os.tmpdir(),
+      timeoutMs: 400,
+      signal: new AbortController().signal
+    })
+    expect(outcome.ok).toBe(false)
+    expect(outcome.summary).toContain('超时')
+    expect(Date.now() - started).toBeLessThan(2500)
   })
 })
 

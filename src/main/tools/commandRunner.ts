@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import { StringDecoder } from 'node:string_decoder'
 import type { ToolExecutionOutcome } from '../../shared/agent'
 
 const COMMAND_OUTPUT_LIMIT = 64 * 1024
@@ -44,30 +45,53 @@ function buildSafeEnv(overrides?: Record<string, string>): NodeJS.ProcessEnv {
 }
 
 function killProcessTree(child: ChildProcess): void {
-  if (!child.pid) return
+  const pid = child.pid
+  if (!pid) return
   if (process.platform === 'win32') {
-    spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true })
+    spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true })
+  } else {
+    // 非 Win 下 spawn(shell:true) 的 pid 是 shell， Kill shell 会留下真实命令。
+    // 子进程以 detached 启动成为进程组组长，负 pid 一次性杀掉整组。
+    try {
+      process.kill(-pid, 'SIGTERM')
+    } catch {
+      // 进程组可能已退出
+    }
   }
-  child.kill()
+  if (child.exitCode === null && child.signalCode === null) {
+    try {
+      child.kill()
+    } catch {
+      // 已退出
+    }
+  }
 }
 
 /**
  * 共享的命令执行主体：接受一个 child 工厂，统一处理超时、abort、输出节流与截断。
  * spawn 的细节（shell 字符串 vs argv 数组）由各入口自己决定。
  */
-function runChild(startChild: (env: NodeJS.ProcessEnv) => ChildProcess, options: RunCommandOptions): Promise<ToolExecutionOutcome> {
+function runChild(
+  startChild: (env: NodeJS.ProcessEnv) => ChildProcess,
+  options: RunCommandOptions
+): Promise<ToolExecutionOutcome> {
   return new Promise((resolve) => {
     let output = ''
     let truncated = false
     let timedOut = false
+    let settled = false
+    let exitCode: number | null = null
+    // 管道按字节分块，中文 UTF-8 的多字节序列常被切在两块之间；
+    // StringDecoder 会暂存半截序列，下次 write 时补齐，避免产出 U+FFFD。
+    const decoder = new StringDecoder('utf8')
 
-    const appendOutput = (chunk: Buffer): void => {
+    const appendOutput = (text: string): void => {
+      if (!text) return
       if (output.length >= COMMAND_OUTPUT_LIMIT) {
         truncated = true
         return
       }
       const remaining = COMMAND_OUTPUT_LIMIT - output.length
-      const text = chunk.toString('utf8')
       output += text.slice(0, remaining)
       if (text.length > remaining) truncated = true
       pendingStream += text
@@ -123,29 +147,50 @@ function runChild(startChild: (env: NodeJS.ProcessEnv) => ChildProcess, options:
       return
     }
 
-    let settled = false
-    const timer = setTimeout(() => {
-      timedOut = true
-      killProcessTree(child)
-    }, options.timeoutMs)
+    let timer: ReturnType<typeof setTimeout> | null = null
 
-    const onAbort = (): void => {
-      killProcessTree(child)
-    }
-    options.signal.addEventListener('abort', onAbort, { once: true })
-
-    const cleanup = (): void => {
-      clearTimeout(timer)
+    function cleanup(): void {
+      if (timer) clearTimeout(timer)
       if (flushTimer) clearTimeout(flushTimer)
       options.signal.removeEventListener('abort', onAbort)
     }
 
+    /** 统一收尾：超时/abort 也走这里，避免把 resolve 绑在可能迟迟不来的 close 上 */
+    function settle(override?: { ok: boolean; summary: string }): void {
+      if (settled) return
+      settled = true
+      // 冲刷 decoder 里残留的半截字节序列（正常结束时为空）
+      const tail = decoder.end()
+      if (tail) appendOutput(tail)
+      flushPending()
+      cleanup()
+      const aborted = options.signal.aborted
+      const ok = override?.ok ?? (exitCode === 0 && !timedOut && !aborted)
+      const summary =
+        override?.summary ??
+        (aborted
+          ? '命令已取消'
+          : timedOut
+            ? `命令超时（${options.timeoutMs}ms）`
+            : `退出码 ${exitCode ?? 'unknown'}`)
+      const suffix = truncated ? '\n[输出已截断]' : ''
+      resolve({ ok, summary, content: `${output || '（无输出）'}${suffix}` })
+    }
+
+    function onAbort(): void {
+      if (settled) return
+      killProcessTree(child)
+      settle()
+    }
+
     child.stdout?.on('data', (chunk: Buffer) => {
-      appendOutput(chunk)
+      if (settled) return
+      appendOutput(decoder.write(chunk))
       scheduleFlush()
     })
     child.stderr?.on('data', (chunk: Buffer) => {
-      appendOutput(chunk)
+      if (settled) return
+      appendOutput(decoder.write(chunk))
       scheduleFlush()
     })
 
@@ -157,24 +202,20 @@ function runChild(startChild: (env: NodeJS.ProcessEnv) => ChildProcess, options:
     })
 
     child.on('close', (code) => {
-      if (settled) return
-      settled = true
-      flushPending()
-      cleanup()
-      const aborted = options.signal.aborted
-      const ok = code === 0 && !timedOut && !aborted
-      const suffix = truncated ? '\n[输出已截断]' : ''
-      const summary = aborted
-        ? '命令已取消'
-        : timedOut
-          ? `命令超时（${options.timeoutMs}ms）`
-          : `退出码 ${code ?? 'unknown'}`
-      resolve({
-        ok,
-        summary,
-        content: `${output || '（无输出）'}${suffix}`
-      })
+      exitCode = code
+      settle()
     })
+
+    timer = setTimeout(() => {
+      if (settled) return
+      timedOut = true
+      killProcessTree(child)
+      // 孤儿进程可能继承管道写端，close 要等它退出；这里主动结束，不等 close。
+      settle()
+    }, options.timeoutMs)
+
+    options.signal.addEventListener('abort', onAbort, { once: true })
+    if (options.signal.aborted) onAbort()
   })
 }
 
@@ -192,6 +233,8 @@ export function runWorkspaceCommand(
       spawn(command, {
         cwd: options.cwd,
         shell: true,
+        // 非 Win 下让 shell 成为进程组组长，超时/取消时连同真实命令一起杀掉。
+        detached: process.platform !== 'win32',
         windowsHide: true,
         env,
         stdio: ['ignore', 'pipe', 'pipe']
@@ -216,6 +259,7 @@ export function runWorkspaceCommandArgv(
       spawn(argv[0], argv.slice(1), {
         cwd: options.cwd,
         shell: false,
+        detached: process.platform !== 'win32',
         windowsHide: true,
         env,
         stdio: ['ignore', 'pipe', 'pipe']

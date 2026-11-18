@@ -997,6 +997,8 @@ export interface AgentContextEntry {
   toolCallId: string | null
   /** 推理模型的隐藏思考内容：原样回传，不参与 UI 渲染 */
   reasoningContent?: string | null
+  /** Anthropic thinking block 签名：与 reasoningContent 一起回传 */
+  reasoningSignature?: string | null
   tokens: number
   createdAt: number
 }
@@ -1010,6 +1012,7 @@ interface AgentContextRow {
   tool_calls_json: string | null
   tool_call_id: string | null
   reasoning_content: string | null
+  reasoning_signature: string | null
   tokens: number
   created_at: number
 }
@@ -1024,6 +1027,7 @@ function mapContextRow(row: AgentContextRow): AgentContextEntry {
     toolCallsJson: row.tool_calls_json,
     toolCallId: row.tool_call_id,
     reasoningContent: row.reasoning_content,
+    reasoningSignature: row.reasoning_signature,
     tokens: row.tokens,
     createdAt: row.created_at
   }
@@ -1057,8 +1061,8 @@ export class AgentContextRepository {
       .prepare(
         `INSERT INTO agent_context
          (id, session_id, seq, role, content, tool_calls_json, tool_call_id, reasoning_content,
-          tokens, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          reasoning_signature, tokens, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         entry.id,
@@ -1069,6 +1073,7 @@ export class AgentContextRepository {
         entry.toolCallsJson,
         entry.toolCallId,
         entry.reasoningContent ?? null,
+        entry.reasoningSignature ?? null,
         entry.tokens,
         entry.createdAt
       )

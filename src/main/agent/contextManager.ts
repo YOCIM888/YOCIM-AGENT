@@ -142,7 +142,9 @@ export class ContextManager {
 
   toMessages(entries: AgentContextEntry[]): AgentMessage[] {
     const messages: AgentMessage[] = []
-    for (const entry of entries) {
+    // 兜底：历史遗留数据或压缩留下的残片里，tool 结果可能与前置 assistant 拆散。
+    // Provider 对「孤立 tool 结果」「toolCalls 没有结果」都会返回 400，这里统一裁掉。
+    for (const entry of sanitizeToolPairs(entries)) {
       if (entry.role === 'summary') {
         messages.push({
           role: 'system',
@@ -161,10 +163,19 @@ export class ContextManager {
       if (entry.role === 'assistant') {
         const toolCalls = parseToolCalls(entry.toolCallsJson)
         const reasoning = entry.reasoningContent ? { reasoningContent: entry.reasoningContent } : {}
+        const signature = entry.reasoningSignature
+          ? { reasoningSignature: entry.reasoningSignature }
+          : {}
         if (toolCalls.length) {
-          messages.push({ role: 'assistant', content: entry.content, toolCalls, ...reasoning })
+          messages.push({
+            role: 'assistant',
+            content: entry.content,
+            toolCalls,
+            ...reasoning,
+            ...signature
+          })
         } else {
-          messages.push({ role: 'assistant', content: entry.content, ...reasoning })
+          messages.push({ role: 'assistant', content: entry.content, ...reasoning, ...signature })
         }
         continue
       }
@@ -184,6 +195,7 @@ export class ContextManager {
       toolCallsJson: message.toolCalls?.length ? JSON.stringify(message.toolCalls) : null,
       toolCallId: message.toolCallId ?? null,
       reasoningContent: message.reasoningContent ?? null,
+      reasoningSignature: message.reasoningSignature ?? null,
       tokens: estimateTextTokens(message.content),
       createdAt: Date.now()
     })
@@ -303,7 +315,8 @@ export class ContextManager {
       }
     }
 
-    const prefix = entries.slice(0, entries.length - keepRecent)
+    const cut = alignCutToToolBoundary(entries, entries.length - keepRecent)
+    const prefix = entries.slice(0, cut)
     const throughSeq = prefix[prefix.length - 1].seq
     const before = estimateMessagesTokens(entries)
 
@@ -357,13 +370,100 @@ export class ContextManager {
     let entries = this.deps.repo.list(sessionId)
     let trimmed = 0
     while (entries.length > 1 && options.systemTokens + estimateMessagesTokens(entries) > target) {
-      const oldest = entries[0]
-      this.deps.repo.deleteThrough(sessionId, oldest.seq)
-      trimmed += 1
-      entries = entries.filter((entry) => entry.seq > oldest.seq)
+      const throughSeq = trimThroughSeq(entries)
+      const removed = this.deps.repo.deleteThrough(sessionId, throughSeq)
+      trimmed += removed
+      entries = entries.filter((entry) => entry.seq > throughSeq)
     }
     return trimmed
   }
+}
+
+/**
+ * 一条 assistant(toolCalls) 与其后相连的 tool 结果构成一个不可分割的组。
+ * 返回组在 entries 中的结束下标（独占）；非此类条目返回 start + 1。
+ */
+function toolGroupEnd(entries: AgentContextEntry[], start: number): number {
+  const first = entries[start]
+  if (!first || first.role !== 'assistant') return start + 1
+  const calls = parseToolCalls(first.toolCallsJson)
+  if (!calls.length) return start + 1
+  const ids = new Set(calls.map((call) => call.id))
+  let end = start + 1
+  while (
+    end < entries.length &&
+    entries[end].role === 'tool' &&
+    entries[end].toolCallId !== null &&
+    ids.has(entries[end].toolCallId!)
+  ) {
+    end += 1
+  }
+  return end
+}
+
+/**
+ * 把压缩切割点推到 tool 组边界之外：绝不让 assistant(toolCalls) 与其结果分家。
+ * 优先向后移到组尾（保留更多近期上下文），组尾已是末尾时再向前移到组首。
+ */
+function alignCutToToolBoundary(entries: AgentContextEntry[], desired: number): number {
+  let cut = Math.max(1, Math.min(desired, entries.length))
+  for (let index = 0; index < cut; ) {
+    const end = toolGroupEnd(entries, index)
+    if (end - 1 === index) {
+      index += 1 // 普通条目，不是组
+      continue
+    }
+    if (cut > index && cut < end) {
+      cut = end < entries.length ? end : Math.max(1, index)
+    }
+    index = Math.max(index + 1, end)
+  }
+  return cut
+}
+
+/** hardTrim 删除最旧条目时，若它是 tool 组首则连同组内结果一起删，避免留下孤立 tool */
+function trimThroughSeq(entries: AgentContextEntry[]): number {
+  if (!entries.length) return 0
+  const end = toolGroupEnd(entries, 0)
+  return entries[Math.max(0, end - 1)].seq
+}
+
+/**
+ * toMessages 前的最后一道防线：丢弃没有前置 toolCalls 的 tool 结果，
+ * 并裁掉没有结果伴随的 toolCalls（两者都会让 Provider 返回 400）。
+ */
+function sanitizeToolPairs(entries: AgentContextEntry[]): AgentContextEntry[] {
+  const declared = new Set<string>()
+  const results = new Set<string>()
+  for (const entry of entries) {
+    if (entry.role === 'assistant') {
+      for (const call of parseToolCalls(entry.toolCallsJson)) declared.add(call.id)
+    } else if (entry.role === 'tool' && entry.toolCallId) {
+      results.add(entry.toolCallId)
+    }
+  }
+  const cleaned: AgentContextEntry[] = []
+  for (const entry of entries) {
+    if (entry.role === 'tool') {
+      if (entry.toolCallId && declared.has(entry.toolCallId)) cleaned.push(entry)
+      continue
+    }
+    if (entry.role === 'assistant') {
+      const calls = parseToolCalls(entry.toolCallsJson)
+      if (calls.length) {
+        const matched = calls.filter((call) => results.has(call.id))
+        // 声明的调用全部没有结果：空 assistant 也会被 Provider 拒绝，整条丢弃
+        if (!matched.length && !entry.content.trim() && !entry.reasoningContent) continue
+        cleaned.push({
+          ...entry,
+          toolCallsJson: matched.length ? JSON.stringify(matched) : null
+        })
+        continue
+      }
+    }
+    cleaned.push(entry)
+  }
+  return cleaned
 }
 
 function parseToolCalls(json: string | null): NonNullable<AgentMessage['toolCalls']> {

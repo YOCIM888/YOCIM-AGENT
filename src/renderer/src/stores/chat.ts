@@ -202,6 +202,16 @@ export const useChatStore = defineStore('chat', () => {
     })
   }
 
+  /** run 终止时统一复位运行状态；run:error 与 run:done 都必须走到这里 */
+  function resetRunState(): void {
+    sending.value = false
+    activeRunId.value = null
+    activeSessionId = null
+    activeRunStartedAt = 0
+    cancelRequested = false
+    pendingApprovals.value = []
+  }
+
   function handleEvent(event: AgentEvent): void {
     if (event.type === 'run:start') {
       if (activeRunId.value && activeRunId.value !== event.runId) return
@@ -296,7 +306,9 @@ export const useChatStore = defineStore('chat', () => {
           settleRunningSteps(target.steps, '运行失败', event.ts)
         }
         persistRunMessages(activeSessionId, event.runId)
-        sending.value = false
+        // 出错也必须复位 run 状态：否则下一次 run:start 会被旧 activeRunId 守卫丢弃，
+        // 且停止按钮会去取消上一轮的陈旧 runId。
+        resetRunState()
         break
       }
       case 'run:done': {
@@ -321,12 +333,7 @@ export const useChatStore = defineStore('chat', () => {
           }
         }
         persistRunMessages(activeSessionId, event.runId)
-        sending.value = false
-        activeRunId.value = null
-        activeSessionId = null
-        activeRunStartedAt = 0
-        cancelRequested = false
-        pendingApprovals.value = []
+        resetRunState()
         break
       }
       case 'run:paused': {

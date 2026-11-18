@@ -79,11 +79,20 @@ ok      example.com/pkg 0.1s
 describe('summarizeTestOutput', () => {
   it('extracts vitest counts, failed names and details', () => {
     const summary = summarizeTestOutput('vitest', VITEST_OUTPUT)
+    expect(summary.total).toBe(5)
     expect(summary.failed).toBe(1)
     expect(summary.passed).toBe(4)
     expect(summary.failedNames.some((name) => name.includes('handles edge case'))).toBe(true)
     expect(summary.excerpt).toContain('AssertionError')
     expect(summary.excerpt.length).toBeLessThan(3000)
+  })
+
+  it('parses vitest total from the parenthesized count on the Tests line', () => {
+    const output = ' Test Files  1 failed | 3 passed (4)\n      Tests  1 failed | 3 passed (4)\n'
+    const summary = summarizeTestOutput('vitest', output)
+    expect(summary.total).toBe(4)
+    expect(summary.passed).toBe(3)
+    expect(summary.failed).toBe(1)
   })
 
   it('extracts jest counts and failure blocks', () => {
@@ -101,11 +110,28 @@ describe('summarizeTestOutput', () => {
     expect(summary.excerpt).toContain('assert 1 == 2')
   })
 
-  it('extracts go test failures', () => {
+  it('parses pytest total from the collected form (second capture group)', () => {
+    const summary = summarizeTestOutput('pytest', 'collected 7 items\n')
+    expect(summary.total).toBe(7)
+    expect(Number.isNaN(summary.total)).toBe(false)
+  })
+
+  it('extracts go test failures without NaN counts', () => {
     const summary = summarizeTestOutput('go', GO_OUTPUT)
     expect(summary.failed).toBe(1)
     expect(summary.failedNames).toContain('TestCompute')
     expect(summary.excerpt).toContain('compute_test.go:12')
+    expect(summary.passed).toBe(1)
+    expect(summary.total).toBe(2)
+    expect(Number.isNaN(summary.passed)).toBe(false)
+  })
+
+  it('counts go verbose PASS lines as passed', () => {
+    const output = '--- PASS: TestOne (0.00s)\n--- PASS: TestTwo (0.00s)\nPASS\nok  example.com/pkg\n'
+    const summary = summarizeTestOutput('go', output)
+    expect(summary.passed).toBe(2)
+    expect(summary.failed).toBeNull()
+    expect(summary.total).toBeNull()
   })
 })
 

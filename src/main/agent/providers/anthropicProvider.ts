@@ -24,6 +24,12 @@ interface AnthropicTextBlock {
   text: string
 }
 
+interface AnthropicThinkingBlock {
+  type: 'thinking'
+  thinking: string
+  signature: string
+}
+
 interface AnthropicToolUseBlock {
   type: 'tool_use'
   id: string
@@ -37,7 +43,11 @@ interface AnthropicToolResultBlock {
   content: string
 }
 
-type AnthropicContentBlock = AnthropicTextBlock | AnthropicToolUseBlock | AnthropicToolResultBlock
+type AnthropicContentBlock =
+  | AnthropicTextBlock
+  | AnthropicThinkingBlock
+  | AnthropicToolUseBlock
+  | AnthropicToolResultBlock
 
 interface AnthropicMessage {
   role: 'user' | 'assistant'
@@ -55,6 +65,8 @@ interface AnthropicStreamEvent {
   delta?: {
     type?: string
     text?: string
+    thinking?: string
+    signature?: string
     partial_json?: string
     stop_reason?: string | null
   }
@@ -129,6 +141,16 @@ function toAnthropicMessages(messages: AgentMessage[]): {
 
     if (message.role === 'assistant') {
       const blocks: AnthropicContentBlock[] = []
+      // 启用 extended thinking 后，带思考的上一条 assistant 消息必须把 thinking block
+      // 原样回传（含签名），否则 Anthropic 以 400 拒绝「缺失 thinking block」。
+      // thinking block 必须排在 text / tool_use 之前。
+      if (message.reasoningContent && message.reasoningSignature) {
+        blocks.push({
+          type: 'thinking',
+          thinking: message.reasoningContent,
+          signature: message.reasoningSignature
+        })
+      }
       if (message.content) blocks.push({ type: 'text', text: message.content })
       for (const call of message.toolCalls ?? []) {
         blocks.push({
@@ -265,6 +287,12 @@ export class AnthropicProvider implements ChatProvider {
           const delta = event.delta
           if (delta?.type === 'text_delta' && delta.text) {
             yield { type: 'text', text: delta.text }
+          }
+          if (delta?.type === 'thinking_delta' && delta.thinking) {
+            yield { type: 'reasoning', text: delta.thinking }
+          }
+          if (delta?.type === 'signature_delta' && delta.signature) {
+            yield { type: 'reasoning_signature', signature: delta.signature }
           }
           if (delta?.type === 'input_json_delta' && typeof event.index === 'number') {
             const pending = pendingTools.get(event.index)

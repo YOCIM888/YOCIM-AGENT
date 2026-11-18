@@ -1,4 +1,5 @@
 import type { SessionSummary, StoredMessage } from '../../shared/session'
+import { redactSecrets } from '../util/redact'
 
 export function buildSessionMarkdown(session: SessionSummary, messages: StoredMessage[]): string {
   const lines: string[] = [
@@ -14,7 +15,13 @@ export function buildSessionMarkdown(session: SessionSummary, messages: StoredMe
   ]
 
   for (const message of messages) {
-    lines.push(message.role === 'user' ? '## 用户' : '## 助手', '', message.content, '')
+    // 导出文件会被用户分享，正文里贴过的密钥不能原样落盘。
+    lines.push(
+      message.role === 'user' ? '## 用户' : '## 助手',
+      '',
+      redactSecrets(message.content),
+      ''
+    )
   }
 
   return lines.join('\n')

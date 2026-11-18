@@ -15,10 +15,16 @@ export interface AgentMessage {
   toolCallId?: string
   toolCalls?: ToolCall[]
   /**
-   * OpenAI 兼容 Provider 的隐藏思考内容（DeepSeek 等）。
+   * 隐藏思考内容。DeepSeek 等 OpenAI 兼容 Provider 用 reasoning_content；
+   * Anthropic extended thinking 用签名过的 thinking block，Gemini 用 thought part。
    * 带工具调用时必须原样回传，否则后续请求会被 Provider 拒绝（HTTP 400）。
    */
   reasoningContent?: string
+  /**
+   * Anthropic thinking block 的签名。启用 extended thinking 且历史里有工具调用时，
+   * 必须把思考内容与签名一起回传，否则 Claude 拒绝请求。仅主进程内部流转。
+   */
+  reasoningSignature?: string
 }
 
 export interface ToolExecutionOutcome {
@@ -82,6 +88,8 @@ export type ProviderEvent =
   | { type: 'text'; text: string }
   /** 思考内容既随助手消息回传 Provider，也以折叠块流式展示在 UI */
   | { type: 'reasoning'; text: string }
+  /** Anthropic thinking block 的签名，与 reasoning 一起原样回传 */
+  | { type: 'reasoning_signature'; signature: string }
   | { type: 'tool_call'; toolCall: ToolCall }
   | { type: 'usage'; usage: ProviderUsage }
   | { type: 'done'; finishReason: ProviderFinishReason }

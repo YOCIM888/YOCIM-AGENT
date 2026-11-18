@@ -176,8 +176,11 @@ export async function runAgentTurn(
     const messageId = `msg-${input.runId.slice(0, 8)}-${round}`
     let roundText = ''
     let roundReasoning = ''
-    const reasoningSuffix = (): { reasoningContent?: string } =>
-      roundReasoning ? { reasoningContent: roundReasoning } : {}
+    let roundReasoningSignature = ''
+    const reasoningSuffix = (): { reasoningContent?: string; reasoningSignature?: string } => ({
+      ...(roundReasoning ? { reasoningContent: roundReasoning } : {}),
+      ...(roundReasoningSignature ? { reasoningSignature: roundReasoningSignature } : {})
+    })
     /** 收口本轮助手消息：只有正文或思考内容至少一样时才推 message:done */
     const finishRoundMessage = (): void => {
       if (!roundText && !roundReasoning) return
@@ -208,6 +211,9 @@ export async function runAgentTurn(
           // 思考内容既要随助手消息回传 Provider（避免 400），也要流式推给 UI 展示。
           roundReasoning += chunk.text
           emit({ type: 'reasoning:delta', ...nextMeta(), messageId, text: chunk.text })
+        } else if (chunk.type === 'reasoning_signature') {
+          // Anthropic 的 thinking 签名不展示给用户，但必须随助手消息原样回传。
+          roundReasoningSignature += chunk.signature
         } else if (chunk.type === 'tool_call') {
           calls.push(chunk.toolCall)
         } else if (chunk.type === 'usage') {
