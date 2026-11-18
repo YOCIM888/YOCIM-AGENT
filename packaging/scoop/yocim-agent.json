@@ -6,7 +6,7 @@
   "architecture": {
     "64bit": {
       "url": "https://github.com/YOCIM888/YOCIM-AGENT/releases/download/v0.1.8/YOCIM.AGENT-0.1.8-x64-setup.exe#/dl.7z",
-      "hash": "11fe0fc71fbd9cbf32291df9ab91b48b08f98f3b71351237cc45668141d5a6ea"
+      "hash": "a90bc630f2fccfaf100f6e5dac47c51ebb566012c1e296eb630fad536cc270b5"
     }
   },
   "bin": "YOCIM AGENT.exe",

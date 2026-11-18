@@ -16,10 +16,10 @@
 
 | 资产                                | SHA-256                                                            |
 | ----------------------------------- | ------------------------------------------------------------------ |
-| `YOCIM.AGENT-0.1.8-x64-setup.exe`   | `CI 构建后回填`                                                    |
-| `YOCIM.AGENT-0.1.8-arm64.dmg`       | `CI 构建后回填`                                                    |
-| `YOCIM.AGENT-0.1.8-x64.dmg`         | `CI 构建后回填`                                                    |
-| `YOCIM.AGENT-0.1.8-x86_64.AppImage` | `CI 构建后回填`                                                    |
+| `YOCIM.AGENT-0.1.8-x64-setup.exe`   | `a90bc630f2fccfaf100f6e5dac47c51ebb566012c1e296eb630fad536cc270b5` |
+| `YOCIM.AGENT-0.1.8-arm64.dmg`       | `9c507d8ec4a70e8b8ef420488a6db7cb688436cc9a424f92eb7ad4d231a486a2` |
+| `YOCIM.AGENT-0.1.8-x64.dmg`         | `6b9e30721883f5c299f5f89e1da4f928fbe1ec46d7e676b525e004d804b019bc` |
+| `YOCIM.AGENT-0.1.8-x86_64.AppImage` | `beffac28eef999e3704214180bde8164844399afb5ee69ecc696ab48cb4f22a7` |
 
 ## 发版时更新
 
