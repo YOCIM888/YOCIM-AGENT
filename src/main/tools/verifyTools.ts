@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 import type { ToolExecutionOutcome } from '../../shared/agent'
 import { AppError } from '../../shared/errors'
@@ -84,10 +84,20 @@ function resolveNpxCli(): string {
     for (const shim of ['npx', 'npx.cmd']) {
       const shimPath = path.join(entry, shim)
       if (existsSync(shimPath)) {
+        // Unix（含 CI 的 hostedtoolcache）：npx 是指向 <prefix>/lib/node_modules/npm/bin/npx-cli.js 的软链接，
+        // 直接解析真实路径，避免依赖目录结构猜测。
+        try {
+          const real = realpathSync(shimPath)
+          if (real.endsWith('.js')) candidates.push(real)
+        } catch {
+          // 软链接不可读时退回下面的路径推断
+        }
         candidates.push(
           path.join(entry, 'node_modules', 'npm', 'bin', 'npx-cli.js'),
           // Windows 上 shim 也可能在 node.exe 同级但 npm 在 <dir>/node_modules
-          path.resolve(entry, '..', 'node_modules', 'npm', 'bin', 'npx-cli.js')
+          path.resolve(entry, '..', 'node_modules', 'npm', 'bin', 'npx-cli.js'),
+          // Linux / macOS 的 Node 发行版把 npm 放在 <prefix>/lib/node_modules
+          path.resolve(entry, '..', 'lib', 'node_modules', 'npm', 'bin', 'npx-cli.js')
         )
       }
     }
@@ -245,8 +255,7 @@ export function summarizeTestOutput(runner: TestRunnerKind, output: string): Tes
     return {
       runner,
       total:
-        count(output, /(\d+)\s+items? selected/i) ??
-        count(output, /collected\s+(\d+)\s+items?/i),
+        count(output, /(\d+)\s+items? selected/i) ?? count(output, /collected\s+(\d+)\s+items?/i),
       passed: count(output, /(\d+)\s+passed/i),
       failed: count(output, /(\d+)\s+failed/i),
       failedNames: [...new Set(failedNames)].slice(0, 10),
