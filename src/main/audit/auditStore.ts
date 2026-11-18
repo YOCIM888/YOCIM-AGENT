@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { AuditEntry, AuditFilter, AuditPage, AuditStats } from '../../shared/audit'
 import type { AuditRepository } from '../db/repositories'
+import { redactSecrets } from '../util/redact'
 
 export interface AuditStoreOptions {
   maxEntries?: number
@@ -33,7 +34,14 @@ export class AuditStore {
   }
 
   record(entry: Omit<AuditEntry, 'id' | 'ts'>): AuditEntry {
-    const record: AuditEntry = { id: randomUUID(), ts: Date.now(), ...entry }
+    // 命令原文、工具参数摘要可能带密钥；审计落库前统一脱敏。
+    const record: AuditEntry = {
+      id: randomUUID(),
+      ts: Date.now(),
+      ...entry,
+      argsSummary: redactSecrets(entry.argsSummary),
+      resultSummary: redactSecrets(entry.resultSummary)
+    }
     if (this.repo) {
       this.repo.insert(record)
     } else {

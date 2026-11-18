@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-export const SCHEMA_VERSION = 13
+export const SCHEMA_VERSION = 14
 
 export const MIGRATION_V1 = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -214,6 +214,14 @@ CREATE TABLE IF NOT EXISTS project_conventions (
 );
 `
 
+/**
+ * Anthropic extended thinking 的 thinking block 签名：启用思考且历史里有工具调用时，
+ * 必须把思考内容与签名原样回传，否则下一轮请求被拒绝（HTTP 400）。
+ */
+const MIGRATION_V14 = `
+ALTER TABLE agent_context ADD COLUMN reasoning_signature TEXT;
+`
+
 function getUserVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as { user_version?: number } | undefined
   return Number(row?.user_version ?? 0)
@@ -397,6 +405,18 @@ export function migrate(db: DatabaseSync): void {
     try {
       db.exec(MIGRATION_V13)
       db.exec('PRAGMA user_version = 13')
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  if (version < 14) {
+    db.exec('BEGIN')
+    try {
+      db.exec(MIGRATION_V14)
+      db.exec('PRAGMA user_version = 14')
       db.exec('COMMIT')
     } catch (error) {
       db.exec('ROLLBACK')

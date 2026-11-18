@@ -458,6 +458,23 @@ export class BrowserService {
     context.listenerBound = true
     const contents = context.view.webContents
 
+    // AI/用户指定的第三方页面同样要受导航约束：禁止弹新窗口，
+    // 只放行 http/https 导航，并拒绝摄像头/麦克风/定位等敏感权限。
+    contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    contents.on('will-navigate', (event, url) => {
+      try {
+        safeUrl(url)
+      } catch {
+        event.preventDefault()
+        this.pushConsole(context, 'error', `已阻止跳转到不允许的地址：${url.slice(0, 200)}`, 'browser')
+        this.emitState(context)
+      }
+    })
+    contents.session.setPermissionRequestHandler((_wc, permission, callback) => {
+      const allowed = new Set(['clipboard-read', 'clipboard-write'])
+      callback(allowed.has(permission))
+    })
+
     contents.on('render-process-gone', (_event, details) =>
       this.onCrash(context, `渲染进程退出：${details.reason}`)
     )

@@ -125,6 +125,35 @@ describe('buildLaunchPlan', () => {
       /超出了工作区范围/
     )
   })
+
+  it('refuses absolute paths outside the workspace', () => {
+    const root = join(os.tmpdir(), 'yocim-plan')
+    expect(() =>
+      buildLaunchPlan(
+        { ...base, program: join(os.tmpdir(), 'evil.js') },
+        { workspaceRoot: root }
+      )
+    ).toThrowError(/超出了工作区范围/)
+    expect(() =>
+      buildLaunchPlan({ ...base, cwd: os.tmpdir() }, { workspaceRoot: root })
+    ).toThrowError(/超出了工作区范围/)
+  })
+
+  it('rejects runtimeArgs that can execute arbitrary code', () => {
+    const root = join(os.tmpdir(), 'yocim-plan')
+    for (const arg of ['--require', '-r', '--import', '-e', '--eval', '--require=/tmp/evil.js']) {
+      expect(() =>
+        buildLaunchPlan({ ...base, runtimeArgs: [arg] }, { workspaceRoot: root }), arg
+      ).toThrowError(/不允许的 Node 参数/)
+    }
+    // 安全 flag 与带值形式仍可用
+    expect(
+      buildLaunchPlan(
+        { ...base, runtimeArgs: ['--max-old-space-size=4096', '--enable-source-maps'] },
+        { workspaceRoot: root }
+      ).runtimeArgs
+    ).toEqual(['--max-old-space-size=4096', '--enable-source-maps'])
+  })
 })
 
 describe('readLaunchConfigs', () => {

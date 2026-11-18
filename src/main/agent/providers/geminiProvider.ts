@@ -20,6 +20,8 @@ export interface GeminiProviderOptions {
 
 interface GeminiPart {
   text?: string
+  /** Gemini 2.5 系列思考内容：thought=true 的 part 是思考而非正文 */
+  thought?: boolean
   functionCall?: {
     name?: string
     args?: Record<string, unknown>
@@ -90,6 +92,11 @@ function toGeminiContents(messages: AgentMessage[]): {
     }
     if (message.role === 'assistant') {
       const parts: GeminiPart[] = []
+      // Gemini 2.5 思考内容必须作为 thought part 原样回传，否则下一轮可能 400；
+      // 且它不能与 functionCall 混在同一个 part 里，故单独成块。
+      if (message.reasoningContent) {
+        parts.push({ text: message.reasoningContent, thought: true })
+      }
       if (message.content) parts.push({ text: message.content })
       for (const call of message.toolCalls ?? []) {
         toolNames.set(call.id, call.name)
@@ -237,7 +244,8 @@ export class GeminiProvider implements ChatProvider {
         for (const candidate of chunk.candidates ?? []) {
           for (const part of candidate.content?.parts ?? []) {
             if (typeof part.text === 'string' && part.text.length > 0) {
-              yield { type: 'text', text: part.text }
+              // 思考内容走 reasoning 事件：既进 UI 折叠块，也随助手消息回传。
+              yield { type: part.thought === true ? 'reasoning' : 'text', text: part.text }
             }
             if (part.functionCall?.name) {
               toolCallCount += 1

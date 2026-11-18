@@ -149,6 +149,101 @@ describe('ContextManager', () => {
     db.close()
   })
 
+  it('keeps assistant(toolCalls) and its tool results together across compaction', async () => {
+    const { db, repo, manager, sessionId } = createManager()
+    // 旧条目 → assistant(两个 toolCalls) → 两个 tool 结果，切割点按条目数恰好落在组内
+    for (let index = 0; index < 6; index += 1) {
+      repo.append({
+        id: `old${index}`,
+        sessionId,
+        role: 'user',
+        content: `旧消息 ${index}`,
+        toolCallsJson: null,
+        toolCallId: null,
+        tokens: 100,
+        createdAt: index
+      })
+    }
+    repo.append({
+      id: 'assistant-with-tools',
+      sessionId,
+      role: 'assistant',
+      content: '',
+      toolCallsJson: JSON.stringify([
+        { id: 'c1', name: 'read_file', argumentsJson: '{}' },
+        { id: 'c2', name: 'read_file', argumentsJson: '{}' }
+      ]),
+      toolCallId: null,
+      tokens: 20,
+      createdAt: 100
+    })
+    repo.append({
+      id: 'tool-c1',
+      sessionId,
+      role: 'tool',
+      content: '结果一',
+      toolCallsJson: null,
+      toolCallId: 'c1',
+      tokens: 20,
+      createdAt: 101
+    })
+    repo.append({
+      id: 'tool-c2',
+      sessionId,
+      role: 'tool',
+      content: '结果二',
+      toolCallsJson: null,
+      toolCallId: 'c2',
+      tokens: 20,
+      createdAt: 102
+    })
+
+    // manual 保留 2 条：若按条目数直切，保留的会是 tool-c1/tool-c2 两条孤立结果
+    await manager.compactManually(sessionId, { systemTokens: 0, limit: 200_000 })
+    const messages = manager.toMessages(repo.list(sessionId))
+    const roles = messages.map((message) => message.role)
+    const firstTool = roles.indexOf('tool')
+    if (firstTool >= 0) {
+      expect(messages[firstTool - 1]?.role).toBe('assistant')
+      expect(messages[firstTool - 1]?.toolCalls?.some((call) => call.id === 'c1')).toBe(true)
+    }
+    // 兜底清洗后不应出现孤立 tool
+    const declared = new Set(
+      messages.flatMap((message) => (message.toolCalls ?? []).map((call) => call.id))
+    )
+    for (const message of messages) {
+      if (message.role === 'tool') expect(declared.has(message.toolCallId ?? '')).toBe(true)
+    }
+    db.close()
+  })
+
+  it('drops orphan tools and unmatched toolCalls in toMessages', () => {
+    const { db, repo, manager, sessionId } = createManager()
+    repo.append({
+      id: 'orphan',
+      sessionId,
+      role: 'tool',
+      content: '没有前置调用的结果',
+      toolCallsJson: null,
+      toolCallId: 'missing',
+      tokens: 5,
+      createdAt: 1
+    })
+    repo.append({
+      id: 'unmatched',
+      sessionId,
+      role: 'assistant',
+      content: '',
+      toolCallsJson: JSON.stringify([{ id: 'never', name: 'x', argumentsJson: '{}' }]),
+      toolCallId: null,
+      tokens: 5,
+      createdAt: 2
+    })
+    const messages = manager.toMessages(repo.list(sessionId))
+    expect(messages).toHaveLength(0)
+    db.close()
+  })
+
   it('falls back to a deterministic summary when the provider fails', async () => {
     const { db, repo, manager, sessionId } = createManager(failingProvider)
     repo.append({

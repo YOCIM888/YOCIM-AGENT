@@ -488,7 +488,21 @@ export function registerIpcHandlers(db: DatabaseSync, userData: string, dataDir?
   })
   const debugService = new DebugService({
     getRoot: () => workspaceService.current()?.root ?? null,
-    emit: broadcastDebugEvent
+    emit: broadcastDebugEvent,
+    authorize: async (commandLine) => {
+      const decision = await approvalManager.request(
+        {
+          callId: `debug-start:${randomUUID()}`,
+          tool: 'start_debug',
+          risk: 'high',
+          argsSummary: commandLine.slice(0, 200),
+          reason: '调试会启动一个 Node 进程执行工作区内的代码，请确认命令行无误',
+          canAllowAlways: false
+        },
+        new AbortController().signal
+      )
+      return decision === 'approve' || decision === 'allow_once'
+    }
   })
   const browserAuditFile = join(dataDir ?? userData, 'browser-audit.jsonl')
   const browserService = new BrowserService({

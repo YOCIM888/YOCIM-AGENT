@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { redactSecrets } from './util/redact'
 
 const MAX_LOG_BYTES = 2 * 1024 * 1024
 
@@ -26,7 +27,8 @@ function formatError(error: unknown): string {
 }
 
 function write(level: 'INFO' | 'ERROR', message: string): void {
-  const line = `[${new Date().toISOString()}] [${level}] ${message}\n`
+  // 日志可能落到磁盘也可能被用户分享出去，密钥类内容统一遮蔽。
+  const line = `[${new Date().toISOString()}] [${level}] ${redactSecrets(message)}\n`
   if (level === 'ERROR') {
     console.error(line.trimEnd())
   } else {

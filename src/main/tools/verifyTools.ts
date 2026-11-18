@@ -122,16 +122,51 @@ export interface TestSummary {
   excerpt: string
 }
 
-function count(text: string, pattern: RegExp): number | null {
-  const match = pattern.exec(text)
-  return match ? Number(match[1]) : null
+function toCount(match: RegExpExecArray | null, group: number): number | null {
+  const raw = match?.[group]
+  if (raw === undefined) return null
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : null
+}
+
+/**
+ * 从一个捕获组取整数。多个匹配分支各自带捕获组时必须显式指定 group，
+ * 否则固定取 [1] 会在命中第二分支时把 undefined 转成 NaN。
+ */
+function count(text: string, pattern: RegExp, group = 1): number | null {
+  return toCount(pattern.exec(text), group)
 }
 
 /** 取最后一次匹配：vitest 输出里 Test Files 行与 Tests 行都有计数，以最后的汇总行为准 */
-function countLast(text: string, pattern: RegExp): number | null {
-  const matches = [...text.matchAll(new RegExp(pattern.source, 'g'))]
-  const last = matches.at(-1)
-  return last ? Number(last[1]) : null
+function countLast(text: string, pattern: RegExp, group = 1): number | null {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`
+  const matches = [...text.matchAll(new RegExp(pattern.source, flags))]
+  return toCount(matches.at(-1) ?? null, group)
+}
+
+/** 数匹配次数（用于 `--- PASS:` 这类没有捕获组的行） */
+function countMatches(text: string, pattern: RegExp): number | null {
+  const matches = text.match(pattern)
+  return matches ? matches.length : null
+}
+
+/**
+ * 从 Tests 汇总行取 total：vitest 写作 `Tests 1 failed | 4 passed (5)`，
+ * jest 写作 `Tests: 1 failed, 4 passed, 5 total`。取最后一条 Tests 行，
+ * 避免被更早的 `Test Files` 行里的括号数字误导。
+ */
+function summaryLineTotal(text: string): number | null {
+  const lines = text.split(/\r?\n/)
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index]
+    if (!/^\s*Tests\b/i.test(line)) continue
+    return (
+      count(line, /\(\s*(\d+)\s*\)/) ??
+      count(line, /(\d+)\s+total/i) ??
+      count(line, /\btotal\s*[:：]?\s*(\d+)/i)
+    )
+  }
+  return null
 }
 
 /** 通用失败详情提取：从标记行开始截取一块，限制块数与总长度 */
@@ -185,9 +220,12 @@ export function summarizeTestOutput(runner: TestRunnerKind, output: string): Tes
     )
     return {
       runner,
-      total: count(output, /(\d+)\s+total|total\s*[:：]?\s*(\d+)/),
-      passed: countLast(output, /(\d+)\s+passed/),
-      failed: countLast(output, /(\d+)\s+failed/),
+      total:
+        summaryLineTotal(output) ??
+        count(output, /(\d+)\s+total/i) ??
+        count(output, /\btotal\s*[:：]?\s*(\d+)/i),
+      passed: countLast(output, /(\d+)\s+passed/i),
+      failed: countLast(output, /(\d+)\s+failed/i),
       failedNames: [...new Set(failedNames)].slice(0, 10),
       excerpt: clipExcerpt(detailBlocks)
     }
@@ -206,24 +244,29 @@ export function summarizeTestOutput(runner: TestRunnerKind, output: string): Tes
     const detailBlocks = extractBlocks(lines, (line) => /^_{5,}\s/.test(line.trim()), 18, 2)
     return {
       runner,
-      total: count(output, /(\d+)\s+items? selected|collected\s+(\d+)\s+items?/),
-      passed: count(output, /(\d+)\s+passed/),
-      failed: count(output, /(\d+)\s+failed/),
+      total:
+        count(output, /(\d+)\s+items? selected/i) ??
+        count(output, /collected\s+(\d+)\s+items?/i),
+      passed: count(output, /(\d+)\s+passed/i),
+      failed: count(output, /(\d+)\s+failed/i),
       failedNames: [...new Set(failedNames)].slice(0, 10),
       excerpt: clipExcerpt(detailBlocks)
     }
   }
 
-  // go test
+  // go test：verbose 模式逐条列 `--- PASS:` / `--- FAIL:`，汇总行为 `ok pkg 0.1s` / `FAIL`
   const failedNames = lines
     .map((line) => /^--- FAIL:\s*(\S+)/.exec(line.trim())?.[1] ?? '')
     .filter(Boolean)
   const detailBlocks = extractBlocks(lines, (line) => /^--- FAIL:/.test(line.trim()), 10, 3)
+  const verbosePassed = countMatches(output, /^--- PASS:/gm)
+  const passed = verbosePassed ?? countMatches(output, /^ok\s/gm)
+  const failed = failedNames.length || null
   return {
     runner: 'go',
-    total: null,
-    passed: count(output, /(\d+)\s+pass|---\s+PASS:/),
-    failed: failedNames.length || null,
+    total: passed !== null && failed !== null ? passed + failed : null,
+    passed,
+    failed,
     failedNames: [...new Set(failedNames)].slice(0, 10),
     excerpt: clipExcerpt(detailBlocks)
   }

@@ -17,6 +17,12 @@ import { NodeDebugAdapter } from './nodeDebugAdapter'
 export interface DebugServiceOptions {
   getRoot: () => string | null
   emit: (event: DebugEvent) => void
+  /**
+   * 启动前的审批钩子。调试入口直接 spawn node 并注入 ELECTRON_RUN_AS_NODE，
+   * 必须和 run_command 一样经过人工确认，否则恶意仓库自带的 launch.json
+   * 可在用户点「开始调试」时执行任意代码。
+   */
+  authorize?: (commandLine: string) => Promise<boolean>
   /** 便于单元测试注入 spawn */
   spawnImpl?: typeof import('node:child_process').spawn
   attachTimeoutMs?: number
@@ -79,6 +85,15 @@ export class DebugService {
       ...(input.activeFile ? { activeFile: resolve(root, input.activeFile) } : {})
     }
     const plan = buildLaunchPlan(config, context)
+
+    // 审批必须在任何进程启动之前完成，且默认拒绝（未注入钩子时不允许启动）
+    if (!this.options.authorize) {
+      throw new AppError('E_FORBIDDEN', '调试启动缺少安全审批通道')
+    }
+    const allowed = await this.options.authorize(plan.commandLine)
+    if (!allowed) {
+      throw new AppError('E_FORBIDDEN', '用户拒绝了调试启动')
+    }
 
     const session: DebugSession = {
       id: randomUUID(),

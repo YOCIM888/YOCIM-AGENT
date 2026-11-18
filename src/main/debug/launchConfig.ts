@@ -1,3 +1,4 @@
+import { existsSync, realpathSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { isAbsolute, join, resolve, sep } from 'node:path'
 import { AppError } from '../../shared/errors'
@@ -116,13 +117,53 @@ function quote(arg: string): string {
   return /[\s"']/.test(arg) ? `"${arg}"` : arg
 }
 
+/**
+ * Node 的启动参数中，以下 flag 可以让进程预加载任意模块或执行任意代码。
+ * launch.json 来自工作区（可能是恶意仓库自带文件），绝不能原样透传给 node。
+ */
+const SAFE_RUNTIME_ARGS = new Set([
+  '--inspect',
+  '--inspect-brk',
+  '--enable-source-maps',
+  '--experimental-modules',
+  '--no-warnings',
+  '--trace-warnings',
+  '--unhandled-rejections=strict',
+  '--max-old-space-size',
+  '--title'
+])
+
+/** 只允许“安全 flag”或“安全 flag=值”，禁止位置参数（那会变成第二个 program） */
+export function assertSafeRuntimeArg(arg: string): void {
+  const name = arg.split('=', 1)[0]
+  if (!SAFE_RUNTIME_ARGS.has(name)) {
+    throw new AppError(
+      'E_INVALID_INPUT',
+      `启动配置使用了不允许的 Node 参数「${name}」（如 --require / --import / -e 可执行任意代码）`
+    )
+  }
+}
+
+/**
+ * 目标路径解析：绝对路径也必须落在工作区内；对已存在的路径做 realpath，
+ * 防止软链接把工作区内的路径指向外部文件。
+ */
 function resolveInsideWorkspace(root: string, value: string): string {
-  if (isAbsolute(value)) return value
-  const resolved = resolve(root, value)
-  if (resolved !== root && !resolved.startsWith(root + sep)) {
+  const resolved = isAbsolute(value) ? resolve(value) : resolve(root, value)
+  const realRoot = realpathOrResolve(root)
+  const realTarget = realpathOrResolve(resolved)
+  if (realTarget !== realRoot && !realTarget.startsWith(realRoot + sep)) {
     throw new AppError('E_PATH_ESCAPE', '启动配置的路径超出了工作区范围')
   }
   return resolved
+}
+
+function realpathOrResolve(value: string): string {
+  try {
+    return existsSync(value) ? realpathSync(value) : resolve(value)
+  } catch {
+    return resolve(value)
+  }
 }
 
 /** 把 DebugConfig 展开成可直接 spawn 的启动计划（路径全部转绝对路径） */
@@ -132,7 +173,11 @@ export function buildLaunchPlan(config: DebugConfig, context: VariableContext): 
     resolveDebugVariables(config.program, context)
   )
   const args = config.args.map((item) => resolveDebugVariables(item, context))
-  const runtimeArgs = (config.runtimeArgs ?? []).map((item) => resolveDebugVariables(item, context))
+  const runtimeArgs = (config.runtimeArgs ?? []).map((item) => {
+    const value = resolveDebugVariables(item, context)
+    assertSafeRuntimeArg(value)
+    return value
+  })
   const cwd = config.cwd
     ? resolveInsideWorkspace(context.workspaceRoot, resolveDebugVariables(config.cwd, context))
     : context.workspaceRoot

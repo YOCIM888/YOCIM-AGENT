@@ -123,6 +123,63 @@ describe('AnthropicProvider', () => {
     expect(body.tools[0].name).toBe('read_file')
   })
 
+  it('streams thinking deltas and round-trips signed thinking blocks', async () => {
+    const captured: { init?: RequestInit } = {}
+    const fetchImpl = async (_url: string, init: RequestInit): Promise<Response> => {
+      captured.init = init
+      return sseResponse([
+        'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"先想一步"}}\n',
+        'data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-abc"}}\n',
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n',
+        'data: {"type":"message_stop"}\n'
+      ])
+    }
+    const provider = new AnthropicProvider({
+      baseUrl: 'https://api.anthropic.com/v1',
+      apiKey: 'sk-ant',
+      model: 'claude-sonnet-4-5',
+      reasoningEffort: 'medium',
+      fetchImpl
+    })
+    const events = await collect(
+      provider.stream(
+        {
+          messages: [
+            { role: 'user', content: 'hi' },
+            {
+              role: 'assistant',
+              content: '',
+              reasoningContent: '上一轮思考',
+              reasoningSignature: 'sig-prev',
+              toolCalls: [
+                { id: 'call_1', name: 'read_file', argumentsJson: '{"relativePath":"a.txt"}' }
+              ]
+            },
+            { role: 'tool', toolCallId: 'call_1', content: 'file content' }
+          ]
+        },
+        new AbortController().signal
+      )
+    )
+    expect(events.filter((event) => event.type === 'reasoning')).toEqual([
+      { type: 'reasoning', text: '先想一步' }
+    ])
+    expect(events.filter((event) => event.type === 'reasoning_signature')).toEqual([
+      { type: 'reasoning_signature', signature: 'sig-abc' }
+    ])
+
+    const body = JSON.parse(String(captured.init?.body)) as {
+      thinking?: { type: string; budget_tokens: number }
+      messages: Array<{ role: string; content: Array<Record<string, unknown>> }>
+    }
+    expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: 8192 })
+    expect(body.messages[1].content[0]).toEqual({
+      type: 'thinking',
+      thinking: '上一轮思考',
+      signature: 'sig-prev'
+    })
+  })
+
   it('surfaces API error messages', async () => {
     const fetchImpl = async (): Promise<Response> =>
       new Response(JSON.stringify({ error: { message: 'invalid api key' } }), { status: 401 })
@@ -206,6 +263,55 @@ describe('GeminiProvider', () => {
       parts: [{ functionResponse: { name: 'read_file', response: { content: 'file content' } } }]
     })
     expect(body.tools[0].functionDeclarations[0].name).toBe('read_file')
+  })
+
+  it('parses thought parts as reasoning and round-trips them', async () => {
+    const captured: { init?: RequestInit } = {}
+    const fetchImpl = async (_url: string, init: RequestInit): Promise<Response> => {
+      captured.init = init
+      return sseResponse([
+        'data: {"candidates":[{"content":{"parts":[{"text":"内在推理","thought":true}]}}]}\n',
+        'data: {"candidates":[{"content":{"parts":[{"text":"回答"}]}}]}\n'
+      ])
+    }
+    const provider = new GeminiProvider({
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+      apiKey: 'gemini-key',
+      model: 'gemini-2.5-pro',
+      reasoningEffort: 'medium',
+      fetchImpl
+    })
+    const events = await collect(
+      provider.stream(
+        {
+          messages: [
+            { role: 'user', content: 'hi' },
+            {
+              role: 'assistant',
+              content: '',
+              reasoningContent: '上一轮思考',
+              toolCalls: [
+                { id: 'call_1', name: 'read_file', argumentsJson: '{"relativePath":"a.txt"}' }
+              ]
+            },
+            { role: 'tool', toolCallId: 'call_1', content: 'file content' }
+          ]
+        },
+        new AbortController().signal
+      )
+    )
+    expect(events.filter((event) => event.type === 'reasoning')).toEqual([
+      { type: 'reasoning', text: '内在推理' }
+    ])
+    expect(events.filter((event) => event.type === 'text')).toEqual([
+      { type: 'text', text: '回答' }
+    ])
+    const body = JSON.parse(String(captured.init?.body)) as {
+      generationConfig?: { thinkingConfig?: { thinkingBudget: number } }
+      contents: Array<{ role: string; parts: Array<Record<string, unknown>> }>
+    }
+    expect(body.generationConfig?.thinkingConfig?.thinkingBudget).toBe(4096)
+    expect(body.contents[1].parts[0]).toEqual({ text: '上一轮思考', thought: true })
   })
 
   it('surfaces API error messages', async () => {
