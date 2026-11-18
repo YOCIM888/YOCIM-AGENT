@@ -239,12 +239,23 @@ export class OpenAICompatibleProvider implements ChatProvider {
       }
     }
 
-    for (const pending of pendingToolCalls.values()) {
+    // 某些 OpenAI 兼容服务会省略 id，或给同一轮多个调用重复 id。
+    // outcomes 以 id 为键，重名会让后一次结果覆盖前一次，因此这里强制生成唯一 id。
+    const usedIds = new Set<string>()
+    for (const [index, pending] of pendingToolCalls) {
       if (!pending.name) continue
+      const baseId = pending.id || `call_unknown_${index}`
+      let id = baseId
+      let suffix = 2
+      while (usedIds.has(id)) {
+        id = `${baseId}_${suffix}`
+        suffix += 1
+      }
+      usedIds.add(id)
       yield {
         type: 'tool_call',
         toolCall: {
-          id: pending.id || 'call_unknown',
+          id,
           name: pending.name,
           argumentsJson: pending.argumentsJson || '{}'
         }

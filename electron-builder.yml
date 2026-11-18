@@ -47,8 +47,9 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: YOCIM AGENT
-  artifactName: ${productName}-${version}-setup.${ext}
+  # 不在这里覆盖 artifactName：沿用 win.artifactName 的 ${arch}，避免多架构时同名互相覆盖
 mac:
+  icon: build/icon.icns
   target:
     - dmg
   category: public.app-category.developer-tools

@@ -2,6 +2,7 @@ import { mkdtemp } from 'node:fs/promises'
 import os from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron, expect, test, type Page } from '@playwright/test'
+import { APP_VERSION } from '../../src/shared/app'
 
 const mainEntry = join(__dirname, '../../out/main/index.js')
 const fakeInfo = {
@@ -23,7 +24,12 @@ async function openAboutAndCheck(page: Page): Promise<void> {
 test('checks for updates from the about dialog and respects cancel/update', async () => {
   const userDataDir = await mkdtemp(join(os.tmpdir(), 'yocim-update-e2e-'))
   const app = await electron.launch({
-    args: [mainEntry, `--user-data-dir=${userDataDir}`, '--disable-update-check', '--skip-language-onboarding']
+    args: [
+      mainEntry,
+      `--user-data-dir=${userDataDir}`,
+      '--disable-update-check',
+      '--skip-language-onboarding'
+    ]
   })
 
   try {
@@ -79,9 +85,10 @@ test('checks once on startup when online and shows the notice', async () => {
   try {
     // 必须在窗口加载完成前打桩：启动检查在 did-finish-load 后 1.5s 触发。
     // 未打包的 e2e 进程里 app.getVersion() 会返回 Electron 版本，这里固定为应用版本。
-    await app.evaluate(({ app }) => {
-      app.getVersion = () => '0.1.6'
-    })
+    // 版本从 package.json 的唯一来源读取，避免发版后 mock 仍停在旧版本。
+    await app.evaluate(({ app }, appVersion: string) => {
+      app.getVersion = () => appVersion
+    }, APP_VERSION)
     await app.evaluate(({ net }) => {
       net.isOnline = () => true
     })

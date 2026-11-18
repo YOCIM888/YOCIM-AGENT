@@ -85,6 +85,29 @@ describe('OpenAICompatibleProvider', () => {
     expect(events[events.length - 1]).toEqual({ type: 'done', finishReason: 'tool_calls' })
   })
 
+  it('generates unique tool call ids when the server omits or repeats them', async () => {
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'test-key',
+      model: 'test-model',
+      fetchImpl: async () =>
+        sseResponse([
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"read_file","arguments":"{}"}}]}}]}\n\n',
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_1","function":{"name":"write_file","arguments":"{}"}}]}}]}\n\n',
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":2,"id":"call_1","function":{"name":"list_dir","arguments":"{}"}}]}}],"finish_reason":"tool_calls"}\n\n',
+          'data: [DONE]\n\n'
+        ])
+    })
+
+    const calls = (await collect(provider)).flatMap((event) =>
+      event.type === 'tool_call' ? [event.toolCall.id] : []
+    )
+    expect(calls).toHaveLength(3)
+    expect(new Set(calls).size).toBe(3)
+    expect(calls[0]).toBe('call_unknown_0')
+    expect(calls.slice(1)).toEqual(['call_1', 'call_1_2'])
+  })
+
   it('throws on non-ok responses with the provider error detail', async () => {
     const provider = new OpenAICompatibleProvider({
       baseUrl: 'https://api.example.com/v1',

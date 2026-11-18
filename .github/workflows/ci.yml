@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    name: lint / typecheck / format / test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # 仓库里有历史遗留的未格式化文件；只要求本次改动的文件符合 Prettier，
+      # 避免一次性重排几十个无关文件。新增文件也算改动。
+      - name: Format check (changed files)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            base=$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)
+          fi
+          files=$(
+            {
+              git diff --name-only --diff-filter=ACMR "$base" HEAD --
+              git ls-files --others --exclude-standard
+            } | grep -E '\.(ts|tsx|js|jsx|mjs|cjs|vue|json|md|yml|yaml|css|html)$' || true
+          )
+          if [ -n "$files" ]; then
+            printf '%s\n' "$files" | xargs npx prettier --check
+          else
+            echo "No changed files to check"
+          fi
+
+      - name: Test
+        run: npx vitest run --pool=vmThreads

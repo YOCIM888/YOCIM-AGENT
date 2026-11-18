@@ -1,0 +1,72 @@
+name: Package Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 目标 Release 标签
+        required: true
+        default: v0.1.8
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  package:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            rg_target: x86_64-pc-windows-msvc
+    name: win-${{ matrix.arch }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 与 macOS / Linux 一致：ripgrep 在 CI 运行时下载，不把 Windows 二进制提交进仓库。
+      - name: Bundle ripgrep 14.1.1
+        shell: pwsh
+        run: |
+          $version = '14.1.1'
+          $target = '${{ matrix.rg_target }}'
+          $archive = "ripgrep-$version-$target.zip"
+          Invoke-WebRequest -Uri "https://github.com/BurntSushi/ripgrep/releases/download/$version/$archive" -OutFile "$env:RUNNER_TEMP\$archive"
+          Expand-Archive -Path "$env:RUNNER_TEMP\$archive" -DestinationPath "$env:RUNNER_TEMP\rg" -Force
+          Copy-Item "$env:RUNNER_TEMP\rg\ripgrep-$version-$target\rg.exe" resources\ripgrep\rg.exe -Force
+
+      - name: Build app
+        run: npm run build
+
+      - name: Package
+        run: npx electron-builder --win --${{ matrix.arch }} --publish never
+
+      - name: Upload to release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $files = @(Get-ChildItem -Path release -Recurse -Filter '*-setup.exe' -File)
+          if ($files.Count -eq 0) { throw '未找到打包产物' }
+          gh release upload $env:RELEASE_TAG $files.FullName --clobber

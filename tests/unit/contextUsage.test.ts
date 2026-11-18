@@ -25,6 +25,16 @@ describe('上下文用量估算', () => {
     expect(estimateMessagesTokens([])).toBe(0)
   })
 
+  it('counts tool call arguments even when the assistant content is empty', () => {
+    const args = JSON.stringify([
+      { id: 'c1', name: 'write_file', argumentsJson: '{"content":"abcdefgh"}' }
+    ])
+    expect(estimateMessagesTokens([{ content: '' }])).toBe(4)
+    expect(estimateMessagesTokens([{ content: '', toolCallsJson: args }])).toBe(
+      4 + estimateTextTokens(args)
+    )
+  })
+
   it('clamps context window to 200K-1M', () => {
     expect(clampContextWindow(100_000)).toBe(200_000)
     expect(clampContextWindow(2_000_000)).toBe(1_000_000)

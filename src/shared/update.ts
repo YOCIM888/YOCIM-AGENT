@@ -116,7 +116,24 @@ export interface ReleaseAsset {
   size?: number
 }
 
-/** 按平台与架构挑选安装包；优先同架构，其次任意同平台资产 */
+/** 资产文件名里的架构标记；用同一组正则做「精确匹配」与「是否标注架构」判断 */
+const ARCH_PATTERNS: Record<string, RegExp> = {
+  arm64: /arm64|aarch64/i,
+  ia32: /x86(?!_64)|ia32|win32/i,
+  x64: /x64|amd64|x86_64/i
+}
+
+function isArchMarked(name: string): boolean {
+  return Object.values(ARCH_PATTERNS).some((pattern) => pattern.test(name))
+}
+
+/**
+ * 按平台与架构挑选安装包：
+ * 1. 优先文件名带当前架构标记的资产；
+ * 2. 其次选未标注架构的资产（历史构建 / 单架构产物沿用旧命名）；
+ * 3. 只剩其它架构的资产时返回 null，让调用方回退到 Release 页面，
+ *    避免把 arm64 包当成 x64 包下载。
+ */
 export function selectReleaseAsset(
   assets: ReleaseAsset[],
   platform: string,
@@ -137,11 +154,10 @@ export function selectReleaseAsset(
   )
   if (candidates.length === 0) return null
 
-  const archToken =
-    arch === 'arm64'
-      ? /arm64|aarch64/i
-      : arch === 'ia32'
-        ? /x86(?!_64)|ia32|win32/i
-        : /x64|amd64|x86_64/i
-  return candidates.find((asset) => archToken.test(asset.name)) ?? candidates[0] ?? null
+  const archToken = ARCH_PATTERNS[arch] ?? ARCH_PATTERNS.x64
+  return (
+    candidates.find((asset) => archToken.test(asset.name)) ??
+    candidates.find((asset) => !isArchMarked(asset.name)) ??
+    null
+  )
 }

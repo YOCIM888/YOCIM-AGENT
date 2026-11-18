@@ -133,14 +133,22 @@ export async function runAgentTurn(
   /** 自适应轮次上限：只读问答 6；出现写操作 20；写操作跨多个文件 60 */
   let writeToolsUsed = 0
   const writtenFiles = new Set<string>()
+  /** run_command 可一次改动任意多个文件，无法从 relativePath 统计，单独记录 */
+  let commandWriteUsed = false
   const roundLimit = (): number => {
     if (writeToolsUsed === 0) return ROUND_LIMIT_READ_ONLY
-    if (writtenFiles.size >= 2) return ROUND_LIMIT_MULTI_FILE
+    if (writtenFiles.size >= 2 || commandWriteUsed) return ROUND_LIMIT_MULTI_FILE
     return ROUND_LIMIT_WITH_WRITES
   }
   const observeCall = (call: ToolCall): void => {
     if (!isWriteTool(call.name)) return
     writeToolsUsed += 1
+    if (call.name === 'run_command') {
+      // sed / python / git apply 等命令没有 relativePath，按「可能多文件」放宽到 60 轮档，
+      // 避免这类任务被永久卡在 20 轮（多文件档只影响上限，不会强迫跑满）。
+      commandWriteUsed = true
+      return
+    }
     try {
       const parsed = JSON.parse(call.argumentsJson) as { relativePath?: unknown }
       if (typeof parsed?.relativePath === 'string' && parsed.relativePath) {

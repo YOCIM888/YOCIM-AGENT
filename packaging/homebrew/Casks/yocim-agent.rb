@@ -1,7 +1,7 @@
 cask "yocim-agent" do
   arch arm: "arm64", intel: "x64"
 
-  version "0.1.7"
+  version "0.1.8"
   sha256 arm:   "b1e8f2009d40f6b046cce970c955f6c73ad8a3727f0b699092051e22c65c40ae",
          intel: "d6cb4cf0b102b8a4777095414624503b9a0f14e118fba7e9b0c3bfdc7b608646"
 

@@ -22,8 +22,9 @@ export interface RipgrepJsonEvent {
 
 function relativeFromRoot(root: string, raw: string): string {
   const forward = raw.replace(/\\/g, '/')
-  const normalized = path.isAbsolute(raw)
-    ? path.relative(root, raw).replace(/\\/g, '/')
+  // 统一用归一化后的路径判断/计算，避免 Windows 风格分隔符在不同平台行为不一致
+  const normalized = path.isAbsolute(forward)
+    ? path.relative(root, forward).replace(/\\/g, '/')
     : forward.replace(/^\.\//, '')
   return normalized.replace(/\\/g, '/')
 }
