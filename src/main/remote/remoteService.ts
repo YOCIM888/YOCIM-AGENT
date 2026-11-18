@@ -319,7 +319,7 @@ export class RemoteService {
       const message = error instanceof AppError ? error.message : 'SSH 连接失败'
       const fingerprint = /SHA256:[A-Za-z0-9+/=]+/.exec(message)?.[0]
       if (error instanceof AppError && error.code === 'E_CONFLICT' && fingerprint) {
-        // 首次连接：把指纹交给 UI 让用户确认，不当作硬错误
+        // 首连确认或指纹变更后的重新信任：把指纹交给 UI，不当作硬错误
         this.updateState({
           status: 'connecting',
           error: message,

@@ -12,7 +12,11 @@ import {
   shellQuote,
   toWslUncPath
 } from '../../src/main/remote/command'
-import { formatHostFingerprint, readHostKeyType } from '../../src/main/remote/sshClient'
+import {
+  formatHostFingerprint,
+  readHostKeyType,
+  verifyHostKey
+} from '../../src/main/remote/sshClient'
 import { createWslExec } from '../../src/main/remote/wslExec'
 import { RemotePathGuard } from '../../src/main/workspace/pathGuard'
 
@@ -185,6 +189,7 @@ describe('SSH 指纹', () => {
   const keyBody = Buffer.alloc(4)
   keyBody.writeUInt32BE(keyType.length, 0)
   const publicKey = Buffer.concat([keyBody, keyType, Buffer.from([1, 2, 3, 4, 5])])
+  const otherKey = Buffer.concat([keyBody, keyType, Buffer.from([9, 9, 9])])
 
   it('formats OpenSSH-style SHA256 fingerprints without padding', () => {
     const fingerprint = formatHostFingerprint(publicKey)
@@ -196,6 +201,45 @@ describe('SSH 指纹', () => {
     expect(readHostKeyType(publicKey)).toBe('ssh-ed25519')
     expect(readHostKeyType(Buffer.from([0, 0]))).toBe('unknown')
     expect(readHostKeyType(Buffer.from([0, 0, 0, 99]))).toBe('unknown')
+  })
+
+  it('首连未信任时拒绝，并带出可供 UI 确认的真实指纹', () => {
+    const result = verifyHostKey(publicKey, {})
+    expect(result.accepted).toBe(false)
+    expect(result.keyType).toBe('ssh-ed25519')
+    expect(result.error?.code).toBe('E_CONFLICT')
+    // remoteService 靠消息里的 SHA256 片段把指纹交给 UI
+    expect(/SHA256:[A-Za-z0-9+/=]+/.exec(result.error?.message ?? '')?.[0]).toBe(
+      result.fingerprint
+    )
+  })
+
+  it('已信任且指纹匹配时放行', () => {
+    const result = verifyHostKey(publicKey, {
+      expectedFingerprint: formatHostFingerprint(publicKey)
+    })
+    expect(result.accepted).toBe(true)
+    expect(result.error).toBeNull()
+  })
+
+  it('指纹变化时拒绝，且带出当前指纹而非旧指纹', () => {
+    const result = verifyHostKey(publicKey, {
+      expectedFingerprint: formatHostFingerprint(otherKey)
+    })
+    expect(result.accepted).toBe(false)
+    expect(result.error?.code).toBe('E_CONFLICT')
+    expect(result.error?.message).toContain('已变化')
+    expect(result.error?.message).toContain(result.fingerprint)
+  })
+
+  it('用户显式信任后，首连与指纹变化都放行（重新信任可完成）', () => {
+    expect(verifyHostKey(publicKey, { trustUnknownHost: true }).accepted).toBe(true)
+    expect(
+      verifyHostKey(publicKey, {
+        expectedFingerprint: formatHostFingerprint(otherKey),
+        trustUnknownHost: true
+      }).accepted
+    ).toBe(true)
   })
 })
 

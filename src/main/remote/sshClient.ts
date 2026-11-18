@@ -54,6 +54,58 @@ export interface SshConnectResult {
   keyType: string
 }
 
+/** 一次主机公钥校验的结果；error 只在需要阻断时设置 */
+export interface HostKeyVerification {
+  fingerprint: string
+  keyType: string
+  accepted: boolean
+  error: AppError | null
+}
+
+/**
+ * 决定是否接受主机公钥（TOFU）。
+ *
+ * 首连或指纹变化时必须阻断握手（认证前），但 ssh2 对 `return false` 只给出
+ * 通用的 `Host denied (verification failed)`，真实指纹会丢失，UI 就无法让
+ * 用户确认。这里把 E_CONFLICT（含 SHA256 指纹）一并带出，由调用方在握手
+ * 失败时原样抛出。
+ */
+export function verifyHostKey(
+  key: Buffer,
+  options: Pick<SshConnectOptions, 'expectedFingerprint' | 'trustUnknownHost'>
+): HostKeyVerification {
+  const fingerprint = formatHostFingerprint(key)
+  const keyType = readHostKeyType(key)
+  const accept = (): HostKeyVerification => ({
+    fingerprint,
+    keyType,
+    accepted: true,
+    error: null
+  })
+  const deny = (error: AppError): HostKeyVerification => ({
+    fingerprint,
+    keyType,
+    accepted: false,
+    error
+  })
+
+  // 用户已显式确认信任（首连确认，或指纹变更后的重新信任）
+  if (options.trustUnknownHost === true) return accept()
+
+  if (!options.expectedFingerprint) {
+    return deny(new AppError('E_CONFLICT', `首次连接需要确认主机指纹：${fingerprint}`))
+  }
+  if (fingerprint !== options.expectedFingerprint) {
+    return deny(
+      new AppError(
+        'E_CONFLICT',
+        `SSH 主机指纹已变化（当前 ${fingerprint}），已阻断连接。如确认是预期变更，请在目标详情中重新信任主机`
+      )
+    )
+  }
+  return accept()
+}
+
 function mapAuthError(message: string): string {
   const lower = message.toLowerCase()
   if (lower.includes('all configured authentication methods failed')) {
@@ -80,8 +132,9 @@ export class SshClient {
   }
 
   async connect(options: SshConnectOptions): Promise<SshConnectResult> {
-    let fingerprint = ''
-    let keyType = 'unknown'
+    // 经对象持有：hostVerifier 是 ssh2 的回调，TS 看不到它的赋值时机，
+    // 直接用局部变量会被控制流分析推断成 never。
+    const state: { verification: HostKeyVerification | null } = { verification: null }
 
     const config: ConnectConfig = {
       host: options.host,
@@ -90,10 +143,8 @@ export class SshClient {
       readyTimeout: options.timeoutMs ?? REMOTE_LIMITS.connectTimeoutMs,
       keepaliveInterval: 15_000,
       hostVerifier: (key: Buffer): boolean => {
-        fingerprint = formatHostFingerprint(key)
-        keyType = readHostKeyType(key)
-        if (!options.expectedFingerprint) return options.trustUnknownHost === true
-        return fingerprint === options.expectedFingerprint
+        state.verification = verifyHostKey(key, options)
+        return state.verification.accepted
       }
     }
 
@@ -122,7 +173,11 @@ export class SshClient {
     await new Promise<void>((resolve, reject) => {
       const onError = (error: Error): void => {
         this.client.removeListener('ready', onReady)
-        reject(new AppError('E_UNKNOWN', mapAuthError(error.message)))
+        // 指纹校验失败时 ssh2 只报通用的 "Host denied"，换成我们准备好的
+        // E_CONFLICT（含真实指纹），remoteService 才能把它交给 UI 确认。
+        reject(
+          state.verification?.error ?? new AppError('E_UNKNOWN', mapAuthError(error.message))
+        )
       }
       const onReady = (): void => {
         this.client.removeListener('error', onError)
@@ -146,20 +201,20 @@ export class SshClient {
       throw error instanceof AppError ? error : new AppError('E_UNKNOWN', 'SSH 连接失败')
     })
 
-    if (!fingerprint) {
+    const verification = state.verification
+    if (!verification) {
       throw new AppError('E_UNKNOWN', '未能获取 SSH 主机指纹，已阻断连接')
     }
-    if (options.expectedFingerprint && fingerprint !== options.expectedFingerprint) {
-      throw new AppError(
-        'E_CONFLICT',
-        `SSH 主机指纹已变化（当前 ${fingerprint}），已阻断连接。如确认是预期变更，请在目标详情中重新信任主机`
+    // 走到这里握手已被接受；accepted=false 本应在 onError 阶段抛出，
+    // 保留这层防御以防 ssh2 未来行为变化时静默放行。
+    if (!verification.accepted) {
+      throw (
+        verification.error ??
+        new AppError('E_CONFLICT', `首次连接需要确认主机指纹：${verification.fingerprint}`)
       )
     }
-    if (!options.expectedFingerprint && options.trustUnknownHost !== true) {
-      throw new AppError('E_CONFLICT', `首次连接需要确认主机指纹：${fingerprint}`)
-    }
 
-    return { fingerprint, keyType }
+    return { fingerprint: verification.fingerprint, keyType: verification.keyType }
   }
 
   private requireSftp(): Promise<SFTPWrapper> {
