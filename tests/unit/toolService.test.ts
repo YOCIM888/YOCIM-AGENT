@@ -548,3 +548,71 @@ describe('write_file timeline snapshot', () => {
     db.close()
   })
 })
+
+describe('verification tools go through approval and command policy', () => {
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 40))
+
+  for (const name of ['run_tests', 'run_typecheck', 'run_lint']) {
+    it(`${name} asks for approval in manual mode (no silent bypass)`, async () => {
+      const args =
+        name === 'run_tests'
+          ? { runner: 'vitest', pattern: 'foo.test.ts' }
+          : name === 'run_lint'
+            ? { relativePath: 'src' }
+            : {}
+      const run = service.execute(toolCall(name, args), context())
+      await settle()
+      expect(requests).toHaveLength(1)
+      expect(requests[0]).toMatchObject({ tool: name, risk: 'medium' })
+      expect(requests[0].reason).toContain('验证命令')
+      // 拒绝后不执行任何命令
+      approvals.respond(requests[0].approvalId, 'deny')
+      const outcome = await run
+      expect(outcome.ok).toBe(false)
+      expect(outcome.summary).toContain('拒绝')
+      expect(audit.list()[0]).toMatchObject({ tool: name, approval: 'denied', ok: false })
+    })
+  }
+
+  it('rejects shell injection in run_lint target before any approval is shown', async () => {
+    const outcome = await service.execute(
+      toolCall('run_lint', { relativePath: 'package.json; echo INJECTED > marker.txt' }),
+      context()
+    )
+    expect(outcome.ok).toBe(false)
+    expect(outcome.summary).toContain('不允许的字符')
+    expect(requests).toHaveLength(0)
+    expect(audit.list()[0]).toMatchObject({ ok: false })
+  })
+
+  it('rejects injection / flag injection in run_tests pattern before approval', async () => {
+    for (const pattern of ['--version; echo INJECTED > marker.txt', '--fix', '-u']) {
+      const outcome = await service.execute(
+        toolCall('run_tests', { runner: 'vitest', pattern }),
+        context()
+      )
+      expect(outcome.ok).toBe(false)
+      expect(requests).toHaveLength(0)
+    }
+  })
+
+  it('blocked dangerous pattern in run_tests shows a blocked card in open mode', async () => {
+    const open = new ToolService({
+      approvals,
+      audit,
+      requireGuard: () => guard,
+      getApprovalMode: () => 'open'
+    })
+    // shutdown 是纯字母、通过字符白名单且不触发 - 开头选项检查，
+    // 但命中危险正则（系统级危险命令），应被硬拦截。
+    const run = open.execute(
+      toolCall('run_tests', { runner: 'vitest', pattern: 'shutdown' }),
+      context()
+    )
+    await settle()
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ kind: 'blocked', tool: 'run_tests' })
+    approvals.respond(requests[0].approvalId, 'deny')
+    expect((await run).ok).toBe(false)
+  })
+})

@@ -360,6 +360,22 @@ export function isWriteTool(name: string): boolean {
 }
 
 /**
+ * 会启动子进程的验证类工具。
+ *
+ * 它们不写入文件（故不计入 isWriteTool 的轮次/并行调度），但会执行本地命令，
+ * 因此必须和 run_command 一样经过命令白名单/危险正则校验与人工审批。
+ * 单独分类而不是并入 isWriteTool，避免影响 agentEngine 的写文件轮次估算。
+ */
+export function isVerificationTool(name: string): boolean {
+  return name === 'run_tests' || name === 'run_typecheck' || name === 'run_lint'
+}
+
+/** 会执行命令、需要纳入命令策略与审批链的工具集合 */
+export function isShellBackedTool(name: string): boolean {
+  return name === 'run_command' || isVerificationTool(name)
+}
+
+/**
  * 只读工具：结果之间没有顺序依赖，Agent 循环可以并发执行
  * （写工具与命令会改状态，必须串行）。
  */

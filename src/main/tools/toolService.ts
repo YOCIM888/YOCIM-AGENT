@@ -5,7 +5,12 @@ import type { ToolCall, ToolExecutionOutcome } from '../../shared/agent'
 import type { ApprovalMode, ApprovalRequest } from '../../shared/approval'
 import type { AuditApproval } from '../../shared/audit'
 import { AppError } from '../../shared/errors'
-import { isWriteTool, summarizeToolArgs, TOOL_DEFINITIONS } from '../../shared/tools'
+import {
+  isVerificationTool,
+  isWriteTool,
+  summarizeToolArgs,
+  TOOL_DEFINITIONS
+} from '../../shared/tools'
 import { isCommandWhitelisted, normalizeCommandWhitelist } from '../../shared/settings'
 import type { AllowRuleStore } from '../approval/allowRules'
 import type { ApprovalManager } from '../approval/approvalManager'
@@ -33,6 +38,7 @@ import {
   runSearchFiles
 } from './workspaceTools'
 import {
+  assertVerifyToolArgs,
   runGetGitDiff,
   runRunLint,
   runRunTests,
@@ -56,6 +62,37 @@ function describeError(error: unknown): string {
     return first ? `参数校验失败：${first.message}` : '参数校验失败'
   }
   return error instanceof Error ? error.message : '工具执行失败'
+}
+
+/**
+ * 验证工具的「逻辑命令」：仅用于命令白名单 / 危险正则校验与审批卡展示。
+ * 真正执行走 argv 数组（见 verifyTools.buildTestArgv），不经 shell；此处拼成
+ * 字符串是为了复用既有的命令策略判断，且 pattern / target 已在上方通过字符白名单。
+ */
+function verificationCommandForPolicy(parsed: ParsedToolArguments): string {
+  switch (parsed.tool) {
+    case 'run_tests': {
+      const runner = parsed.args.runner ?? 'vitest'
+      const pattern = parsed.args.pattern ?? ''
+      const base =
+        runner === 'vitest'
+          ? 'npx vitest run'
+          : runner === 'jest'
+            ? 'npx jest'
+            : runner === 'pytest'
+              ? 'python -m pytest'
+              : 'go test'
+      return pattern ? `${base} ${pattern}` : base
+    }
+    case 'run_typecheck':
+      return 'npx tsc --noEmit'
+    case 'run_lint':
+      // 只放可执行文件 + 工具名 + 用户可控 target；框架自身 flag（如 --format unix）
+      // 是代码生成、可信的，不纳入策略检查，否则 --format 会误命中危险词 format。
+      return `npx eslint ${parsed.args.relativePath?.trim() || '.'}`
+    default:
+      return ''
+  }
 }
 
 export interface ToolExecutionContext {
@@ -186,20 +223,29 @@ export class ToolService {
       return outcome
     }
 
+    const isRunCommand = parsed.tool === 'run_command'
+    const isVerify = isVerificationTool(parsed.tool)
+    const runCommandText = isRunCommand && 'command' in parsed.args ? parsed.args.command : ''
+
     try {
-      if (parsed.tool === 'run_command') {
+      // 验证工具此前完全绕开命令策略：既不受白名单约束，也不受危险正则拦截。
+      // 现在与 run_command 走同一道策略门：先校验模型可控参数字符，再把逻辑命令
+      // 交给 assertCommandAllowed（npx/python/go 属于默认白名单，危险模式仍会被拦）。
+      if (isRunCommand || isVerify) {
+        if (isVerify) assertVerifyToolArgs({ tool: parsed.tool, ...parsed.args })
+        const policyCommand = isRunCommand ? runCommandText : verificationCommandForPolicy(parsed)
         const whitelist = normalizeCommandWhitelist(this.deps.getCommandWhitelist?.() ?? [])
-        const whitelisted = mode === 'open' && isCommandWhitelisted(parsed.args.command, whitelist)
+        // 白名单放行只适用于用户直接给出的 run_command；验证工具的逻辑命令由代码生成，
+        // 始终过危险正则，避免 pattern 里塞进危险模式时借开放模式白名单绕过。
+        const whitelisted =
+          isRunCommand && mode === 'open' && isCommandWhitelisted(runCommandText, whitelist)
         if (!whitelisted) {
           let blocked: unknown = null
           try {
             const project =
               (await this.deps.projectCommands?.()) ??
               (await loadProjectCommands(this.deps.requireGuard().root))
-            assertCommandAllowed(
-              parsed.args.command,
-              new Set([...DEFAULT_ALLOWED_COMMANDS, ...project])
-            )
+            assertCommandAllowed(policyCommand, new Set([...DEFAULT_ALLOWED_COMMANDS, ...project]))
           } catch (error) {
             blocked = error
           }
@@ -225,7 +271,7 @@ export class ToolService {
                 reason: message,
                 argsSummary,
                 kind: 'blocked',
-                blockedCommand: parsed.args.command
+                blockedCommand: policyCommand
               },
               context.signal
             )
@@ -241,7 +287,7 @@ export class ToolService {
             }
             if (decision === 'allow_whitelist') {
               try {
-                this.deps.addCommandToWhitelist?.(parsed.args.command)
+                this.deps.addCommandToWhitelist?.(policyCommand)
                 argsSummary = `${argsSummary}（已加入白名单）`
               } catch {
                 argsSummary = `${argsSummary}（本次放行，白名单写入失败）`
@@ -268,7 +314,7 @@ export class ToolService {
       return outcome
     }
 
-    if (isWriteTool(parsed.tool)) {
+    if (isWriteTool(parsed.tool) || isVerify) {
       /** 审批卡解释「为什么这一步需要确认」 */
       let approvalReason: string | undefined
       /** 外部操作才标高风险；本地操作在 manual 档询问时标中风险 */
@@ -287,6 +333,12 @@ export class ToolService {
         approvalReason = info.reason
         approvalRisk = info.risk === 'external' ? 'high' : 'medium'
         requiresApproval = needsApproval(info.risk, mode)
+      } else if (isVerify) {
+        // 验证工具会启动本地构建/测试进程（可能执行项目脚本），按本地命令处理：
+        // manual 档询问，auto/open 档放行；风险中、理由明确说明会执行命令。
+        approvalReason = '将运行本地验证命令（测试 / 类型检查 / Lint），可能执行项目脚本'
+        approvalRisk = 'medium'
+        requiresApproval = needsApproval('local', mode)
       } else {
         approvalReason = '将修改工作区文件，可通过时间线恢复历史版本'
         approvalRisk = 'medium'
@@ -296,11 +348,11 @@ export class ToolService {
       let ruleName: string | null = null
       if (requiresApproval && this.deps.allowRules) {
         const root = this.deps.requireGuard().root
-        if (parsed.tool === 'run_command') {
+        if (isRunCommand || isVerify) {
           ruleName = this.deps.allowRules.matchesCommand(
             root,
             context.sessionId,
-            parsed.args.command
+            isRunCommand ? runCommandText : verificationCommandForPolicy(parsed)
           )
         } else if (parsed.tool === 'write_file' || parsed.tool === 'edit_file') {
           ruleName = this.deps.allowRules.matchesWritePath(
@@ -369,18 +421,23 @@ export class ToolService {
         if (
           decision !== 'approve' &&
           this.deps.allowRules &&
-          (parsed.tool === 'run_command' ||
+          (isRunCommand ||
+            isVerify ||
             parsed.tool === 'write_file' ||
             parsed.tool === 'edit_file')
         ) {
           try {
             this.deps.allowRules.add(
               {
-                kind: parsed.tool === 'run_command' ? 'command' : 'path',
+                kind: isRunCommand || isVerify ? 'command' : 'path',
                 value:
-                  parsed.tool === 'run_command'
-                    ? allowRuleValue(parsed.args.command)
-                    : parsed.args.relativePath,
+                  isRunCommand || isVerify
+                    ? allowRuleValue(
+                        isRunCommand ? runCommandText : verificationCommandForPolicy(parsed)
+                      )
+                    : 'relativePath' in parsed.args
+                      ? (parsed.args.relativePath ?? '')
+                      : '',
                 scope: decision === 'approve_session' ? 'session' : 'project',
                 sessionId: context.sessionId
               },

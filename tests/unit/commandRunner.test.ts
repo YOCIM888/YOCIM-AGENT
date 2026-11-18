@@ -7,7 +7,10 @@ import {
   DEFAULT_ALLOWED_COMMANDS,
   loadProjectCommands
 } from '../../src/main/tools/commandPolicy'
-import { runWorkspaceCommand } from '../../src/main/tools/commandRunner'
+import {
+  runWorkspaceCommand,
+  runWorkspaceCommandArgv
+} from '../../src/main/tools/commandRunner'
 
 let cwd: string
 
@@ -133,5 +136,52 @@ describe('runWorkspaceCommand', () => {
     })
     expect(outcome.ok).toBe(false)
     expect(outcome.summary).toContain('超时')
+  })
+})
+
+describe('runWorkspaceCommandArgv', () => {
+  it('captures stdout and exit code without a shell', async () => {
+    const outcome = await runWorkspaceCommandArgv([process.execPath, '-e', 'console.log(42)'], {
+      cwd,
+      timeoutMs: 5000,
+      signal: new AbortController().signal
+    })
+    expect(outcome.ok).toBe(true)
+    expect(outcome.content).toContain('42')
+  })
+
+  it('treats shell metacharacters as literal arguments (no command injection)', async () => {
+    // 若走 shell:true，参数里的 `; console.log(999)` 会被解析成第二条语句；
+    // shell:false 下它只是 process.argv 的一部分，999 不应出现。
+    const outcome = await runWorkspaceCommandArgv(
+      [process.execPath, '-e', 'console.log(process.argv[1])', 'hello; console.log(999)'],
+      { cwd, timeoutMs: 5000, signal: new AbortController().signal }
+    )
+    expect(outcome.ok).toBe(true)
+    expect(outcome.content).toContain('hello; console.log(999)')
+    expect(outcome.content).not.toContain('999\n')
+  })
+
+  it('supports env overrides (ELECTRON_RUN_AS_NODE)', async () => {
+    const outcome = await runWorkspaceCommandArgv(
+      [process.execPath, '-e', 'console.log(process.env.ELECTRON_RUN_AS_NODE)'],
+      {
+        cwd,
+        timeoutMs: 5000,
+        signal: new AbortController().signal,
+        env: { ELECTRON_RUN_AS_NODE: '1' }
+      }
+    )
+    expect(outcome.ok).toBe(true)
+    expect(outcome.content).toContain('1')
+  })
+
+  it('rejects an empty argv', async () => {
+    const outcome = await runWorkspaceCommandArgv([], {
+      cwd,
+      timeoutMs: 5000,
+      signal: new AbortController().signal
+    })
+    expect(outcome.ok).toBe(false)
   })
 })
