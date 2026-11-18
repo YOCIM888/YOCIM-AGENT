@@ -14,9 +14,11 @@ export interface RunCommandOptions {
   onOutput?: (text: string) => void
   /** 节流间隔，测试时可调小 */
   flushIntervalMs?: number
+  /** 追加到安全基础环境变量上的覆盖项（如 ELECTRON_RUN_AS_NODE） */
+  env?: Record<string, string>
 }
 
-function buildSafeEnv(): NodeJS.ProcessEnv {
+function buildSafeEnv(overrides?: Record<string, string>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {}
   const keys = [
     'PATH',
@@ -37,6 +39,7 @@ function buildSafeEnv(): NodeJS.ProcessEnv {
     const value = process.env[key]
     if (value) env[key] = value
   }
+  if (overrides) Object.assign(env, overrides)
   return env
 }
 
@@ -48,10 +51,11 @@ function killProcessTree(child: ChildProcess): void {
   child.kill()
 }
 
-export function runWorkspaceCommand(
-  command: string,
-  options: RunCommandOptions
-): Promise<ToolExecutionOutcome> {
+/**
+ * 共享的命令执行主体：接受一个 child 工厂，统一处理超时、abort、输出节流与截断。
+ * spawn 的细节（shell 字符串 vs argv 数组）由各入口自己决定。
+ */
+function runChild(startChild: (env: NodeJS.ProcessEnv) => ChildProcess, options: RunCommandOptions): Promise<ToolExecutionOutcome> {
   return new Promise((resolve) => {
     let output = ''
     let truncated = false
@@ -109,13 +113,7 @@ export function runWorkspaceCommand(
 
     let child: ChildProcess
     try {
-      child = spawn(command, {
-        cwd: options.cwd,
-        shell: true,
-        windowsHide: true,
-        env: buildSafeEnv(),
-        stdio: ['ignore', 'pipe', 'pipe']
-      })
+      child = startChild(buildSafeEnv(options.env))
     } catch (error) {
       resolve({
         ok: false,
@@ -178,4 +176,50 @@ export function runWorkspaceCommand(
       })
     })
   })
+}
+
+/**
+ * 执行一条 shell 命令字符串（run_command 工具专用）。
+ * 注意：这里刻意启用 shell 以支持管道/重定向等语法；所有模型可控输入必须先在
+ * commandPolicy / toolService 层通过白名单与危险正则校验后才会走到这里。
+ */
+export function runWorkspaceCommand(
+  command: string,
+  options: RunCommandOptions
+): Promise<ToolExecutionOutcome> {
+  return runChild(
+    (env) =>
+      spawn(command, {
+        cwd: options.cwd,
+        shell: true,
+        windowsHide: true,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe']
+      }),
+    options
+  )
+}
+
+/**
+ * 以 argv 数组执行命令（验证类工具专用）：spawn(argv[0], argv.slice(1), shell:false)。
+ * 不使用 shell，参数里的 ; | & $ ` 等都是普通字符，从执行层面根除命令注入。
+ */
+export function runWorkspaceCommandArgv(
+  argv: string[],
+  options: RunCommandOptions
+): Promise<ToolExecutionOutcome> {
+  if (argv.length === 0) {
+    return Promise.resolve({ ok: false, summary: '命令为空', content: '命令参数为空' })
+  }
+  return runChild(
+    (env) =>
+      spawn(argv[0], argv.slice(1), {
+        cwd: options.cwd,
+        shell: false,
+        windowsHide: true,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe']
+      }),
+    options
+  )
 }

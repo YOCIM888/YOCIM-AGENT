@@ -1,7 +1,9 @@
+import { existsSync } from 'node:fs'
+import path from 'node:path'
 import type { ToolExecutionOutcome } from '../../shared/agent'
 import { AppError } from '../../shared/errors'
 import type { WorkspacePathGuard } from '../workspace/pathGuard'
-import { runWorkspaceCommand } from './commandRunner'
+import { runWorkspaceCommandArgv } from './commandRunner'
 import type { ToolFileIo } from './toolFileIo'
 import type { RunTestsArgs } from './toolSchemas'
 
@@ -9,6 +11,96 @@ export type TestRunnerKind = 'vitest' | 'jest' | 'pytest' | 'go'
 
 const EXCERPT_MAX_CHARS = 2600
 const DIFF_MAX_CHARS = 8000
+
+/**
+ * 验证工具参数安全边界。
+ *
+ * run_tests 的 pattern / run_lint 的 relativePath 由模型给出，历史上被直接拼进
+ * `spawn(shell:true)` 的命令串，一个 `;` 就能追加任意 shell 命令且完全绕过审批。
+ * 这里做两层防护：
+ *  1) 命令一律改成 argv 数组 + `shell:false`（见 commandRunner），shell 元字符
+ *     即使漏进来也只是普通参数，不会被解释成命令分隔符；
+ *  2) 参数本身再用字符白名单约束，既是纵深防御，也让传给测试框架的内容保持
+ *     在「文件名 / 正则片段」的合理范围（并挡住 --fix / -u 这类改写型 flag）。
+ */
+const SAFE_ARG_PATTERN = /^[\w./\\*,\- ]+$/
+
+/**
+ * 校验一个将被放进验证命令用户输入位的值。
+ * 仅允许字母数字（含 Unicode 词字符）、下划线、点、斜杠、反斜杠、星号、逗号、连字符与空格。
+ * 拒绝 ; | & $ ` ( ) < > " ' \n \r 等一切 shell 元字符与引号。
+ */
+export function assertSafeVerifyArg(value: string, label: string): void {
+  if (!SAFE_ARG_PATTERN.test(value)) {
+    throw new AppError(
+      'E_INVALID_INPUT',
+      `${label} 含不允许的字符（仅支持字母、数字、路径分隔符、*、逗号、连字符与空格）`
+    )
+  }
+  // 即使已无 shell，以 - 开头的 token 仍会被 eslint/vitest 当成选项：
+  // `eslint --fix` 会改写源码、`vitest -u` 会更新快照，二者都绕过写文件审批。
+  // 用户参数只应是路径 / 测试名 / 正则片段，一律不接受选项形式。
+  if (/(^|\s)-/.test(value)) {
+    throw new AppError('E_INVALID_INPUT', `${label} 不允许以 - 开头的选项参数（如 --fix、-u）`)
+  }
+}
+
+/**
+ * 在审批前校验验证工具的所有模型可控参数，确保审批卡展示的命令与最终执行一致，
+ * 且注入字符在更早的策略阶段就被拒绝（而不必等到执行期）。
+ */
+export function assertVerifyToolArgs(args: {
+  tool: string
+  pattern?: string
+  relativePath?: string
+}): void {
+  if (args.tool === 'run_tests' && args.pattern) assertSafeVerifyArg(args.pattern, 'pattern')
+  if (args.tool === 'run_lint' && args.relativePath?.trim()) {
+    assertSafeVerifyArg(args.relativePath.trim(), 'relativePath')
+  }
+}
+
+/**
+ * 定位系统安装的 npx-cli.js，用 process.execPath + ELECTRON_RUN_AS_NODE 直接驱动，
+ * 从而在不启用 shell 的情况下解析工作区本地依赖（Windows 上 npx 是 .cmd，无法无 shell 执行）。
+ *
+ * 不能只看 process.execPath 的同级目录：开发期它是 node.exe（npm 就在旁边），
+ * 但打包后是 electron.exe（旁边没有 npm）。因此按优先级探测：
+ *   1) process.execPath 同级 node_modules/npm/bin（开发 / Node 直跑）；
+ *   2) PATH 上 npx shim 的同级 node_modules/npm/bin（打包后，依赖用户机器的 Node）。
+ * npx shim（Unix 无扩展名 / Windows .cmd）内容形如 `"%~dp0\\node.exe" ... npx-cli.js`，
+ * 其目录即 npm 安装根目录，npx-cli.js 固定在 <root>/node_modules/npm/bin 下。
+ */
+function resolveNpxCli(): string {
+  const candidates: string[] = []
+  // 1) 与当前可执行文件同安装前缀
+  candidates.push(
+    path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js')
+  )
+  // 2) PATH 上每个 npx shim 的同级安装前缀
+  const pathVar = process.env.PATH ?? process.env.Path ?? ''
+  for (const entry of pathVar.split(path.delimiter)) {
+    if (!entry) continue
+    for (const shim of ['npx', 'npx.cmd']) {
+      const shimPath = path.join(entry, shim)
+      if (existsSync(shimPath)) {
+        candidates.push(
+          path.join(entry, 'node_modules', 'npm', 'bin', 'npx-cli.js'),
+          // Windows 上 shim 也可能在 node.exe 同级但 npm 在 <dir>/node_modules
+          path.resolve(entry, '..', 'node_modules', 'npm', 'bin', 'npx-cli.js')
+        )
+      }
+    }
+  }
+  const found = candidates.find((candidate) => existsSync(candidate))
+  if (!found) {
+    throw new AppError(
+      'E_UNSUPPORTED',
+      '未找到 npx：验证工具需要本机安装 Node/npm（用于运行本地测试与检查工具）'
+    )
+  }
+  return found
+}
 
 /**
  * 验证类工具（run_tests / run_typecheck / run_lint / get_git_diff）。
@@ -199,17 +291,24 @@ export async function detectTestRunner(io: ToolFileIo): Promise<TestRunnerKind |
   return null
 }
 
-function buildTestCommand(runner: TestRunnerKind, pattern: string): string {
-  const suffix = pattern ? ` ${pattern}` : ''
+/**
+ * 构造测试命令的 argv 数组（argv[0] 为可执行文件）。
+ * 不再返回可拼接的字符串：用户输入（pattern）是独立argv元素，且经过字符白名单校验，
+ * 因此不存在命令注入面。node/npx-cli 组合用于跨平台在不启用 shell 的情况下解析
+ * 工作区本地安装的工具（Windows 上 npx 是 .cmd，无法在 shell:false 下直接执行）。
+ */
+export function buildTestArgv(runner: TestRunnerKind, pattern: string): string[] {
+  if (pattern) assertSafeVerifyArg(pattern, 'pattern')
+  const npx = (...args: string[]): string[] => [process.execPath, resolveNpxCli(), ...args]
   switch (runner) {
     case 'vitest':
-      return `npx vitest run${suffix}`
+      return npx('vitest', 'run', ...(pattern ? [pattern] : []))
     case 'jest':
-      return `npx jest${suffix}`
+      return npx('jest', ...(pattern ? [pattern] : []))
     case 'pytest':
-      return `python -m pytest${suffix ? ` ${pattern}` : ''} -q`
+      return ['python', '-m', 'pytest', ...(pattern ? [pattern] : []), '-q']
     case 'go':
-      return pattern ? `go test -run ${pattern}/... ./...` : 'go test ./...'
+      return pattern ? ['go', 'test', '-run', `${pattern}/...`, './...'] : ['go', 'test', './...']
   }
 }
 
@@ -262,17 +361,20 @@ export interface VerifyRunOptions {
 
 async function execVerifyCommand(
   guard: WorkspacePathGuard,
-  command: string,
+  argv: string[],
   cwd: string,
   timeoutMs: number,
   options: VerifyRunOptions
 ): Promise<ToolExecutionOutcome> {
   const resolved = await guard.resolve(cwd, { mustExist: true })
-  return runWorkspaceCommand(command, {
+  return runWorkspaceCommandArgv(argv, {
     cwd: resolved.absolutePath,
     timeoutMs,
     signal: options.signal,
-    onOutput: options.onOutput
+    onOutput: options.onOutput,
+    // Electron 主进程里 process.execPath 是 electron.exe；用 argv 驱动 npx-cli.js
+    // 时必须让它以 Node 身份运行（与 debug 适配器一致）。
+    env: argv[0] === process.execPath ? { ELECTRON_RUN_AS_NODE: '1' } : undefined
   })
 }
 
@@ -289,10 +391,10 @@ export async function runRunTests(
       '未能识别测试框架：请确认项目包含 vitest/jest/pytest/go，或通过 runner 参数指定'
     )
   }
-  const command = buildTestCommand(runner, args.pattern ?? '')
+  const argv = buildTestArgv(runner, args.pattern ?? '')
   const raw = await execVerifyCommand(
     guard,
-    command,
+    argv,
     args.cwd ?? '',
     args.timeoutMs ?? 120_000,
     options
@@ -318,7 +420,7 @@ export async function runRunTypecheck(
   }
   const raw = await execVerifyCommand(
     guard,
-    'npx tsc --noEmit',
+    [process.execPath, resolveNpxCli(), 'tsc', '--noEmit'],
     args.cwd ?? '',
     args.timeoutMs ?? 180_000,
     options
@@ -360,9 +462,10 @@ export async function runRunLint(
     throw new AppError('E_UNSUPPORTED', '未找到 ESLint 配置文件，无法运行 lint')
   }
   const target = args.relativePath?.trim() || '.'
+  assertSafeVerifyArg(target, 'relativePath')
   const raw = await execVerifyCommand(
     guard,
-    `npx eslint ${target} --format unix`,
+    [process.execPath, resolveNpxCli(), 'eslint', target, '--format', 'unix'],
     args.cwd ?? '',
     args.timeoutMs ?? 180_000,
     options
