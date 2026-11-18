@@ -13,7 +13,7 @@ function choose(locale: Locale): void {
 <template>
   <div class="overlay" data-testid="language-onboarding">
     <section class="dialog" role="dialog" :aria-label="t('选择语言')">
-      <div class="brand" aria-hidden="true">Y</div>
+      <img class="brand" src="/image/yocim.png" alt="YOCIM" />
       <h1>{{ t('选择语言') }}</h1>
       <p class="subtitle">{{ t('选择 YOCIM AGENT 的界面语言，稍后可在设置中更改。') }}</p>
 
@@ -60,16 +60,14 @@ function choose(locale: Locale): void {
 }
 
 .brand {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 44px;
   height: 44px;
   margin: 0 auto 18px;
+  padding: 3px;
   border-radius: 12px;
-  background: var(--accent);
-  color: var(--accent-contrast);
-  font-size: 20px;
-  font-weight: 700;
+  background: #ffffff;
+  object-fit: contain;
 }
 
 h1 {
