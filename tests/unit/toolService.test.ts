@@ -501,6 +501,34 @@ describe('command whitelist in open mode', () => {
   })
 })
 
+describe('run_command shell bypass protection', () => {
+  const bypass = 'npm test && rm -r /'
+
+  it('rejects a chained non-whitelisted executable in manual mode without an approval card', async () => {
+    const outcome = await service.execute(toolCall('run_command', { command: bypass }), context())
+    expect(outcome.ok).toBe(false)
+    expect(outcome.summary).toContain('白名单')
+    expect(requests).toHaveLength(0)
+  })
+
+  it('shows a blocked card in open mode even when the first executable is whitelisted', async () => {
+    const open = new ToolService({
+      approvals,
+      audit,
+      requireGuard: () => guard,
+      getApprovalMode: () => 'open',
+      getCommandWhitelist: () => ['npm']
+    })
+    const run = open.execute(toolCall('run_command', { command: bypass }), context())
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ kind: 'blocked', risk: 'high', tool: 'run_command' })
+    expect(requests[0].reason).toContain('白名单')
+    approvals.respond(requests[0].approvalId, 'deny')
+    expect((await run).ok).toBe(false)
+  })
+})
+
 describe('write_file timeline snapshot', () => {
   function makeTimeline(): { timeline: TimelineService; db: DatabaseSync } {
     const db = new DatabaseSync(':memory:')
