@@ -349,7 +349,10 @@ describe('runAgentTurn round and tool gating', () => {
         },
         { type: 'done', finishReason: 'tool_calls' }
       ],
-      [{ type: 'text', text: 'done' }, { type: 'done', finishReason: 'stop' }]
+      [
+        { type: 'text', text: 'done' },
+        { type: 'done', finishReason: 'stop' }
+      ]
     ])
     const tools = {
       definitions: [
@@ -390,7 +393,10 @@ describe('runAgentTurn round and tool gating', () => {
         },
         { type: 'done', finishReason: 'tool_calls' }
       ],
-      [{ type: 'text', text: 'should not run' }, { type: 'done', finishReason: 'stop' }]
+      [
+        { type: 'text', text: 'should not run' },
+        { type: 'done', finishReason: 'stop' }
+      ]
     ])
 
     const result = await runAgentTurn(
@@ -408,6 +414,39 @@ describe('runAgentTurn round and tool gating', () => {
     expect(provider.requests).toHaveLength(1)
     expect(events.some((event) => event.type === 'run:paused')).toBe(true)
     expect(events.some((event) => event.type === 'run:error')).toBe(false)
+  })
+
+  it('treats command-based writes as multi-file so they are not capped at 20 rounds', async () => {
+    const provider = new ScriptedProvider(
+      Array.from(
+        { length: 21 },
+        () =>
+          [
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'c1',
+                name: 'run_command',
+                argumentsJson: '{"command":"git apply patch"}'
+              }
+            },
+            { type: 'done', finishReason: 'tool_calls' }
+          ] as ProviderEvent[]
+      )
+    )
+
+    const result = await runAgentTurn(
+      {
+        provider,
+        tools: { definitions: [], execute: async () => ({ ok: true, content: '', summary: '' }) },
+        emit: () => {}
+      },
+      baseInput,
+      new AbortController().signal
+    )
+
+    expect(provider.requests).toHaveLength(22)
+    expect(result.reason).not.toBe('paused')
   })
 })
 

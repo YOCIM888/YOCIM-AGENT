@@ -51,10 +51,10 @@ A local-first desktop AI coding assistant (Electron + Vue 3 + TypeScript). Pick 
 
 ## Approval Modes
 
-| Mode   | Behavior                                                   |
-| ------ | ---------------------------------------------------------- |
-| Manual | Both file writes and commands require approval (default)    |
-| Auto   | File writes are approved automatically; commands still ask  |
+| Mode   | Behavior                                                     |
+| ------ | ------------------------------------------------------------ |
+| Manual | Both file writes and commands require approval (default)     |
+| Auto   | File writes are approved automatically; commands still ask   |
 | Open   | File writes and commands are auto-approved, no approval card |
 
 Open mode is still constrained by the workspace path guard, command allowlist, and dangerous-command blocking — approval modes never bypass these security boundaries.
@@ -79,17 +79,17 @@ $env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'
 node node_modules/electron/install.js
 ```
 
-| Command               | Description                                                              |
-| --------------------- | ------------------------------------------------------------------------ |
-| `npm run dev`         | Start the dev window (Vite HMR)                                          |
-| `npm run typecheck`   | TypeScript / Vue type checking                                           |
-| `npm run lint`        | ESLint                                                                   |
-| `npm run test`        | Vitest unit tests                                                        |
-| `npm run build`       | Build main / preload / renderer                                          |
-| `npx playwright test` | Electron e2e smoke tests (build first)                                   |
-| `npm run e2e`         | Build + e2e                                                              |
-| `npm run package`     | Build an installer for the current platform (`release/<version>/`)       |
-| `npm run package:dir` | Build an unpacked directory only (debugging packaging)                   |
+| Command               | Description                                                        |
+| --------------------- | ------------------------------------------------------------------ |
+| `npm run dev`         | Start the dev window (Vite HMR)                                    |
+| `npm run typecheck`   | TypeScript / Vue type checking                                     |
+| `npm run lint`        | ESLint                                                             |
+| `npm run test`        | Vitest unit tests                                                  |
+| `npm run build`       | Build main / preload / renderer                                    |
+| `npx playwright test` | Electron e2e smoke tests (build first)                             |
+| `npm run e2e`         | Build + e2e                                                        |
+| `npm run package`     | Build an installer for the current platform (`release/<version>/`) |
+| `npm run package:dir` | Build an unpacked directory only (debugging packaging)             |
 
 ## Model Configuration
 
@@ -99,23 +99,23 @@ To connect a real model: title bar "Application" → "Settings…" → "Models" 
 
 Built-in endpoints:
 
-| Provider          | Base URL                                            | Protocol                    |
-| ----------------- | --------------------------------------------------- | --------------------------- |
-| DeepSeek          | `https://api.deepseek.com/v1`                       | OpenAI-compatible           |
-| Qwen (Tongyi)     | `https://dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI-compatible           |
-| BigModel (Zhipu)  | `https://open.bigmodel.cn/api/paas/v4`              | OpenAI-compatible           |
-| Kimi (Moonshot)   | `https://api.moonshot.cn/v1`                        | OpenAI-compatible           |
-| MiniMax           | `https://api.minimaxi.com/v1`                       | OpenAI-compatible           |
-| Tencent Cloud     | `https://api.hunyuan.cloud.tencent.com/v1`          | OpenAI-compatible           |
-| Alibaba Cloud     | `https://dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI-compatible           |
-| SiliconFlow       | `https://api.siliconflow.cn/v1`                     | OpenAI-compatible           |
-| Volcano Engine    | `https://ark.cn-beijing.volces.com/api/v3`          | OpenAI-compatible           |
-| ChatGPT (OpenAI)  | `https://api.openai.com/v1`                         | OpenAI-compatible           |
-| Claude            | `https://api.anthropic.com/v1`                      | Anthropic Messages          |
-| Gemini            | `https://generativelanguage.googleapis.com/v1beta`  | Gemini GenerateContent      |
-| Grok              | `https://api.x.ai/v1`                               | OpenAI-compatible           |
-| Local Ollama      | `http://localhost:11434/v1`                         | OpenAI-compatible (no key)  |
-| Custom            | Enter your own                                      | OpenAI / Anthropic / Gemini |
+| Provider         | Base URL                                            | Protocol                    |
+| ---------------- | --------------------------------------------------- | --------------------------- |
+| DeepSeek         | `https://api.deepseek.com/v1`                       | OpenAI-compatible           |
+| Qwen (Tongyi)    | `https://dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI-compatible           |
+| BigModel (Zhipu) | `https://open.bigmodel.cn/api/paas/v4`              | OpenAI-compatible           |
+| Kimi (Moonshot)  | `https://api.moonshot.cn/v1`                        | OpenAI-compatible           |
+| MiniMax          | `https://api.minimaxi.com/v1`                       | OpenAI-compatible           |
+| Tencent Cloud    | `https://api.hunyuan.cloud.tencent.com/v1`          | OpenAI-compatible           |
+| Alibaba Cloud    | `https://dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI-compatible           |
+| SiliconFlow      | `https://api.siliconflow.cn/v1`                     | OpenAI-compatible           |
+| Volcano Engine   | `https://ark.cn-beijing.volces.com/api/v3`          | OpenAI-compatible           |
+| ChatGPT (OpenAI) | `https://api.openai.com/v1`                         | OpenAI-compatible           |
+| Claude           | `https://api.anthropic.com/v1`                      | Anthropic Messages          |
+| Gemini           | `https://generativelanguage.googleapis.com/v1beta`  | Gemini GenerateContent      |
+| Grok             | `https://api.x.ai/v1`                               | OpenAI-compatible           |
+| Local Ollama     | `http://localhost:11434/v1`                         | OpenAI-compatible (no key)  |
+| Custom           | Enter your own                                      | OpenAI / Anthropic / Gemini |
 
 Settings tabs: Billing (DeepSeek balance + token usage by provider/model with hand-entered unit prices), Models, Search (Tavily key — enables `web_search`; the tool is hidden when no key is set), Image Generation (Zhipu key, free `cogview-3-flash` by default — enables `generate_image`, with a custom OpenAI-image-format endpoint option), Appearance (theme / font size / word wrap / code minimap), Storage (view and change the data directory, effective after restart), and Browser (enable/disable the AI browser tools, headless mode, idle recycle, Runtime.evaluate, and explicit opt-in to reuse your daily profile with a risk warning).
 
@@ -149,10 +149,10 @@ $env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-bu
 npm run package
 ```
 
-- Windows artifacts: `release/0.1.7/YOCIM AGENT-0.1.7-setup.exe` and `release/0.1.7/win-unpacked/`
-- Bundled ripgrep: `resources/ripgrep/rg.exe` (14.1.1) placed there via `extraResources`; falls back to `rg` on PATH and the built-in JS search when missing
+- Windows artifacts: `release/0.1.8/YOCIM AGENT-0.1.8-x64-setup.exe` and `release/0.1.8/win-unpacked/`
+- Bundled ripgrep: 14.1.1 binaries downloaded by CI into `resources/ripgrep/` before packaging and copied via `extraResources`; local builds can place `rg`/`rg.exe` there manually (gitignored) or set `YOCIM_RIPGREP_PATH`. Falls back to `rg` on PATH and the built-in JS search when missing
 - Runtime dependencies: `zod` and `ssh2` (with `asn1` / `bcrypt-pbkdf` / `tweetnacl` / `safer-buffer`) are externalized and packed into the asar; `cpu-features` is an optional native accelerator that is neither compiled nor packaged; `npmRebuild: false` avoids node-gyp failures when the project path contains spaces
-- App icon: `build/icon.png` (copied from `public/image/yocim.png`). Code signing is not configured yet, so SmartScreen may warn during installation.
+- App icons: `build/icon.png` (Windows / Linux, copied from `public/image/yocim.png`) and `build/icon.icns` (macOS). Code signing is not configured yet, so SmartScreen may warn during installation.
 
 ## License
 

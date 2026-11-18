@@ -29,7 +29,9 @@ function query(overrides: Partial<SearchQuery> = {}): SearchQuery {
 }
 
 describe('parseRipgrepJson', () => {
-  const root = path.join('E:', 'workspace')
+  // 用平台无关的绝对根：path.join('E:', ...) 在 POSIX 上不是绝对路径，
+  // 会让本文件只在 Windows 通过。
+  const root = path.resolve(path.sep, 'workspace')
 
   it('parses begin/match/end records and normalizes relative paths', () => {
     const begin = JSON.stringify({ type: 'begin', data: { path: { text: './src/a.ts' } } })

@@ -49,11 +49,7 @@ import {
 } from './verifyTools'
 import { runWebSearch, type WebSearchRunner } from './webSearchTools'
 import { runGenerateImage, type ImageGenRunner } from './imageGenTools'
-import {
-  runBrowserCdp,
-  runBrowserWait,
-  type BrowserToolDeps
-} from './browserCdpTools'
+import { runBrowserCdp, runBrowserWait, type BrowserToolDeps } from './browserCdpTools'
 import { allowRuleValue, classifyCommand, needsApproval } from './commandRisk'
 import type { SubagentRole } from '../agent/subagent'
 
@@ -428,10 +424,7 @@ export class ToolService {
         if (
           decision !== 'approve' &&
           this.deps.allowRules &&
-          (isRunCommand ||
-            isVerify ||
-            parsed.tool === 'write_file' ||
-            parsed.tool === 'edit_file')
+          (isRunCommand || isVerify || parsed.tool === 'write_file' || parsed.tool === 'edit_file')
         ) {
           try {
             this.deps.allowRules.add(
@@ -468,6 +461,9 @@ export class ToolService {
     } catch (error) {
       const message = describeError(error)
       outcome = { ok: false, content: `工具执行失败：${message}`, summary: message }
+    } finally {
+      // 预览 hash 只在执行写工具期间有效；成功、拒绝、异常都要清掉，否则 Map 会缓慢增长
+      this.approvalHashes.delete(call.id)
     }
 
     this.record(context, call, argsSummary, approval, outcome, Date.now() - startedAt)
@@ -494,7 +490,6 @@ export class ToolService {
         const result = await runWriteFile(this.io, parsed.args, {
           approvalHash: this.approvalHashes.get(callId)
         })
-        this.approvalHashes.delete(callId)
         if (result.ok) {
           await this.snapshotAfterWrite(this.deps.requireGuard(), parsed.args.relativePath)
         }
@@ -504,7 +499,6 @@ export class ToolService {
         const result = await runEditFile(this.io, parsed.args, {
           approvalHash: this.approvalHashes.get(callId)
         })
-        this.approvalHashes.delete(callId)
         if (result.ok) {
           await this.snapshotAfterWrite(this.deps.requireGuard(), parsed.args.relativePath)
         }

@@ -78,6 +78,18 @@ describe('version helpers', () => {
     expect(selectReleaseAsset([], 'win32', 'x64')).toBeNull()
     expect(selectReleaseAsset(assets, 'freebsd', 'x64')).toBeNull()
   })
+
+  it('never hands an arm64-only release to an x64 client, and accepts unmarked legacy names', () => {
+    const unmarked = [asset('YOCIM AGENT-0.1.7-setup.exe')]
+    expect(selectReleaseAsset(unmarked, 'win32', 'x64')?.name).toBe(unmarked[0]?.name)
+
+    const mixed = [asset('YOCIM AGENT-0.2.0-arm64-setup.exe'), ...unmarked]
+    expect(selectReleaseAsset(mixed, 'win32', 'x64')?.name).toBe(unmarked[0]?.name)
+
+    const arm64Only = [asset('YOCIM AGENT-0.2.0-arm64-setup.exe')]
+    expect(selectReleaseAsset(arm64Only, 'win32', 'x64')).toBeNull()
+    expect(selectReleaseAsset(arm64Only, 'win32', 'arm64')?.name).toBe(arm64Only[0]?.name)
+  })
 })
 
 describe('checkForUpdate', () => {

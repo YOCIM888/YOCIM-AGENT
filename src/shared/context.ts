@@ -38,11 +38,19 @@ export function estimateTextTokens(text: string): number {
   return cjk + Math.ceil(rest / 4)
 }
 
-/** 按条累加估算，并计入每条消息的固定开销（role/分隔符等） */
-export function estimateMessagesTokens(messages: Array<{ content: string }>): number {
+/**
+ * 按条累加估算，并计入每条消息的固定开销（role/分隔符等）。
+ * assistant 的工具调用参数存在 toolCallsJson 里，content 可能为空，
+ * 不算进来会系统性低估工具密集会话的用量，导致自动压缩触发偏晚。
+ */
+export function estimateMessagesTokens(
+  messages: Array<{ content: string; toolCallsJson?: string | null }>
+): number {
   let total = 0
   for (const message of messages) {
-    total += estimateTextTokens(message.content) + MESSAGE_OVERHEAD_TOKENS
+    total += estimateTextTokens(message.content)
+    if (message.toolCallsJson) total += estimateTextTokens(message.toolCallsJson)
+    total += MESSAGE_OVERHEAD_TOKENS
   }
   return total
 }

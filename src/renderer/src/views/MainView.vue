@@ -108,7 +108,13 @@ onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
   window.addEventListener('resize', syncViewport)
   syncViewport()
-  void bootstrap()
+  void bootstrap().catch((error: unknown) => {
+    // IPC 通常返回 IpcResult 不会 reject；这里只兜住主进程崩溃 / channel 未注册等极端情况，
+    // 避免变成未处理 rejection 且首屏静默空白。
+    console.error('[MainView] bootstrap failed:', error)
+    const message = error instanceof Error ? error.message : String(error)
+    workspace.setError(`初始化失败：${message}`)
+  })
 })
 
 onBeforeUnmount(() => {

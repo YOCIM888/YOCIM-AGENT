@@ -16,7 +16,9 @@ export default tseslint.config(
       'public/**',
       'DevDocs/**',
       'playwright-report/**',
-      'test-results/**'
+      'test-results/**',
+      // 独立 git 仓库，由官网自己的流程管理
+      '.official-website/**'
     ]
   },
   js.configs.recommended,
@@ -41,6 +43,16 @@ export default tseslint.config(
     files: ['src/renderer/**/*.{ts,vue}'],
     languageOptions: {
       globals: globals.browser
+    }
+  },
+  {
+    // 安全复现脚本是浏览器内执行的 .mjs，既用 DOM 也用 Node API
+    files: ['tests/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.browser
+      }
     }
   },
   {

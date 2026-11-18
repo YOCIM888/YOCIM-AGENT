@@ -37,6 +37,12 @@ test-results/
 tests/bench/results/last.json
 
 # -----------------------------------------------------------------------------
+# ripgrep 二进制（CI 在打包前从官方 release 下载，不入库）
+# -----------------------------------------------------------------------------
+resources/ripgrep/rg
+resources/ripgrep/rg.exe
+
+# -----------------------------------------------------------------------------
 # 日志与缓存
 # -----------------------------------------------------------------------------
 logs/
@@ -91,11 +97,9 @@ desktop.ini
 
 # =============================================================================
 # 不要忽略以下文件（打包 / 运行必需，已纳入版本控制）：
-#   build/icon.png                 —— NSIS / DMG 安装包图标
-#   public/image/yocim.png         —— 应用图标源图
-#   resources/ripgrep/rg.exe       —— 内置全文搜索二进制（extraResources）
-#   resources/ripgrep/rg           —— 同上，macOS / Linux 版
-#   resources/ripgrep/README.md    —— 内置 ripgrep 的版本说明
+#   build/icon.png / build/icon.icns  —— NSIS / DMG 安装包图标
+#   public/image/yocim.png            —— 应用图标源图
+#   resources/ripgrep/README.md       —— 内置 ripgrep 的版本与下载说明
 #   tests/bench/results/baseline.json —— 基准门禁基线
-#   package-lock.json              —— 依赖锁定文件
+#   package-lock.json                 —— 依赖锁定文件
 # =============================================================================
