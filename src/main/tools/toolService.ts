@@ -11,7 +11,7 @@ import {
   summarizeToolArgs,
   TOOL_DEFINITIONS
 } from '../../shared/tools'
-import { isCommandWhitelisted, normalizeCommandWhitelist } from '../../shared/settings'
+import { normalizeCommandWhitelist } from '../../shared/settings'
 import type { AllowRuleStore } from '../approval/allowRules'
 import type { ApprovalManager } from '../approval/approvalManager'
 import type { AuditStore } from '../audit/auditStore'
@@ -22,7 +22,9 @@ import { TIMELINE_LIMITS, type TimelineService } from '../workspace/timelineServ
 import { runWorkspaceCommand } from './commandRunner'
 import {
   assertCommandAllowed,
+  assertShellCommandAllowed,
   DEFAULT_ALLOWED_COMMANDS,
+  isOpenModeShellWhitelisted,
   loadProjectCommands
 } from './commandPolicy'
 import { createSearchServiceRunner, type ToolSearchRunner } from './searchTools'
@@ -237,15 +239,20 @@ export class ToolService {
         const whitelist = normalizeCommandWhitelist(this.deps.getCommandWhitelist?.() ?? [])
         // 白名单放行只适用于用户直接给出的 run_command；验证工具的逻辑命令由代码生成，
         // 始终过危险正则，避免 pattern 里塞进危险模式时借开放模式白名单绕过。
+        // 开放模式白名单短路：run_command 必须按 shell 段逐段判定，
+        // 只匹配首个可执行名会让 `npm test && rm -r /` 整条跳过校验。
         const whitelisted =
-          isRunCommand && mode === 'open' && isCommandWhitelisted(runCommandText, whitelist)
+          isRunCommand && mode === 'open' && isOpenModeShellWhitelisted(runCommandText, whitelist)
         if (!whitelisted) {
           let blocked: unknown = null
           try {
             const project =
               (await this.deps.projectCommands?.()) ??
               (await loadProjectCommands(this.deps.requireGuard().root))
-            assertCommandAllowed(policyCommand, new Set([...DEFAULT_ALLOWED_COMMANDS, ...project]))
+            const allowed = new Set([...DEFAULT_ALLOWED_COMMANDS, ...project])
+            // 只有 run_command 走 shell 解析 + 逐段校验；验证工具保持原有策略入口
+            if (isRunCommand) assertShellCommandAllowed(policyCommand, allowed)
+            else assertCommandAllowed(policyCommand, allowed)
           } catch (error) {
             blocked = error
           }

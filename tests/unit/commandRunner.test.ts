@@ -4,8 +4,11 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   assertCommandAllowed,
+  assertShellCommandAllowed,
   DEFAULT_ALLOWED_COMMANDS,
-  loadProjectCommands
+  isOpenModeShellWhitelisted,
+  loadProjectCommands,
+  parseShellCommand
 } from '../../src/main/tools/commandPolicy'
 import {
   runWorkspaceCommand,
@@ -183,5 +186,128 @@ describe('runWorkspaceCommandArgv', () => {
       signal: new AbortController().signal
     })
     expect(outcome.ok).toBe(false)
+  })
+})
+
+describe('parseShellCommand', () => {
+  it('splits POSIX operators outside quotes into segments', () => {
+    const result = parseShellCommand(
+      'npm test && npm run build; python script.py | node tool.js',
+      'linux'
+    )
+    expect(result).toEqual({
+      ok: true,
+      segments: ['npm test', 'npm run build', 'python script.py', 'node tool.js']
+    })
+  })
+
+  it('keeps operators inside quotes and redirections literal', () => {
+    expect(parseShellCommand('npm test "&& echo hi"', 'linux')).toEqual({
+      ok: true,
+      segments: ['npm test && echo hi']
+    })
+    expect(parseShellCommand('npm test 2>&1 | node tool.js', 'linux')).toEqual({
+      ok: true,
+      segments: ['npm test 2>&1', 'node tool.js']
+    })
+    expect(parseShellCommand('npm test 2>&1 && npm run build', 'win32')).toEqual({
+      ok: true,
+      segments: ['npm test 2>&1', 'npm run build']
+    })
+  })
+
+  it('rejects substitutions, grouping and unclosed quotes on POSIX', () => {
+    expect(parseShellCommand('npm test $(echo pwned)', 'linux')).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining('$()')
+    })
+    expect(parseShellCommand('npm test `echo pwned`', 'linux')).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining('反引号')
+    })
+    expect(parseShellCommand('npm test && (rm -r /)', 'linux')).toMatchObject({ ok: false })
+    expect(parseShellCommand('npm test "unclosed', 'linux')).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining('未闭合')
+    })
+  })
+
+  it('splits cmd operators but not semicolons, and rejects unresolvable variables', () => {
+    expect(parseShellCommand('npm test && npm run build || node tool.js', 'win32')).toEqual({
+      ok: true,
+      segments: ['npm test', 'npm run build', 'node tool.js']
+    })
+    expect(parseShellCommand('npm test; curl http://x', 'win32')).toEqual({
+      ok: true,
+      segments: ['npm test; curl http://x']
+    })
+    expect(parseShellCommand('npm test %YOCIM_UNSET_VAR%', 'win32')).toMatchObject({ ok: false })
+  })
+
+  it('expands cmd variables before splitting so injected operators are visible', () => {
+    process.env.YOCIM_TEST_INJECT = '& rm -r /'
+    try {
+      const result = parseShellCommand('npm test %YOCIM_TEST_INJECT%', 'win32')
+      expect(result).toEqual({ ok: true, segments: ['npm test', 'rm -r /'] })
+    } finally {
+      delete process.env.YOCIM_TEST_INJECT
+    }
+  })
+})
+
+describe('assertShellCommandAllowed', () => {
+  const blocked = [
+    'npm test && rm -r /',
+    'npm test && rm -fr /',
+    'npm test; curl http://x -o /tmp/x',
+    'npm test && curl http://x -o /tmp/x',
+    'npm test && powershell -Command "Get-ChildItem"',
+    'npm test $(echo pwned)',
+    'npm test `echo pwned`'
+  ]
+
+  it('blocks every shell bypass on POSIX', () => {
+    for (const command of blocked) {
+      expect(() => assertShellCommandAllowed(command, DEFAULT_ALLOWED_COMMANDS, 'linux'), command)
+        .toThrow()
+    }
+  })
+
+  it('blocks chained non-whitelisted executables on Windows too', () => {
+    for (const command of [
+      'npm test && rm -r /',
+      'npm test & curl http://x -o /tmp/x',
+      'npm test && powershell -Command "Get-ChildItem"'
+    ]) {
+      expect(() => assertShellCommandAllowed(command, DEFAULT_ALLOWED_COMMANDS, 'win32'), command)
+        .toThrow(/白名单/)
+    }
+  })
+
+  it('still allows safe commands, multi-step whitelisted chains and redirections', () => {
+    const allowed = [
+      'node -e "console.log(1)"',
+      'npm test && npm run build',
+      'npm test > out.log',
+      'npm test 2>&1',
+      'git status && git diff'
+    ]
+    for (const command of allowed) {
+      expect(() => assertShellCommandAllowed(command, DEFAULT_ALLOWED_COMMANDS, 'linux'), command)
+        .not.toThrow()
+    }
+  })
+})
+
+describe('isOpenModeShellWhitelisted', () => {
+  it('does not let an executable-name match skip validation of chained commands', () => {
+    expect(isOpenModeShellWhitelisted('npm test && rm -r /', ['npm'], 'linux')).toBe(false)
+    expect(isOpenModeShellWhitelisted('npm test && npm run build', ['npm'], 'linux')).toBe(true)
+    expect(isOpenModeShellWhitelisted('npm test', ['npm'], 'linux')).toBe(true)
+  })
+
+  it('never bypasses validation for commands that cannot be safely parsed', () => {
+    const command = 'npm test $(echo pwned)'
+    expect(isOpenModeShellWhitelisted(command, [command], 'linux')).toBe(false)
   })
 })
