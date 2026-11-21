@@ -1,6 +1,6 @@
 # YOCIM AGENT
 
-[English](README.md) | [中文](README.zh-CN.md)
+[English](README.md) | [中文](README/README.zh-CN.md) | [日本語](README/README.ja.md) | [한국어](README/README.ko.md) | [Español](README/README.es.md) | [Português (Brasil)](README/README.pt-BR.md)
 
 A local-first desktop AI coding assistant (Electron + Vue 3 + TypeScript). Pick a local workspace, chat with a model, and let it read/modify files and run controlled commands after your approval.
 
@@ -9,7 +9,7 @@ A local-first desktop AI coding assistant (Electron + Vue 3 + TypeScript). Pick 
 ## Features
 
 - **Multi-model support**: DeepSeek, Qwen, BigModel, Kimi, MiniMax, Tencent Cloud, Alibaba Cloud, SiliconFlow, Volcano Engine, ChatGPT, Claude, Gemini, Grok, local Ollama, and custom endpoints. Add them in Settings and switch from the bottom-right of the composer (grouped by provider, model name only, selected item marked with a green filled circle).
-- **Two languages**: English and Simplified Chinese. The first launch asks for a language and then opens Model settings to guide you through entering an API Key; this happens only once. Change it any time in Settings → Appearance → Interface language (takes effect immediately, no restart).
+- **Six languages**: Simplified Chinese, English, Japanese, Korean, Spanish, and Brazilian Portuguese. The first launch asks for a language and then opens Model settings to guide you through entering an API Key; this happens only once. Change it any time in Settings → Appearance → Interface language (takes effect immediately, no restart).
 - **Tabbed settings**: Billing, Models, Search, Image Generation, Appearance, Storage, and Browser. Approval mode (Manual / Auto / Open) is toggled at the bottom-left of the composer and persisted.
 - **Three-pane workspace**: project-based session list on the left, a pure chat area in the middle, and an 8-view icon activity bar on the right (Files / Search / Editor / Audit / Source Control / Extensions / Debug / Remote). Side panels can be collapsed and resized by dragging, with state persisted across restarts.
 - **AI-operable browser**: the lower tool area of the chat column has Terminal / Browser tabs (shared resizable height). The agent drives an embedded, visible Chromium view through thin CDP primitives (`browser_cdp` / `browser_wait`) — navigate, screenshot, read DOM/title, dispatch input coordinates, wait for conditions. An in-view console aggregates Console / Network / exceptions / an append-only action audit, with pause AI / take over / resume controls. Browser contexts are isolated per session, and Runtime.evaluate is sandboxed away from Node/Electron.
@@ -149,7 +149,7 @@ $env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-bu
 npm run package
 ```
 
-- Windows artifacts: `release/0.1.8/YOCIM AGENT-0.1.8-x64-setup.exe` and `release/0.1.8/win-unpacked/`
+- Windows artifacts: `release/0.1.9/YOCIM.AGENT-0.1.9-x64-setup.exe` and `release/0.1.9/win-unpacked/`
 - Bundled ripgrep: 14.1.1 binaries downloaded by CI into `resources/ripgrep/` before packaging and copied via `extraResources`; local builds can place `rg`/`rg.exe` there manually (gitignored) or set `YOCIM_RIPGREP_PATH`. Falls back to `rg` on PATH and the built-in JS search when missing
 - Runtime dependencies: `zod` and `ssh2` (with `asn1` / `bcrypt-pbkdf` / `tweetnacl` / `safer-buffer`) are externalized and packed into the asar; `cpu-features` is an optional native accelerator that is neither compiled nor packaged; `npmRebuild: false` avoids node-gyp failures when the project path contains spaces
 - App icons: `build/icon.png` (Windows / Linux, copied from `public/image/yocim.png`) and `build/icon.icns` (macOS). Code signing is not configured yet, so SmartScreen may warn during installation.

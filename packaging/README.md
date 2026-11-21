@@ -10,16 +10,16 @@
 | Homebrew Cask | `homebrew/Casks/yocim-agent.rb` | 本地 cask：`brew install --cask ./yocim-agent.rb`                                                                      | `Homebrew/homebrew-cask` 尚无条目；需提交 PR          |
 | Scoop         | `scoop/yocim-agent.json`        | 直接 URL：`scoop install https://raw.githubusercontent.com/YOCIM888/YOCIM-AGENT/main/packaging/scoop/yocim-agent.json` | 可由用户直接按 URL 安装；也可再向 bucket 提交 PR      |
 
-清单对应版本：**0.1.8**。
+清单对应版本：**0.1.9**。
 
-## v0.1.8 资产校验值
+## v0.1.9 资产校验值
 
-| 资产                                | SHA-256                                                            |
-| ----------------------------------- | ------------------------------------------------------------------ |
-| `YOCIM.AGENT-0.1.8-x64-setup.exe`   | `a90bc630f2fccfaf100f6e5dac47c51ebb566012c1e296eb630fad536cc270b5` |
-| `YOCIM.AGENT-0.1.8-arm64.dmg`       | `9c507d8ec4a70e8b8ef420488a6db7cb688436cc9a424f92eb7ad4d231a486a2` |
-| `YOCIM.AGENT-0.1.8-x64.dmg`         | `6b9e30721883f5c299f5f89e1da4f928fbe1ec46d7e676b525e004d804b019bc` |
-| `YOCIM.AGENT-0.1.8-x86_64.AppImage` | `beffac28eef999e3704214180bde8164844399afb5ee69ecc696ab48cb4f22a7` |
+| 资产                                | SHA-256         |
+| ----------------------------------- | --------------- |
+| `YOCIM.AGENT-0.1.9-x64-setup.exe`   | `CI 构建后回填` |
+| `YOCIM.AGENT-0.1.9-arm64.dmg`       | `CI 构建后回填` |
+| `YOCIM.AGENT-0.1.9-x64.dmg`         | `CI 构建后回填` |
+| `YOCIM.AGENT-0.1.9-x86_64.AppImage` | `CI 构建后回填` |
 
 ## 发版时更新
 

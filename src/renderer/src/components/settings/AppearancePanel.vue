@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { t } from '../../i18n'
+import { LOCALES, t } from '../../i18n'
 import type { Locale } from '../../i18n'
 import { computed } from 'vue'
 import { FONT_SIZE_MAX, FONT_SIZE_MIN, useSettingsStore } from '../../stores/settings'
@@ -37,8 +37,9 @@ const minimap = computed({
         <label class="sp-field">
           <span>{{ t('界面语言') }}</span>
           <select v-model="locale" data-testid="appearance-language">
-            <option value="zh-CN">简体中文</option>
-            <option value="en">English</option>
+            <option v-for="item in LOCALES" :key="item.value" :value="item.value">
+              {{ item.label }}
+            </option>
           </select>
         </label>
       </div>

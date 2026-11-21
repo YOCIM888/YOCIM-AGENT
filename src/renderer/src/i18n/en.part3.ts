@@ -178,7 +178,12 @@ const en: Record<string, string> = {
   'OpenAI 兼容': 'OpenAI compatible',
   'Provider / 模型': 'Provider / Model',
   'Provider 预设': 'Provider presets',
-  'YOCIM AGENT 让想法落地': 'YOCIM AGENT brings ideas to life'
+  'YOCIM AGENT 让想法落地': 'YOCIM AGENT brings ideas to life',
+  英语界面: 'English interface',
+  日语界面: 'Japanese interface',
+  韩语界面: 'Korean interface',
+  西班牙语界面: 'Spanish interface',
+  巴西葡萄牙语界面: 'Brazilian Portuguese interface'
 }
 
 export default en

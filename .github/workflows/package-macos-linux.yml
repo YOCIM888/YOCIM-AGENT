@@ -6,7 +6,7 @@ on:
       tag:
         description: 目标 Release 标签
         required: true
-        default: v0.1.8
+        default: v0.1.9
   push:
     tags:
       - 'v*'

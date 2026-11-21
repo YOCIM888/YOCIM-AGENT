@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { t, type Locale } from '../i18n'
+import { LOCALES, t, type Locale } from '../i18n'
 
 const emit = defineEmits<{
   select: [locale: Locale]
@@ -19,17 +19,15 @@ function choose(locale: Locale): void {
 
       <div class="options">
         <button
+          v-for="item in LOCALES"
+          :key="item.value"
           type="button"
           class="option"
-          data-testid="language-option-zh-CN"
-          @click="choose('zh-CN')"
+          :data-testid="`language-option-${item.value}`"
+          @click="choose(item.value)"
         >
-          <span class="option-title">简体中文</span>
-          <span class="option-sub">{{ t('中文界面') }}</span>
-        </button>
-        <button type="button" class="option" data-testid="language-option-en" @click="choose('en')">
-          <span class="option-title">English</span>
-          <span class="option-sub">{{ t('English interface') }}</span>
+          <span class="option-title">{{ item.label }}</span>
+          <span class="option-sub">{{ t(item.subtitleKey) }}</span>
         </button>
       </div>
 

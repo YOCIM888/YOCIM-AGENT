@@ -1,11 +1,11 @@
 {
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Local-first desktop AI coding assistant",
   "homepage": "https://agent.yocim.top/",
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/YOCIM888/YOCIM-AGENT/releases/download/v0.1.8/YOCIM.AGENT-0.1.8-x64-setup.exe#/dl.7z",
+      "url": "https://github.com/YOCIM888/YOCIM-AGENT/releases/download/v0.1.9/YOCIM.AGENT-0.1.9-x64-setup.exe#/dl.7z",
       "hash": "a90bc630f2fccfaf100f6e5dac47c51ebb566012c1e296eb630fad536cc270b5"
     }
   },

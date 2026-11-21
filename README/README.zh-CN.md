@@ -1,15 +1,15 @@
 # YOCIM AGENT
 
-[English](README.md) | [中文](README.zh-CN.md)
+[English](../README.md) | [中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Português (Brasil)](README.pt-BR.md)
 
 本地优先的桌面 AI 编程助手（Electron + Vue 3 + TypeScript）。可选择本地工作区，与模型对话，在审批后读取/修改文件并执行受控命令。
 
-![YOCIM AGENT 三栏工作台](public/image/yocim-agent.png)
+![YOCIM AGENT 三栏工作台](../public/image/yocim-agent.png)
 
 ## 功能
 
 - **多模型接入**：DeepSeek、Qwen、BigModel、Kimi、MiniMax、腾讯云、阿里云、硅基流动、火山引擎、ChatGPT、Claude、Gemini、Grok、本地 Ollama 与自定义端点；设置中添加，输入卡右下角切换（按服务商分组，只显示模型名，选中项右侧为绿色实心圆）
-- **中英双语**：支持简体中文与 English。首次启动弹窗选择语言，随后自动打开模型设置引导填写 API Key，仅触发一次；之后可在「设置 → 外观 → 界面语言」随时切换，立即生效无需重启
+- **六种语言**：支持简体中文、English、日本語、한국어、Español 与 Português (Brasil)。首次启动弹窗选择语言，随后自动打开模型设置引导填写 API Key，仅触发一次；之后可在「设置 → 外观 → 界面语言」随时切换，立即生效无需重启
 - **分栏设置**：账单、模型、搜索、生图、外观、存储、浏览器；审批模式（手动 / 自动 / 开放）在输入卡左下角切换并持久化
 - **三栏工作台**：左侧项目化会话、中间纯会话区、右侧 8 个图标视图（文件 / 搜索 / 编辑器 / 审计 / 源代码管理 / 扩展 / 调试 / 远程）；左右栏可折叠、可拖动调宽，状态重启后保留
 - **AI 可操作浏览器**：会话区下半屏工具区提供「终端 / 浏览器」双 tab（共享可拖拽高度）；Agent 通过薄 CDP 原语（`browser_cdp` / `browser_wait`）驱动内嵌可见的 Chromium 视图——导航、截图、读标题/DOM、坐标级输入、条件等待。视图内可折叠控制台汇聚 Console / Network / 未处理异常 / append-only 操作审计，并提供暂停 AI / 接管 / 恢复入口。浏览器上下文按会话隔离，Runtime.evaluate 与 Node/Electron 隔离。
@@ -149,11 +149,11 @@ $env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-bu
 npm run package
 ```
 
-- Windows 产物：`release/0.1.8/YOCIM AGENT-0.1.8-x64-setup.exe` 与 `release/0.1.8/win-unpacked/`
+- Windows 产物：`release/0.1.9/YOCIM.AGENT-0.1.9-x64-setup.exe` 与 `release/0.1.9/win-unpacked/`
 - 内置 ripgrep：CI 在打包前把 14.1.1 二进制下载到 `resources/ripgrep/`，再经 `extraResources` 放入；本地构建可手动放置 `rg` / `rg.exe`（已 gitignore）或设置 `YOCIM_RIPGREP_PATH`；缺失时回退 PATH 的 `rg` 与内置 JS 搜索
 - 运行依赖：`zod` 与 `ssh2`（含 `asn1` / `bcrypt-pbkdf` / `tweetnacl` / `safer-buffer`）外置并打进 asar；`cpu-features` 为可选原生加速依赖，未编译也不打包；`npmRebuild: false` 规避路径含空格时 node-gyp 失败
 - 应用图标：`build/icon.png`（Windows / Linux，由 `public/image/yocim.png` 复制）与 `build/icon.icns`（macOS）；当前未配置代码签名，安装时可能出现 SmartScreen 提示
 
 ## 许可证
 
-本项目采用 MIT License，详见 [LICENSE](LICENSE)。
+本项目采用 MIT License，详见 [LICENSE](../LICENSE)。
